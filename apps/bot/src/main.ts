@@ -1,4 +1,5 @@
 import express from "express";
+import { deflateSync } from "node:zlib";
 import { Context, Markup, Telegraf } from "telegraf";
 import { ExtraEditMessageText, ExtraReplyMessage } from "telegraf/typings/telegram-types";
 import {
@@ -20,7 +21,9 @@ if (!token) {
 const api = new ApiClient();
 const bot = new Telegraf(token);
 const CATALOG_BUTTON_LIMIT = 40;
-const CATALOG_TEXT_LIMIT = 25;
+const CATALOG_TEXT_LIMIT = 12;
+const CAPTION_LIMIT = 1000;
+const BOT_CARD_PNG = createBotCardPng();
 const lastBotMessages = new Map<number, number>();
 const BOT_COMMANDS = [
   { command: "start", description: "Bắt đầu sử dụng bot" },
@@ -50,6 +53,9 @@ const HELP_TEXT = [
   "",
   "Gửi /sanpham trước để xem số thứ tự sản phẩm."
 ].join("\n");
+
+type ScreenKeyboard = ReturnType<typeof Markup.inlineKeyboard>;
+type ScreenMedia = string | Buffer;
 
 function mainKeyboard() {
   return Markup.inlineKeyboard([
@@ -163,6 +169,10 @@ bot.on("text", async (ctx) => {
 
 bot.catch(async (error, ctx) => {
   console.error(error);
+  if (isCallbackContext(ctx)) {
+    await renderScreen(ctx, `Có lỗi xảy ra: ${escapeHtml((error as Error).message)}`, mainKeyboard()).catch(() => undefined);
+    return;
+  }
   await ctx.reply(`Có lỗi xảy ra: ${(error as Error).message}`, mainKeyboard()).catch(() => undefined);
 });
 
@@ -174,18 +184,18 @@ async function showCatalog(ctx: Context) {
     Markup.button.callback(`${index + 1}. ${product.name} - ${formatVnd(product.price)} - SL: ${productQuantityText(product)}`, `prod:${product.id}`)
   ]);
   buttons.push([Markup.button.callback("Quay lại", "home")]);
-  await updateText(ctx, buildCatalogText(products), Markup.inlineKeyboard(buttons));
+  await renderScreen(ctx, buildCatalogText(products), Markup.inlineKeyboard(buttons));
 }
 
 async function showWallet(ctx: Context) {
   await upsertUser(ctx);
   const wallet = await api.get<{ balance: number }>(`/bot/wallet/${ctx.from!.id}`);
-  await updateText(ctx, `Số dư hiện tại: ${formatVnd(wallet.balance)}`, mainKeyboard());
+  await renderScreen(ctx, `Số dư hiện tại: <b>${formatVnd(wallet.balance)}</b>`, mainKeyboard());
 }
 
 async function showTopup(ctx: Context) {
   await upsertUser(ctx);
-  await updateText(
+  await renderScreen(
     ctx,
     "Chọn số tiền cần nạp. QR có hiệu lực trong 10 phút.\n\nBạn cũng có thể chat: /nap 100000",
     Markup.inlineKeyboard([
@@ -200,24 +210,30 @@ async function showHistory(ctx: Context) {
   await upsertUser(ctx);
   const history = await api.get<HistoryResponse>(`/bot/history/${ctx.from!.id}`);
   const orderLines = history.orders.length
-    ? history.orders.map((order) => `${order.code} - ${order.product.name} - ${formatVnd(order.totalAmount)} - ${order.status}`).join("\n")
+    ? history.orders
+        .slice(0, 8)
+        .map((order) => `${escapeHtml(order.code)} - ${escapeHtml(order.product.name)} - ${formatVnd(order.totalAmount)} - ${escapeHtml(order.status)}`)
+        .join("\n")
     : "Chưa có đơn hàng.";
   const ledgerLines = history.ledger.length
-    ? history.ledger.map((entry) => `${formatVnd(entry.amount)} - ${entry.type}${entry.note ? ` - ${entry.note}` : ""}`).join("\n")
+    ? history.ledger
+        .slice(0, 8)
+        .map((entry) => `${formatVnd(entry.amount)} - ${escapeHtml(entry.type)}${entry.note ? ` - ${escapeHtml(entry.note)}` : ""}`)
+        .join("\n")
     : "Chưa có giao dịch ví.";
-  await updateText(ctx, `Đơn hàng gần đây:\n${orderLines}\n\nGiao dịch ví gần đây:\n${ledgerLines}`, mainKeyboard());
+  await renderScreen(ctx, `Đơn hàng gần đây:\n${orderLines}\n\nGiao dịch ví gần đây:\n${ledgerLines}`, mainKeyboard());
 }
 
 async function showSupport(ctx: Context) {
-  await updateText(ctx, `Vui lòng liên hệ admin @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} để được hỗ trợ.`, mainKeyboard());
+  await renderScreen(ctx, `Vui lòng liên hệ admin @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} để được hỗ trợ.`, mainKeyboard());
 }
 
 async function showHelp(ctx: Context) {
-  await updateText(ctx, HELP_TEXT, mainKeyboard());
+  await renderScreen(ctx, HELP_TEXT, mainKeyboard());
 }
 
 async function showHome(ctx: Context, message = "Menu chính\n\nGửi /help để xem cú pháp chat nhanh.") {
-  await updateText(ctx, message, mainKeyboard());
+  await renderScreen(ctx, message, mainKeyboard());
 }
 
 async function showProduct(ctx: Context, productId: string) {
@@ -226,9 +242,9 @@ async function showProduct(ctx: Context, productId: string) {
 }
 
 async function showProductDetail(ctx: Context, product: ProductDetail) {
-  const description = product.description ? `\n${product.description}` : "";
+  const description = product.description ? `\n${escapeHtml(product.description)}` : "";
   const categoryLine = product.category?.name ? `Danh mục: <b>${escapeHtml(product.category.name)}</b>\n` : "";
-  const caption = `${categoryLine}<b>${escapeHtml(product.name)}</b>${escapeHtml(description)}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(
+  const caption = `${categoryLine}<b>${escapeHtml(product.name)}</b>${description}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(
     product
   )}\n\nChat nhanh: /mua ${escapeHtml(product.name)} vi hoặc /mua ${escapeHtml(product.name)} ck`;
   const keyboard = Markup.inlineKeyboard([
@@ -237,51 +253,7 @@ async function showProductDetail(ctx: Context, product: ProductDetail) {
     [Markup.button.callback("Quay lại", "catalog")]
   ]);
 
-  if (product.imageUrl) {
-    const updated = await updateProductPhoto(ctx, product.imageUrl, caption, keyboard);
-    if (updated) return;
-  }
-
-  await updateText(ctx, withImageLink(caption, product.imageUrl), {
-    parse_mode: "HTML",
-    ...keyboard
-  });
-}
-
-async function updateProductPhoto(ctx: Context, imageUrl: string, caption: string, extra: ExtraReplyMessage) {
-  if ("callbackQuery" in ctx.update && ctx.callbackQuery?.message) {
-    try {
-      await ctx.editMessageMedia(
-        {
-          type: "photo",
-          media: imageUrl,
-          caption,
-          parse_mode: "HTML"
-        },
-        extra as never
-      );
-      return true;
-    } catch (error) {
-      console.error("Could not edit Telegram product photo:", error);
-      return false;
-    }
-  }
-
-  try {
-    await ctx.replyWithPhoto(imageUrl, {
-      caption,
-      parse_mode: "HTML",
-      ...extra
-    });
-    return true;
-  } catch (error) {
-    console.error("Could not send Telegram product photo:", error);
-    return false;
-  }
-}
-
-function withImageLink(caption: string, imageUrl?: string | null) {
-  return imageUrl ? `${caption}\nLogo: <a href="${escapeHtml(imageUrl)}">xem ảnh</a>` : caption;
+  await renderScreen(ctx, caption, keyboard, product.imageUrl ?? undefined);
 }
 
 async function showProductByCommand(ctx: Context) {
@@ -353,10 +325,11 @@ async function purchaseWithWallet(ctx: Context, productId: string) {
     productId,
     quantity: 1
   });
-  await ctx.reply(`Mua hàng thành công.\nSố dư còn lại: ${formatVnd(result.balanceAfter)}\n\nHàng của bạn:\n<pre>${escapeHtml(result.deliveryText)}</pre>`, {
-    parse_mode: "HTML",
-    ...mainKeyboard()
-  });
+  await renderScreen(
+    ctx,
+    `Mua hàng thành công.\nSố dư còn lại: <b>${formatVnd(result.balanceAfter)}</b>\n\nHàng của bạn:\n<pre>${escapeHtml(result.deliveryText)}</pre>`,
+    mainKeyboard()
+  );
 }
 
 async function createBankOrderQr(ctx: Context, productId: string) {
@@ -369,28 +342,118 @@ async function createBankOrderQr(ctx: Context, productId: string) {
   await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption("Mua hàng", result.code, result.amount, result.expiresAt));
 }
 
-async function updateText(ctx: Context, text: string, extra?: ExtraReplyMessage) {
-  if ("callbackQuery" in ctx.update && ctx.callbackQuery?.message) {
+async function renderScreen(ctx: Context, caption: string, keyboard?: ScreenKeyboard, media?: ScreenMedia) {
+  const safeCaption = fitCaption(caption);
+  if (isCallbackContext(ctx)) {
+    const updatedMedia = await editCurrentMedia(ctx, media ?? BOT_CARD_PNG, safeCaption, keyboard);
+    if (updatedMedia) return updatedMedia;
+
+    const updatedText = await editCurrentText(ctx, safeCaption, keyboard);
+    if (updatedText) return updatedText;
+
+    await ctx.answerCbQuery("Không cập nhật được tin nhắn này. Gửi /start để mở menu mới.", { show_alert: true }).catch(() => undefined);
+    return null;
+  }
+
+  const sent = await replyWithScreenPhoto(ctx, media ?? BOT_CARD_PNG, safeCaption, keyboard);
+  if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
+  return sent.message_id;
+}
+
+async function replyWithScreenPhoto(ctx: Context, media: ScreenMedia, caption: string, keyboard?: ScreenKeyboard) {
+  try {
+    return await ctx.replyWithPhoto(toTelegramPhoto(media), {
+      caption,
+      parse_mode: "HTML",
+      ...(keyboard ?? {})
+    } as ExtraReplyMessage);
+  } catch (error) {
+    if (typeof media !== "string") throw error;
+    console.error("Could not send Telegram screen photo, falling back to default card:", error);
+    return ctx.replyWithPhoto(toTelegramPhoto(BOT_CARD_PNG), {
+      caption,
+      parse_mode: "HTML",
+      ...(keyboard ?? {})
+    } as ExtraReplyMessage);
+  }
+}
+
+async function editCurrentMedia(ctx: Context, media: ScreenMedia, caption: string, keyboard?: ScreenKeyboard) {
+  const chatId = ctx.chat?.id;
+  const messageId = currentCallbackMessageId(ctx);
+  if (!chatId || !messageId) return null;
+
+  try {
+    await ctx.editMessageMedia(
+      {
+        type: "photo",
+        media: toTelegramPhoto(media),
+        caption,
+        parse_mode: "HTML"
+      },
+      (keyboard ?? {}) as never
+    );
+    rememberBotMessage(chatId, messageId);
+    return messageId;
+  } catch (error) {
+    if ((error as Error).message.includes("message is not modified")) return messageId;
+    if (typeof media !== "string") {
+      console.error("Could not edit Telegram media:", error);
+      return null;
+    }
+
     try {
-      await ctx.editMessageText(text, extra as ExtraEditMessageText);
-      if (ctx.chat && ctx.callbackQuery?.message) rememberBotMessage(ctx.chat.id, ctx.callbackQuery.message.message_id);
-      return;
-    } catch (error) {
-      const message = (error as Error).message;
-      if (!message.includes("message is not modified")) {
-        console.error("Could not edit Telegram message:", error);
-      }
-      if (message.includes("message is not modified")) return;
+      await ctx.editMessageMedia(
+        {
+          type: "photo",
+          media: toTelegramPhoto(BOT_CARD_PNG),
+          caption,
+          parse_mode: "HTML"
+        },
+        (keyboard ?? {}) as never
+      );
+      rememberBotMessage(chatId, messageId);
+      return messageId;
+    } catch (fallbackError) {
+      if ((fallbackError as Error).message.includes("message is not modified")) return messageId;
+      console.error("Could not edit Telegram media:", fallbackError);
+      return null;
     }
   }
-  const sent = await ctx.reply(text, extra);
-  if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
+}
+
+async function editCurrentText(ctx: Context, text: string, keyboard?: ScreenKeyboard) {
+  const chatId = ctx.chat?.id;
+  const messageId = currentCallbackMessageId(ctx);
+  if (!chatId || !messageId) return null;
+
+  try {
+    await ctx.editMessageText(text, {
+      parse_mode: "HTML",
+      ...(keyboard ?? {})
+    } as ExtraEditMessageText);
+    rememberBotMessage(chatId, messageId);
+    return messageId;
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.includes("message is not modified")) return messageId;
+    console.error("Could not edit Telegram text:", error);
+    return null;
+  }
 }
 
 async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, caption: string) {
   const buffer = await fetchQrImage(qrImageUrl);
-  const editedMessageId = await editQrIntoCurrentMessage(ctx, qrImageUrl, caption);
-  const messageId = editedMessageId ?? (await sendQrPhoto(ctx, buffer, caption));
+  const messageId = isCallbackContext(ctx) ? await editCurrentMedia(ctx, buffer, caption) : await sendQrPhoto(ctx, buffer, caption);
+  if (!messageId) {
+    await editCurrentText(
+      ctx,
+      `${caption}\n\nKhông thể đổi menu cũ sang ảnh QR. Gửi lại bằng cú pháp /nap số_tiền hoặc /mua sản_phẩm ck để tạo QR mới.`,
+      mainKeyboard()
+    );
+    return;
+  }
+
   await api.post(`/bot/payments/${paymentId}/telegram-message`, {
     telegramChatId: String(ctx.chat!.id),
     telegramMessageId: messageId
@@ -409,37 +472,8 @@ async function fetchQrImage(qrImageUrl: string) {
   return Buffer.from(await image.arrayBuffer());
 }
 
-async function editQrIntoCurrentMessage(ctx: Context, qrImageUrl: string, caption: string) {
-  const chatId = ctx.chat?.id;
-  if (!chatId) return null;
-
-  const currentMessageId = "callbackQuery" in ctx.update && ctx.callbackQuery?.message ? ctx.callbackQuery.message.message_id : undefined;
-  const messageId = currentMessageId ?? lastBotMessages.get(chatId);
-  if (!messageId) return null;
-
-  try {
-    await ctx.telegram.editMessageMedia(
-      chatId,
-      messageId,
-      undefined,
-      {
-        type: "photo",
-        media: qrImageUrl,
-        caption,
-        parse_mode: "HTML"
-      },
-      {} as never
-    );
-    rememberBotMessage(chatId, messageId);
-    return messageId;
-  } catch (error) {
-    console.error("Could not edit Telegram message to QR:", error);
-    return null;
-  }
-}
-
 async function sendQrPhoto(ctx: Context, buffer: Buffer, caption: string) {
-  const sent = await ctx.replyWithPhoto({ source: buffer, filename: "vietqr.png" }, { caption, parse_mode: "HTML" });
+  const sent = await ctx.replyWithPhoto(toTelegramPhoto(buffer), { caption, parse_mode: "HTML" });
   if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
   return sent.message_id;
 }
@@ -449,7 +483,7 @@ function rememberBotMessage(chatId: number, messageId: number) {
 }
 
 function buildQrCaption(title: string, code: string, amount: number, expiresAt: string) {
-  return `${title}\nSố tiền: <b>${formatVnd(amount)}</b>\nNội dung CK: <code>${code}</code>\nHạn thanh toán: ${new Date(
+  return `${title}\nSố tiền: <b>${formatVnd(amount)}</b>\nNội dung CK: <code>${escapeHtml(code)}</code>\nHạn thanh toán: ${new Date(
     expiresAt
   ).toLocaleString("vi-VN")}\nHệ thống sẽ tự xử lý khi nhận tiền.`;
 }
@@ -458,8 +492,8 @@ function buildCatalogText(products: ProductSummary[]) {
   if (!products.length) return "Hiện chưa có sản phẩm đang bán.";
 
   const productLines = products.slice(0, CATALOG_TEXT_LIMIT).map((product, index) => {
-    const category = product.category?.name ? ` - ${singleLine(product.category.name)}` : "";
-    return `${index + 1}. ${singleLine(product.name)} - ${formatVnd(product.price)} - SL: ${productQuantityText(product)}${category}`;
+    const category = product.category?.name ? ` - ${escapeHtml(singleLine(product.category.name))}` : "";
+    return `${index + 1}. ${escapeHtml(singleLine(product.name))} - ${formatVnd(product.price)} - SL: ${productQuantityText(product)}${category}`;
   });
   const moreLine = products.length > CATALOG_TEXT_LIMIT ? `\n\nCòn ${products.length - CATALOG_TEXT_LIMIT} sản phẩm khác. Bấm nút bên dưới để xem tiếp.` : "";
 
@@ -551,6 +585,99 @@ function singleLine(input: string) {
   return input.replace(/\s+/g, " ").trim();
 }
 
+function createBotCardPng() {
+  const width = 900;
+  const height = 420;
+  const channels = 3;
+  const raw = Buffer.alloc((1 + width * channels) * height);
+  const colors = {
+    background: [248, 250, 252],
+    border: [203, 213, 225],
+    dark: [15, 23, 42],
+    teal: [15, 118, 110],
+    mint: [20, 184, 166],
+    white: [255, 255, 255]
+  } as const;
+
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * (1 + width * channels);
+    raw[rowStart] = 0;
+    for (let x = 0; x < width; x += 1) {
+      let color: readonly [number, number, number] = colors.background;
+      if (y < 92) color = colors.teal;
+      if (x < 10 || x >= width - 10 || y < 10 || y >= height - 10) color = colors.border;
+      if (x >= 355 && x <= 545 && y >= 135 && y <= 285) color = colors.teal;
+      if (x >= 385 && x <= 515 && y >= 165 && y <= 255) color = colors.white;
+      if (x >= 415 && x <= 485 && y >= 190 && y <= 230) color = colors.mint;
+      if (x >= 280 && x <= 620 && y >= 330 && y <= 344) color = colors.dark;
+      if (x >= 330 && x <= 570 && y >= 360 && y <= 372) color = colors.mint;
+
+      const offset = rowStart + 1 + x * channels;
+      raw[offset] = color[0];
+      raw[offset + 1] = color[1];
+      raw[offset + 2] = color[2];
+    }
+  }
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", deflateSync(raw)),
+    pngChunk("IEND", Buffer.alloc(0))
+  ]);
+}
+
+function pngChunk(type: string, data: Buffer) {
+  const typeBuffer = Buffer.from(type, "ascii");
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const checksum = Buffer.alloc(4);
+  checksum.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
+  return Buffer.concat([length, typeBuffer, data, checksum]);
+}
+
+function crc32(buffer: Buffer) {
+  const table = Array.from({ length: 256 }, (_, index) => {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    return value >>> 0;
+  });
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function isCallbackContext(ctx: Context) {
+  return "callbackQuery" in ctx.update && Boolean(ctx.callbackQuery?.message);
+}
+
+function currentCallbackMessageId(ctx: Context) {
+  return "callbackQuery" in ctx.update && ctx.callbackQuery?.message ? ctx.callbackQuery.message.message_id : undefined;
+}
+
+function toTelegramPhoto(media: ScreenMedia) {
+  if (typeof media === "string") return media;
+  return { source: media, filename: "vd-store.png" };
+}
+
+function fitCaption(caption: string) {
+  if (caption.length <= CAPTION_LIMIT) return caption;
+  return `${caption.slice(0, CAPTION_LIMIT - 20).trim()}\n\n...`;
+}
+
 async function launch() {
   await configureTelegramMenu();
   const mode = process.env.TELEGRAM_BOT_MODE ?? "polling";
@@ -562,6 +689,9 @@ async function launch() {
     const app = express();
     app.get("/health", (_request, response) => {
       response.json({ ok: true, service: "vd-store-bot", timestamp: new Date().toISOString() });
+    });
+    app.get("/assets/bot-card.png", (_request, response) => {
+      response.type("png").send(BOT_CARD_PNG);
     });
     app.use(bot.webhookCallback(path));
     const port = Number(process.env.PORT ?? process.env.BOT_PORT ?? 3001);
