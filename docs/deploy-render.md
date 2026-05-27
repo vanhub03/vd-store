@@ -28,7 +28,7 @@ The Render Hobby plan includes 2 custom domains. This config uses them for `admi
    VIETQR_ACCOUNT_NAME=VANH DAO
    ```
 
-5. On the first successful API deploy, Render runs the seed command automatically and creates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+5. On API startup, Render runs Prisma migrations and the seed command automatically. This creates or updates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
 6. Check health:
 
