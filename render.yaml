@@ -21,9 +21,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        fromDatabase:
-          name: vd-store-db
-          property: connectionString
+        sync: false
       - key: REDIS_URL
         fromService:
           name: vd-store-redis
@@ -34,7 +32,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_EMAIL
-        value: admin@vd-store.local
+        sync: false
       - key: ADMIN_PASSWORD
         sync: false
       - key: TELEGRAM_BOT_TOKEN
@@ -107,9 +105,3 @@ services:
         value: 22.18.0
       - key: VITE_API_BASE_URL
         value: https://api.vanhdao.io.vn
-
-databases:
-  - name: vd-store-db
-    plan: free
-    region: singapore
-    postgresMajorVersion: "16"

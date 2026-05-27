@@ -1,6 +1,8 @@
 # Deploy VD Store on Render Free
 
-Render is the recommended free deployment target for this project because it can run Node web services, PostgreSQL, Redis-compatible Key Value, custom domains, and TLS from one place.
+Render is the recommended free deployment target for this project because it can run Node web services, Redis-compatible Key Value, custom domains, and TLS from one place.
+
+Use an external managed PostgreSQL provider such as Neon or Supabase for `DATABASE_URL`. Render Free Postgres works for tests, but it has limits such as one active free database per workspace and 30-day expiration, so this project does not create a Render database in the Blueprint.
 
 ## Target URLs
 
@@ -15,9 +17,13 @@ The Render Hobby plan includes 2 custom domains. This config uses them for `admi
 1. Push this repo to GitHub.
 2. Create a Render account and choose **New > Blueprint**.
 3. Select the GitHub repo and use the root `render.yaml`.
-4. When Render asks for secret env vars, fill:
+4. Create a free PostgreSQL database on Neon or Supabase and copy its PostgreSQL connection string.
+
+5. When Render asks for secret env vars, fill:
 
    ```env
+   DATABASE_URL=postgresql://...
+   ADMIN_EMAIL=your_admin_email
    ADMIN_PASSWORD=your_strong_admin_password
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
    SEPAY_WEBHOOK_SECRET=your_sepay_hmac_secret
@@ -28,9 +34,9 @@ The Render Hobby plan includes 2 custom domains. This config uses them for `admi
    VIETQR_ACCOUNT_NAME=VANH DAO
    ```
 
-5. On API startup, Render runs Prisma migrations and the seed command automatically. This creates or updates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
+6. On API startup, Render runs Prisma migrations and the seed command automatically. This creates or updates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
-6. Check health:
+7. Check health:
 
    ```text
    https://api.vanhdao.io.vn/health
