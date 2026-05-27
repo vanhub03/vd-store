@@ -4,8 +4,11 @@ export const TOPUP_PREFIX = "NAP";
 export const DIRECT_ORDER_PREFIX = "DH";
 
 export function generatePaymentCode(prefix: string) {
-  const random = crypto.randomBytes(5).toString("base64url").replace(/[^a-zA-Z0-9]/g, "");
-  return `${prefix}${random}`.toUpperCase().slice(0, prefix.length + 8);
+  let random = "";
+  while (random.length < 8) {
+    random += crypto.randomBytes(6).toString("base64url").replace(/[^a-zA-Z0-9]/g, "");
+  }
+  return `${prefix}${random.slice(0, 8)}`.toUpperCase();
 }
 
 export function extractPaymentCode(input?: string | null) {
