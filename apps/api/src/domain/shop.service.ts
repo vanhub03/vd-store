@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   InventoryStatus,
   OrderStatus,
@@ -12,7 +12,8 @@ import {
 } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
 import { DIRECT_ORDER_PREFIX, generatePaymentCode, TOPUP_PREFIX } from "./payment-codes";
-import { assertPositiveVnd } from "./money";
+import { assertPositiveVnd, formatVnd } from "./money";
+import { BroadcastService } from "./broadcast.service";
 
 export type BotUserInput = {
   telegramId: string;
@@ -39,7 +40,12 @@ export type ProductInput = {
 
 @Injectable()
 export class ShopService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ShopService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly broadcasts: BroadcastService
+  ) {}
 
   async upsertTelegramUser(input: BotUserInput) {
     return this.prisma.telegramUser.upsert({
@@ -490,12 +496,16 @@ export class ShopService {
       }
     });
     await this.audit(adminId, "PRODUCT_CREATE", "Product", product.id, { name: product.name });
+    await this.announceNewProductIfReady(product, adminId);
     return product;
   }
 
   async updateProduct(productId: string, input: Partial<ProductInput>, adminId: string) {
     if (input.price !== undefined) assertPositiveVnd(input.price);
     assertNonNegativeStock(input.manualStock);
+    const previous = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!previous) throw new NotFoundException("Không tìm thấy sản phẩm.");
+
     const product = await this.prisma.product.update({
       where: { id: productId },
       data: {
@@ -505,6 +515,7 @@ export class ShopService {
       }
     });
     await this.audit(adminId, "PRODUCT_UPDATE", "Product", product.id, input);
+    await this.announceManualStockIncrease(previous, product, adminId);
     return product;
   }
 
@@ -520,6 +531,7 @@ export class ShopService {
       skipDuplicates: false
     });
     await this.audit(adminId, "INVENTORY_IMPORT", "Product", productId, { count: result.count });
+    await this.announceStockItemIncrease(product, result.count, adminId);
     return result;
   }
 
@@ -812,6 +824,93 @@ export class ShopService {
       }
     });
   }
+
+  private async announceNewProductIfReady(product: {
+    id: string;
+    name: string;
+    description?: string | null;
+    price: number;
+    status: ProductStatus;
+    deliveryType: ProductDeliveryType;
+    manualStock?: number | null;
+  }, adminId: string) {
+    if (product.status !== ProductStatus.ACTIVE) return;
+    if (product.deliveryType === ProductDeliveryType.STOCK_ITEM) return;
+
+    if (product.deliveryType === ProductDeliveryType.MANUAL) {
+      const stock = product.manualStock ?? 0;
+      if (stock <= 0) return;
+      await this.queueNewStockBroadcast(product, stock, stock, adminId);
+      return;
+    }
+
+    await this.queueNewStockBroadcast(product, null, null, adminId);
+  }
+
+  private async announceManualStockIncrease(
+    previous: {
+      name: string;
+      manualStock?: number | null;
+      status: ProductStatus;
+      deliveryType: ProductDeliveryType;
+    },
+    product: {
+      id: string;
+      name: string;
+      description?: string | null;
+      price: number;
+      status: ProductStatus;
+      deliveryType: ProductDeliveryType;
+      manualStock?: number | null;
+    },
+    adminId: string
+  ) {
+    if (product.status !== ProductStatus.ACTIVE || product.deliveryType !== ProductDeliveryType.MANUAL) return;
+    const previousStock = previous.deliveryType === ProductDeliveryType.MANUAL && previous.status === ProductStatus.ACTIVE ? previous.manualStock ?? 0 : 0;
+    const currentStock = product.manualStock ?? 0;
+    const addedCount = currentStock - previousStock;
+    if (addedCount <= 0) return;
+    await this.queueNewStockBroadcast(product, addedCount, currentStock, adminId);
+  }
+
+  private async announceStockItemIncrease(
+    product: {
+      id: string;
+      name: string;
+      description?: string | null;
+      price: number;
+      status: ProductStatus;
+      deliveryType: ProductDeliveryType;
+    },
+    addedCount: number,
+    adminId: string
+  ) {
+    if (product.status !== ProductStatus.ACTIVE || product.deliveryType !== ProductDeliveryType.STOCK_ITEM || addedCount <= 0) return;
+    const availableStock = await this.prisma.inventoryItem.count({
+      where: { productId: product.id, status: InventoryStatus.AVAILABLE }
+    });
+    await this.queueNewStockBroadcast(product, addedCount, availableStock, adminId);
+  }
+
+  private async queueNewStockBroadcast(
+    product: {
+      name: string;
+      description?: string | null;
+      price: number;
+      deliveryType: ProductDeliveryType;
+    },
+    addedCount: number | null,
+    stock: number | null,
+    adminId: string
+  ) {
+    const title = `Hàng mới: ${product.name}`;
+    const message = buildNewStockBroadcastMessage(product, addedCount, stock);
+    try {
+      await this.broadcasts.createSystemBroadcast(title, message, adminId);
+    } catch (error) {
+      this.logger.warn(`Could not queue new stock broadcast for ${product.name}: ${(error as Error).message}`);
+    }
+  }
 }
 
 function minutesFromNow(minutes: number) {
@@ -837,6 +936,38 @@ export function slugify(input: string) {
 function defaultManualInstructions() {
   const username = process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99";
   return `Vui lòng ib admin @${username} để nhận hàng.`;
+}
+
+function buildNewStockBroadcastMessage(
+  product: {
+    name: string;
+    description?: string | null;
+    price: number;
+    deliveryType: ProductDeliveryType;
+  },
+  addedCount: number | null,
+  stock: number | null
+) {
+  const productName = escapeHtml(product.name);
+  const addedLine =
+    addedCount === null ? `Shop đã lên sản phẩm mới: ${productName}!` : `Shop đã lên thêm ${addedCount} con ${productName}!`;
+  const stockText = stock === null ? "Không giới hạn" : String(stock);
+  const note = product.description?.trim() ? product.description.trim() : `${product.name} đã có thêm slot mới!`;
+
+  return [
+    "🚀 THÔNG BÁO HÀNG MỚI 🚀",
+    "✨ ──────────────────────── ✨",
+    addedLine,
+    `💰 Giá: ${formatVnd(product.price)}`,
+    `💾 Kho: ${escapeHtml(stockText)}`,
+    `✨ Ghi chú: ${escapeHtml(note)}`,
+    "✨ ──────────────────────── ✨",
+    "👉 Nhấn /shop để mua hàng ngay!"
+  ].join("\n");
+}
+
+function escapeHtml(input: string) {
+  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 type RevenuePayment = {

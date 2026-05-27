@@ -56,6 +56,29 @@ export class BroadcastService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async createSystemBroadcast(title: string, message: string, adminId?: string) {
+    if (!title.trim() || !message.trim()) {
+      throw new BadRequestException("Tiêu đề và nội dung thông báo là bắt buộc.");
+    }
+
+    const broadcast = await this.prisma.broadcast.create({
+      data: {
+        title: title.trim(),
+        message: message.trim(),
+        createdByAdminId: adminId,
+        status: BroadcastStatus.DRAFT
+      }
+    });
+
+    if (!this.queue) {
+      this.logger.warn(`Broadcast queue not ready. System broadcast ${broadcast.id} was saved as draft.`);
+      return { broadcast, queued: 0 };
+    }
+
+    const result = await this.queueBroadcast(broadcast.id);
+    return { broadcast, ...result };
+  }
+
   async listBroadcasts() {
     return this.prisma.broadcast.findMany({
       orderBy: { createdAt: "desc" },

@@ -29,6 +29,7 @@ const BOT_COMMANDS = [
   { command: "start", description: "Bắt đầu sử dụng bot" },
   { command: "help", description: "Xem cú pháp chat nhanh" },
   { command: "menu", description: "Mở menu chính" },
+  { command: "shop", description: "Mở danh sách sản phẩm" },
   { command: "sanpham", description: "Xem tất cả sản phẩm" },
   { command: "xem", description: "Xem sản phẩm: /xem 1" },
   { command: "mua", description: "Mua hàng: /mua 1 vi hoặc /mua 1 ck" },
@@ -41,6 +42,7 @@ const BOT_COMMANDS = [
 const HELP_TEXT = [
   "Cú pháp chat nhanh:",
   "/menu - mở menu chính",
+  "/shop - xem tất cả sản phẩm",
   "/sanpham - xem tất cả sản phẩm",
   "/xem 1 - xem sản phẩm theo số thứ tự trong danh sách",
   "/xem ten san pham - tìm sản phẩm theo tên",
@@ -86,6 +88,7 @@ bot.start(async (ctx) => {
 
 bot.command("help", (ctx) => showHelp(ctx));
 bot.command("menu", (ctx) => showHome(ctx));
+bot.command("shop", (ctx) => showCatalog(ctx));
 bot.command("sanpham", (ctx) => showCatalog(ctx));
 bot.command("xem", (ctx) => showProductByCommand(ctx));
 bot.command("mua", (ctx) => purchaseByCommand(ctx));
@@ -161,6 +164,7 @@ bot.on("text", async (ctx) => {
   if (topupAmount) return createTopupQr(ctx, topupAmount);
   if (text === "help" || text === "tro giup" || text === "trợ giúp") return showHelp(ctx);
   if (text === "menu") return showHome(ctx);
+  if (text === "shop") return showCatalog(ctx);
   if (text === "san pham" || text === "sản phẩm") return showCatalog(ctx);
   if (text === "so du" || text === "số dư") return showWallet(ctx);
   if (text === "lich su" || text === "lịch sử") return showHistory(ctx);
