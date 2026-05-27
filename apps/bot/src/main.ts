@@ -45,13 +45,7 @@ bot.action("catalog", async (ctx) => {
 
 bot.action(/^cat:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  const categoryId = ctx.match[1];
-  const catalog = await api.get<CatalogResponse>("/bot/catalog");
-  const category = catalog.categories.find((item) => item.id === categoryId);
-  if (!category) return ctx.reply("Không tìm thấy danh mục.", mainKeyboard());
-  const buttons = category.products.map((product) => [Markup.button.callback(product.name, `prod:${product.id}`)]);
-  buttons.push([Markup.button.callback("Quay lại danh mục", "catalog")]);
-  await ctx.reply(`Danh mục: ${category.name}`, Markup.inlineKeyboard(buttons));
+  await showCatalog(ctx);
 });
 
 bot.action(/^prod:(.+)$/, async (ctx) => {
@@ -146,21 +140,20 @@ bot.catch(async (error, ctx) => {
 async function showCatalog(ctx: Context) {
   await upsertUser(ctx);
   const catalog = await api.get<CatalogResponse>("/bot/catalog");
-  const buttons = catalog.categories.map((category) => [Markup.button.callback(category.name, `cat:${category.id}`)]);
-  for (const product of catalog.uncategorized.slice(0, 10)) {
-    buttons.push([Markup.button.callback(product.name, `prod:${product.id}`)]);
-  }
+  const products = flattenProducts(catalog);
+  const buttons = products.slice(0, 40).map((product) => [
+    Markup.button.callback(`${product.name} - ${formatVnd(product.price)}`, `prod:${product.id}`)
+  ]);
   buttons.push([Markup.button.callback("Quay lại", "home")]);
-  const totalProducts =
-    catalog.uncategorized.length + catalog.categories.reduce((total, category) => total + category.products.length, 0);
-  await ctx.reply(totalProducts ? "Chọn danh mục hoặc sản phẩm:" : "Hiện chưa có sản phẩm đang bán.", Markup.inlineKeyboard(buttons));
+  await ctx.reply(products.length ? "Chọn sản phẩm:" : "Hiện chưa có sản phẩm đang bán.", Markup.inlineKeyboard(buttons));
 }
 
 async function showProduct(ctx: Context, productId: string) {
   const product = await api.get<ProductDetail>(`/bot/products/${productId}`);
   const description = product.description ? `\n${product.description}` : "";
+  const categoryLine = product.category?.name ? `Danh mục: <b>${escapeHtml(product.category.name)}</b>\n` : "";
   await ctx.reply(
-    `<b>${escapeHtml(product.name)}</b>${escapeHtml(description)}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(product)}`,
+    `${categoryLine}<b>${escapeHtml(product.name)}</b>${escapeHtml(description)}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(product)}`,
     {
       parse_mode: "HTML",
       ...Markup.inlineKeyboard([
@@ -173,17 +166,38 @@ async function showProduct(ctx: Context, productId: string) {
 }
 
 async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, caption: string) {
-  const sent = await ctx.replyWithPhoto({ url: qrImageUrl }, { caption, parse_mode: "HTML" });
+  const sent = await sendQrPhotoWithFallback(ctx, qrImageUrl, caption);
   await api.post(`/bot/payments/${paymentId}/telegram-message`, {
     telegramChatId: String(ctx.chat!.id),
     telegramMessageId: sent.message_id
   });
 }
 
+async function sendQrPhotoWithFallback(ctx: Context, qrImageUrl: string, caption: string) {
+  try {
+    const image = await fetch(qrImageUrl);
+    if (!image.ok) throw new Error(`VietQR returned HTTP ${image.status}`);
+    const contentType = image.headers.get("content-type") ?? "";
+    if (!contentType.includes("image")) throw new Error(`VietQR returned ${contentType || "unknown content type"}`);
+    const buffer = Buffer.from(await image.arrayBuffer());
+    return ctx.replyWithPhoto({ source: buffer, filename: "vietqr.png" }, { caption, parse_mode: "HTML" });
+  } catch (error) {
+    console.error("Could not upload VietQR image:", error);
+    return ctx.reply(`${caption}\n\nLink QR: ${escapeHtml(qrImageUrl)}`, { parse_mode: "HTML" });
+  }
+}
+
 function buildQrCaption(title: string, code: string, amount: number, expiresAt: string) {
   return `${title}\nSố tiền: <b>${formatVnd(amount)}</b>\nNội dung CK: <code>${code}</code>\nHạn thanh toán: ${new Date(
     expiresAt
   ).toLocaleString("vi-VN")}\nHệ thống sẽ tự xử lý khi nhận tiền.`;
+}
+
+function flattenProducts(catalog: CatalogResponse) {
+  return [
+    ...catalog.categories.flatMap((category) => category.products.map((product) => ({ ...product, category }))),
+    ...catalog.uncategorized
+  ];
 }
 
 async function launch() {

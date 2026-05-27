@@ -182,7 +182,7 @@ function Login({ api, onLogin }: { api: Api; onLogin: (session: AdminSession) =>
         </label>
         {error && <div className="alert">{error}</div>}
         <button className="primaryButton" disabled={loading}>
-          <Save size={16} /> Đăng nhập
+          {loading ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {loading ? "Đang đăng nhập..." : "Đăng nhập"}
         </button>
       </form>
     </main>
@@ -191,12 +191,19 @@ function Login({ api, onLogin }: { api: Api; onLogin: (session: AdminSession) =>
 
 function Overview({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    api.get<Dashboard>("/admin/dashboard").then(setDashboard).catch((err) => onError((err as Error).message));
+    setLoading(true);
+    api
+      .get<Dashboard>("/admin/dashboard")
+      .then(setDashboard)
+      .catch((err) => onError((err as Error).message))
+      .finally(() => setLoading(false));
   }, [api, onError]);
 
   return (
     <div className="stack">
+      {loading && <LoadingBlock label="Đang tải tổng quan..." />}
       <section className="metricsGrid">
         <Metric label="Doanh thu hôm nay" value={formatVnd(dashboard?.todayRevenue ?? 0)} />
         <Metric label="Doanh thu tháng này" value={formatVnd(dashboard?.monthRevenue ?? 0)} />
@@ -243,6 +250,9 @@ function Overview({ api, onError }: { api: Api; onError: (error: string | null) 
 function Products({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [inventoryProductId, setInventoryProductId] = useState("");
   const [inventoryContent, setInventoryContent] = useState("");
   const [form, setForm] = useState({
@@ -257,9 +267,14 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
   });
 
   async function load() {
-    const [nextProducts, nextCategories] = await Promise.all([api.get<Product[]>("/admin/products"), api.get<Category[]>("/admin/categories")]);
-    setProducts(nextProducts);
-    setCategories(nextCategories);
+    setLoading(true);
+    try {
+      const [nextProducts, nextCategories] = await Promise.all([api.get<Product[]>("/admin/products"), api.get<Category[]>("/admin/categories")]);
+      setProducts(nextProducts);
+      setCategories(nextCategories);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -268,6 +283,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
 
   async function submitProduct(event: FormEvent) {
     event.preventDefault();
+    setCreating(true);
     try {
       await api.post("/admin/products", {
         ...form,
@@ -281,12 +297,15 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       onError(null);
     } catch (err) {
       onError((err as Error).message);
+    } finally {
+      setCreating(false);
     }
   }
 
   async function importInventory(event: FormEvent) {
     event.preventDefault();
     if (!inventoryProductId) return;
+    setImporting(true);
     try {
       await api.post(`/admin/products/${inventoryProductId}/inventory/import`, { content: inventoryContent });
       setInventoryContent("");
@@ -294,11 +313,14 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       onError(null);
     } catch (err) {
       onError((err as Error).message);
+    } finally {
+      setImporting(false);
     }
   }
 
   return (
     <div className="stack">
+      {loading && <LoadingBlock label="Đang tải sản phẩm..." />}
       <section className="panel">
         <h2>Tạo sản phẩm</h2>
         <form className="formGrid" onSubmit={submitProduct}>
@@ -345,8 +367,8 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             Hướng dẫn manual
             <input value={form.manualInstructions} onChange={(event) => setForm({ ...form, manualInstructions: event.target.value })} />
           </label>
-          <button className="primaryButton">
-            <PackagePlus size={16} /> Tạo sản phẩm
+          <button className="primaryButton" disabled={creating}>
+            {creating ? <RefreshCw className="spin" size={16} /> : <PackagePlus size={16} />} {creating ? "Đang tạo..." : "Tạo sản phẩm"}
           </button>
         </form>
       </section>
@@ -369,8 +391,8 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             Dữ liệu
             <textarea value={inventoryContent} onChange={(event) => setInventoryContent(event.target.value)} rows={5} />
           </label>
-          <button className="primaryButton">
-            <Save size={16} /> Nhập kho
+          <button className="primaryButton" disabled={importing || !inventoryProductId}>
+            {importing ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {importing ? "Đang nhập..." : "Nhập kho"}
           </button>
         </form>
       </section>
@@ -393,9 +415,16 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
   const [users, setUsers] = useState<User[]>([]);
   const [amounts, setAmounts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [adjustingUserId, setAdjustingUserId] = useState<string | null>(null);
 
   async function load() {
-    setUsers(await api.get<User[]>("/admin/users"));
+    setLoading(true);
+    try {
+      setUsers(await api.get<User[]>("/admin/users"));
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -403,18 +432,22 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
   }, []);
 
   async function adjust(userId: string) {
+    setAdjustingUserId(userId);
     try {
       await api.post(`/admin/users/${userId}/wallet-adjustments`, { amount: Number(amounts[userId] ?? 0), note: notes[userId] });
       await load();
       onError(null);
     } catch (err) {
       onError((err as Error).message);
+    } finally {
+      setAdjustingUserId(null);
     }
   }
 
   return (
     <section className="panel">
       <h2>User Telegram</h2>
+      {loading && <LoadingBlock label="Đang tải user..." />}
       <div className="tableWrap">
         <table>
           <thead>
@@ -438,8 +471,9 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
                     onChange={(event) => setAmounts({ ...amounts, [user.id]: Number(event.target.value) })}
                   />
                   <input value={notes[user.id] ?? ""} onChange={(event) => setNotes({ ...notes, [user.id]: event.target.value })} placeholder="Ghi chú" />
-                  <button className="smallButton" onClick={() => adjust(user.id)}>
-                    <Wallet size={14} /> Lưu
+                  <button className="smallButton" onClick={() => adjust(user.id)} disabled={adjustingUserId === user.id}>
+                    {adjustingUserId === user.id ? <RefreshCw className="spin" size={14} /> : <Wallet size={14} />}{" "}
+                    {adjustingUserId === user.id ? "Đang lưu..." : "Lưu"}
                   </button>
                 </td>
               </tr>
@@ -454,18 +488,22 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
 function OrdersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([api.get<Order[]>("/admin/orders"), api.get<Payment[]>("/admin/payments")])
       .then(([nextOrders, nextPayments]) => {
         setOrders(nextOrders);
         setPayments(nextPayments);
       })
-      .catch((err) => onError((err as Error).message));
+      .catch((err) => onError((err as Error).message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
     <div className="stack">
+      {loading && <LoadingBlock label="Đang tải đơn hàng và thanh toán..." />}
       <DataTable
         title="Đơn hàng"
         columns={["Mã", "User", "Sản phẩm", "Số tiền", "Trạng thái"]}
@@ -496,9 +534,17 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   async function load() {
-    setBroadcasts(await api.get<Broadcast[]>("/admin/broadcasts"));
+    setLoading(true);
+    try {
+      setBroadcasts(await api.get<Broadcast[]>("/admin/broadcasts"));
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -507,6 +553,7 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
 
   async function create(event: FormEvent) {
     event.preventDefault();
+    setCreating(true);
     try {
       await api.post("/admin/broadcasts", { title, message });
       setTitle("");
@@ -515,21 +562,27 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
       onError(null);
     } catch (err) {
       onError((err as Error).message);
+    } finally {
+      setCreating(false);
     }
   }
 
   async function send(id: string) {
+    setSendingId(id);
     try {
       await api.post(`/admin/broadcasts/${id}/send`);
       await load();
       onError(null);
     } catch (err) {
       onError((err as Error).message);
+    } finally {
+      setSendingId(null);
     }
   }
 
   return (
     <div className="stack">
+      {loading && <LoadingBlock label="Đang tải thông báo..." />}
       <section className="panel">
         <h2>Tạo thông báo</h2>
         <form className="formGrid" onSubmit={create}>
@@ -541,8 +594,8 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
             Nội dung gửi bot
             <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} required />
           </label>
-          <button className="primaryButton">
-            <Save size={16} /> Lưu nháp
+          <button className="primaryButton" disabled={creating}>
+            {creating ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {creating ? "Đang lưu..." : "Lưu nháp"}
           </button>
         </form>
       </section>
@@ -567,8 +620,8 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
                   <td>{item.sentCount}</td>
                   <td>{item.failedCount}</td>
                   <td>
-                    <button className="smallButton" onClick={() => send(item.id)}>
-                      <Send size={14} /> Gửi
+                    <button className="smallButton" onClick={() => send(item.id)} disabled={sendingId === item.id}>
+                      {sendingId === item.id ? <RefreshCw className="spin" size={14} /> : <Send size={14} />} {sendingId === item.id ? "Đang gửi..." : "Gửi"}
                     </button>
                   </td>
                 </tr>
@@ -586,6 +639,15 @@ function Metric({ label, value }: { label: string; value: string | number }) {
     <div className="metric">
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function LoadingBlock({ label }: { label: string }) {
+  return (
+    <div className="loadingBlock">
+      <RefreshCw className="spin" size={16} />
+      {label}
     </div>
   );
 }

@@ -47,6 +47,7 @@ export type ProductSummary = {
   description?: string;
   price: number;
   deliveryType: string;
+  category?: { id: string; name: string } | null;
   _count?: { inventoryItems: number };
 };
 

@@ -84,6 +84,21 @@ nav {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .navButton {
   width: 100%;
   justify-content: flex-start;
@@ -181,6 +196,19 @@ nav {
 .stack {
   display: grid;
   gap: 18px;
+}
+
+.loadingBlock {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #0f766e;
+  background: #e7f5f3;
+  border: 1px solid #bae3de;
+  border-radius: 8px;
+  padding: 10px 12px;
+  width: fit-content;
 }
 
 .panel {
