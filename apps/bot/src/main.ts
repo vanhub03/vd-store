@@ -21,6 +21,7 @@ const api = new ApiClient();
 const bot = new Telegraf(token);
 const CATALOG_BUTTON_LIMIT = 40;
 const CATALOG_TEXT_LIMIT = 25;
+const lastBotMessages = new Map<number, number>();
 const BOT_COMMANDS = [
   { command: "start", description: "Bắt đầu sử dụng bot" },
   { command: "help", description: "Xem cú pháp chat nhanh" },
@@ -148,7 +149,10 @@ bot.action("home", async (ctx) => {
 });
 
 bot.on("text", async (ctx) => {
-  const text = ctx.message.text.trim().toLocaleLowerCase("vi-VN");
+  const rawText = ctx.message.text.trim();
+  const text = rawText.toLocaleLowerCase("vi-VN");
+  const topupAmount = parseTopupAmountMessage(rawText);
+  if (topupAmount) return createTopupQr(ctx, topupAmount);
   if (text === "help" || text === "tro giup" || text === "trợ giúp") return showHelp(ctx);
   if (text === "menu") return showHome(ctx);
   if (text === "san pham" || text === "sản phẩm") return showCatalog(ctx);
@@ -369,6 +373,7 @@ async function updateText(ctx: Context, text: string, extra?: ExtraReplyMessage)
   if ("callbackQuery" in ctx.update && ctx.callbackQuery?.message) {
     try {
       await ctx.editMessageText(text, extra as ExtraEditMessageText);
+      if (ctx.chat && ctx.callbackQuery?.message) rememberBotMessage(ctx.chat.id, ctx.callbackQuery.message.message_id);
       return;
     } catch (error) {
       const message = (error as Error).message;
@@ -378,29 +383,52 @@ async function updateText(ctx: Context, text: string, extra?: ExtraReplyMessage)
       if (message.includes("message is not modified")) return;
     }
   }
-  await ctx.reply(text, extra);
+  const sent = await ctx.reply(text, extra);
+  if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
 }
 
 async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, caption: string) {
-  const sent = await sendQrPhotoWithFallback(ctx, qrImageUrl, caption);
+  const buffer = await fetchQrImage(qrImageUrl);
+  await clearPreviousBotMessage(ctx);
+  const sent = await ctx.replyWithPhoto({ source: buffer, filename: "vietqr.png" }, { caption, parse_mode: "HTML" });
+  if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
   await api.post(`/bot/payments/${paymentId}/telegram-message`, {
     telegramChatId: String(ctx.chat!.id),
     telegramMessageId: sent.message_id
   });
 }
 
-async function sendQrPhotoWithFallback(ctx: Context, qrImageUrl: string, caption: string) {
-  try {
-    const image = await fetch(qrImageUrl);
-    if (!image.ok) throw new Error(`VietQR returned HTTP ${image.status}`);
-    const contentType = image.headers.get("content-type") ?? "";
-    if (!contentType.includes("image")) throw new Error(`VietQR returned ${contentType || "unknown content type"}`);
-    const buffer = Buffer.from(await image.arrayBuffer());
-    return ctx.replyWithPhoto({ source: buffer, filename: "vietqr.png" }, { caption, parse_mode: "HTML" });
-  } catch (error) {
-    console.error("Could not upload VietQR image:", error);
-    return ctx.reply(`${caption}\n\nLink QR: ${escapeHtml(qrImageUrl)}`, { parse_mode: "HTML" });
+async function fetchQrImage(qrImageUrl: string) {
+  const image = await fetch(qrImageUrl);
+  if (!image.ok) throw new Error(`Không tải được ảnh VietQR. HTTP ${image.status}`);
+
+  const contentType = image.headers.get("content-type") ?? "";
+  if (!contentType.includes("image")) {
+    throw new Error(`Không tải được ảnh VietQR. Server trả về ${contentType || "unknown content type"}.`);
   }
+
+  return Buffer.from(await image.arrayBuffer());
+}
+
+async function clearPreviousBotMessage(ctx: Context) {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  const currentMessageId = "callbackQuery" in ctx.update && ctx.callbackQuery?.message ? ctx.callbackQuery.message.message_id : undefined;
+  const messageId = currentMessageId ?? lastBotMessages.get(chatId);
+  if (!messageId) return;
+
+  try {
+    await ctx.telegram.deleteMessage(chatId, messageId);
+  } catch (error) {
+    console.error("Could not delete previous Telegram message:", error);
+  } finally {
+    if (lastBotMessages.get(chatId) === messageId) lastBotMessages.delete(chatId);
+  }
+}
+
+function rememberBotMessage(chatId: number, messageId: number) {
+  lastBotMessages.set(chatId, messageId);
 }
 
 function buildQrCaption(title: string, code: string, amount: number, expiresAt: string) {
@@ -480,6 +508,12 @@ function parseVndAmount(input?: string) {
   if (!/^\d+$/.test(digits)) return null;
   const amount = Number(digits) * multiplier;
   return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
+}
+
+function parseTopupAmountMessage(input: string) {
+  const normalized = input.trim().toLocaleLowerCase("vi-VN");
+  if (!/^[\d\s.,_]+k?$/.test(normalized)) return null;
+  return parseVndAmount(normalized);
 }
 
 function getCommandArgs(ctx: Context) {

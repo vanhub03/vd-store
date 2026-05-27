@@ -769,18 +769,22 @@ export class ShopService {
   }
 
   private buildVietQrImageUrl(amount: number, code: string) {
-    const bankCode = process.env.VIETQR_BANK_CODE ?? "MB";
-    const accountNumber = process.env.VIETQR_ACCOUNT_NUMBER || process.env.SEPAY_ACCOUNT_NUMBER || "";
-    const accountName = process.env.VIETQR_ACCOUNT_NAME || "VD STORE";
+    const bankCode = (process.env.VIETQR_BANK_CODE?.trim() || "TPB").toUpperCase();
+    const accountNumber = (process.env.VIETQR_ACCOUNT_NUMBER || process.env.SEPAY_ACCOUNT_NUMBER || "03219071601").trim();
+    const accountName = (process.env.VIETQR_ACCOUNT_NAME || "VANH DAO").trim();
     const template = process.env.VIETQR_TEMPLATE ?? "compact2";
-    const baseUrl = process.env.VIETQR_IMAGE_BASE_URL ?? "https://img.vietqr.io/image";
+    const baseUrl = (process.env.VIETQR_IMAGE_BASE_URL ?? "https://img.vietqr.io/image").replace(/\/+$/, "");
+
+    if (!bankCode || !accountNumber) {
+      throw new BadRequestException("Thiếu cấu hình VietQR: cần VIETQR_BANK_CODE và VIETQR_ACCOUNT_NUMBER.");
+    }
 
     const params = new URLSearchParams({
       amount: String(amount),
       addInfo: code,
       accountName
     });
-    return `${baseUrl}/${bankCode}-${accountNumber}-${template}.png?${params.toString()}`;
+    return `${baseUrl}/${encodeURIComponent(bankCode)}-${encodeURIComponent(accountNumber)}-${encodeURIComponent(template)}.png?${params.toString()}`;
   }
 
   private async audit(adminId: string, action: string, entityType: string, entityId: string, meta?: unknown) {
