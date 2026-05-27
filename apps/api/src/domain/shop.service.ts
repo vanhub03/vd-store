@@ -27,6 +27,7 @@ export type ProductInput = {
   name: string;
   slug?: string;
   description?: string | null;
+  imageUrl?: string | null;
   price: number;
   status?: ProductStatus;
   deliveryType: ProductDeliveryType;

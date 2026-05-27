@@ -26,6 +26,7 @@ type Product = {
   id: string;
   name: string;
   description?: string;
+  imageUrl?: string | null;
   price: number;
   status: string;
   deliveryType: string;
@@ -261,6 +262,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
     categoryId: "",
     deliveryType: "STOCK_ITEM",
     description: "",
+    imageUrl: "",
     sharedContent: "",
     sharedFilePath: "",
     manualInstructions: "Vui lòng ib admin @vanhdao99 để nhận hàng."
@@ -289,10 +291,11 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
         ...form,
         categoryId: form.categoryId || null,
         price: Number(form.price),
+        imageUrl: form.imageUrl || null,
         sharedContent: form.sharedContent || null,
         sharedFilePath: form.sharedFilePath || null
       });
-      setForm({ ...form, name: "", description: "", sharedContent: "", sharedFilePath: "" });
+      setForm({ ...form, name: "", description: "", imageUrl: "", sharedContent: "", sharedFilePath: "" });
       await load();
       onError(null);
     } catch (err) {
@@ -327,6 +330,15 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
           <label>
             Tên
             <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+          </label>
+          <label>
+            Logo URL
+            <input
+              type="url"
+              value={form.imageUrl}
+              onChange={(event) => setForm({ ...form, imageUrl: event.target.value })}
+              placeholder="https://example.com/logo.png"
+            />
           </label>
           <label>
             Giá VND
@@ -400,13 +412,29 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       <DataTable
         columns={["Tên", "Giá", "Loại", "Tồn", "Trạng thái"]}
         rows={products.map((product) => [
-          product.name,
+          <ProductNameCell product={product} />,
           formatVnd(product.price),
           product.deliveryType,
           String(product._count?.inventoryItems ?? 0),
           product.status
         ])}
       />
+    </div>
+  );
+}
+
+function ProductNameCell({ product }: { product: Product }) {
+  return (
+    <div className="productNameCell">
+      {product.imageUrl ? (
+        <img className="productLogo" src={product.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" />
+      ) : (
+        <div className="productLogo productLogoPlaceholder">VD</div>
+      )}
+      <div>
+        <strong>{product.name}</strong>
+        {product.category?.name && <span>{product.category.name}</span>}
+      </div>
     </div>
   );
 }
@@ -716,7 +744,7 @@ function NavButton({ active, onClick, icon, children }: { active: boolean; onCli
   );
 }
 
-function DataTable({ title, columns, rows }: { title?: string; columns: string[]; rows: Array<Array<string | number | undefined>> }) {
+function DataTable({ title, columns, rows }: { title?: string; columns: string[]; rows: Array<Array<React.ReactNode>> }) {
   return (
     <section className="panel">
       {title && <h2>{title}</h2>}

@@ -131,6 +131,7 @@ model Product {
   name               String
   slug               String              @unique
   description        String?
+  imageUrl           String?
   price              Int
   status             ProductStatus       @default(ACTIVE)
   deliveryType       ProductDeliveryType

@@ -224,18 +224,60 @@ async function showProduct(ctx: Context, productId: string) {
 async function showProductDetail(ctx: Context, product: ProductDetail) {
   const description = product.description ? `\n${product.description}` : "";
   const categoryLine = product.category?.name ? `Danh mục: <b>${escapeHtml(product.category.name)}</b>\n` : "";
-  await updateText(
-    ctx,
-    `${categoryLine}<b>${escapeHtml(product.name)}</b>${escapeHtml(description)}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(product)}\n\nChat nhanh: /mua ${escapeHtml(product.name)} vi hoặc /mua ${escapeHtml(product.name)} ck`,
-    {
-      parse_mode: "HTML",
-      ...Markup.inlineKeyboard([
-        [Markup.button.callback("Mua bằng ví", `buy_wallet:${product.id}`)],
-        [Markup.button.callback("Chuyển khoản QR", `buy_bank:${product.id}`)],
-        [Markup.button.callback("Quay lại", "catalog")]
-      ])
+  const caption = `${categoryLine}<b>${escapeHtml(product.name)}</b>${escapeHtml(description)}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(
+    product
+  )}\n\nChat nhanh: /mua ${escapeHtml(product.name)} vi hoặc /mua ${escapeHtml(product.name)} ck`;
+  const keyboard = Markup.inlineKeyboard([
+    [Markup.button.callback("Mua bằng ví", `buy_wallet:${product.id}`)],
+    [Markup.button.callback("Chuyển khoản QR", `buy_bank:${product.id}`)],
+    [Markup.button.callback("Quay lại", "catalog")]
+  ]);
+
+  if (product.imageUrl) {
+    const updated = await updateProductPhoto(ctx, product.imageUrl, caption, keyboard);
+    if (updated) return;
+  }
+
+  await updateText(ctx, withImageLink(caption, product.imageUrl), {
+    parse_mode: "HTML",
+    ...keyboard
+  });
+}
+
+async function updateProductPhoto(ctx: Context, imageUrl: string, caption: string, extra: ExtraReplyMessage) {
+  if ("callbackQuery" in ctx.update && ctx.callbackQuery?.message) {
+    try {
+      await ctx.editMessageMedia(
+        {
+          type: "photo",
+          media: imageUrl,
+          caption,
+          parse_mode: "HTML"
+        },
+        extra as never
+      );
+      return true;
+    } catch (error) {
+      console.error("Could not edit Telegram product photo:", error);
+      return false;
     }
-  );
+  }
+
+  try {
+    await ctx.replyWithPhoto(imageUrl, {
+      caption,
+      parse_mode: "HTML",
+      ...extra
+    });
+    return true;
+  } catch (error) {
+    console.error("Could not send Telegram product photo:", error);
+    return false;
+  }
+}
+
+function withImageLink(caption: string, imageUrl?: string | null) {
+  return imageUrl ? `${caption}\nLogo: <a href="${escapeHtml(imageUrl)}">xem ảnh</a>` : caption;
 }
 
 async function showProductByCommand(ctx: Context) {
