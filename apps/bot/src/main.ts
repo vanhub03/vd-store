@@ -1,5 +1,6 @@
 import express from "express";
 import { Context, Markup, Telegraf } from "telegraf";
+import { ExtraEditMessageText, ExtraReplyMessage } from "telegraf/typings/telegram-types";
 import { ApiClient, CatalogResponse, HistoryResponse, PaymentResponse, ProductDetail, WalletPurchaseResponse } from "./api";
 import { escapeHtml, formatVnd, productStockLabel } from "./format";
 
@@ -57,13 +58,14 @@ bot.action("wallet", async (ctx) => {
   await ctx.answerCbQuery();
   await upsertUser(ctx);
   const wallet = await api.get<{ balance: number }>(`/bot/wallet/${ctx.from!.id}`);
-  await ctx.reply(`Số dư hiện tại: ${formatVnd(wallet.balance)}`, mainKeyboard());
+  await updateText(ctx, `Số dư hiện tại: ${formatVnd(wallet.balance)}`, mainKeyboard());
 });
 
 bot.action("topup", async (ctx) => {
   await ctx.answerCbQuery();
   await upsertUser(ctx);
-  await ctx.reply(
+  await updateText(
+    ctx,
     "Chọn số tiền cần nạp. QR có hiệu lực trong 10 phút.",
     Markup.inlineKeyboard([
       [Markup.button.callback("50.000đ", "topup:50000"), Markup.button.callback("100.000đ", "topup:100000")],
@@ -119,17 +121,17 @@ bot.action("history", async (ctx) => {
   const ledgerLines = history.ledger.length
     ? history.ledger.map((entry) => `${formatVnd(entry.amount)} - ${entry.type}${entry.note ? ` - ${entry.note}` : ""}`).join("\n")
     : "Chưa có giao dịch ví.";
-  await ctx.reply(`Đơn hàng gần đây:\n${orderLines}\n\nGiao dịch ví gần đây:\n${ledgerLines}`, mainKeyboard());
+  await updateText(ctx, `Đơn hàng gần đây:\n${orderLines}\n\nGiao dịch ví gần đây:\n${ledgerLines}`, mainKeyboard());
 });
 
 bot.action("support", async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply(`Vui lòng liên hệ admin @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} để được hỗ trợ.`, mainKeyboard());
+  await updateText(ctx, `Vui lòng liên hệ admin @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} để được hỗ trợ.`, mainKeyboard());
 });
 
 bot.action("home", async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply("Menu chính", mainKeyboard());
+  await updateText(ctx, "Menu chính", mainKeyboard());
 });
 
 bot.catch(async (error, ctx) => {
@@ -145,14 +147,15 @@ async function showCatalog(ctx: Context) {
     Markup.button.callback(`${product.name} - ${formatVnd(product.price)}`, `prod:${product.id}`)
   ]);
   buttons.push([Markup.button.callback("Quay lại", "home")]);
-  await ctx.reply(products.length ? "Chọn sản phẩm:" : "Hiện chưa có sản phẩm đang bán.", Markup.inlineKeyboard(buttons));
+  await updateText(ctx, products.length ? "Chọn sản phẩm:" : "Hiện chưa có sản phẩm đang bán.", Markup.inlineKeyboard(buttons));
 }
 
 async function showProduct(ctx: Context, productId: string) {
   const product = await api.get<ProductDetail>(`/bot/products/${productId}`);
   const description = product.description ? `\n${product.description}` : "";
   const categoryLine = product.category?.name ? `Danh mục: <b>${escapeHtml(product.category.name)}</b>\n` : "";
-  await ctx.reply(
+  await updateText(
+    ctx,
     `${categoryLine}<b>${escapeHtml(product.name)}</b>${escapeHtml(description)}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(product)}`,
     {
       parse_mode: "HTML",
@@ -163,6 +166,22 @@ async function showProduct(ctx: Context, productId: string) {
       ])
     }
   );
+}
+
+async function updateText(ctx: Context, text: string, extra?: ExtraReplyMessage) {
+  if ("callbackQuery" in ctx.update && ctx.callbackQuery?.message) {
+    try {
+      await ctx.editMessageText(text, extra as ExtraEditMessageText);
+      return;
+    } catch (error) {
+      const message = (error as Error).message;
+      if (!message.includes("message is not modified")) {
+        console.error("Could not edit Telegram message:", error);
+      }
+      if (message.includes("message is not modified")) return;
+    }
+  }
+  await ctx.reply(text, extra);
 }
 
 async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, caption: string) {
