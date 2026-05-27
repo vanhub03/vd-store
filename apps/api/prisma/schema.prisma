@@ -1,0 +1,307 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+}
+
+enum ProductDeliveryType {
+  STOCK_ITEM
+  SHARED_CONTENT
+  MANUAL
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  SOLD
+  DISABLED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  FULFILLED
+  EXPIRED
+  CANCELLED
+  CREDITED_TO_WALLET
+  MANUAL_REVIEW
+}
+
+enum PaymentKind {
+  TOPUP
+  DIRECT_ORDER
+  WALLET_PURCHASE
+  ADMIN_ADJUSTMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  EXPIRED
+  FAILED
+  CREDITED_TO_WALLET
+  MANUAL_REVIEW
+}
+
+enum WalletEntryType {
+  TOPUP
+  PURCHASE
+  REFUND
+  DIRECT_PAYMENT_CREDIT
+  ADMIN_ADJUSTMENT
+}
+
+enum BroadcastStatus {
+  DRAFT
+  QUEUED
+  SENDING
+  SENT
+  PARTIAL
+  FAILED
+}
+
+enum BroadcastDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum PaymentMethod {
+  WALLET
+  BANK_TRANSFER
+}
+
+model TelegramUser {
+  id           String              @id @default(cuid())
+  telegramId   String              @unique
+  username     String?
+  firstName    String?
+  lastName     String?
+  languageCode String?
+  isBlocked    Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  orders              Order[]
+  payments            Payment[]
+  walletEntries       WalletLedgerEntry[]
+  broadcastDeliveries BroadcastDelivery[]
+}
+
+model Admin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  role         AdminRole @default(ADMIN)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  auditLogs  AuditLog[]
+  broadcasts Broadcast[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+}
+
+model Product {
+  id                 String              @id @default(cuid())
+  categoryId         String?
+  name               String
+  slug               String              @unique
+  description        String?
+  price              Int
+  status             ProductStatus       @default(ACTIVE)
+  deliveryType       ProductDeliveryType
+  sharedContent      String?
+  sharedFilePath     String?
+  manualInstructions String              @default("Vui lòng ib admin @vanhdao99 để nhận hàng.")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  category       Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  inventoryItems InventoryItem[]
+  orders         Order[]
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+model InventoryItem {
+  id        String          @id @default(cuid())
+  productId String
+  content   String
+  status    InventoryStatus @default(AVAILABLE)
+  orderId   String?
+  soldAt    DateTime?
+  createdAt DateTime        @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([productId, status])
+}
+
+model Order {
+  id             String        @id @default(cuid())
+  code           String        @unique
+  userId         String
+  productId      String
+  quantity       Int           @default(1)
+  unitPrice      Int
+  totalAmount    Int
+  status         OrderStatus
+  paymentMethod  PaymentMethod
+  deliveryText   String?
+  expiresAt      DateTime?
+  fulfilledAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user            TelegramUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product         Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  payments        Payment[]
+  inventoryItems  InventoryItem[]
+  walletEntries   WalletLedgerEntry[]
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  code              String        @unique
+  kind              PaymentKind
+  status            PaymentStatus
+  amount            Int
+  expectedAmount    Int?
+  userId            String?
+  orderId           String?
+  expiresAt         DateTime?
+  qrImageUrl        String?
+  qrPayload         String?
+  telegramChatId    String?
+  telegramMessageId Int?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user             TelegramUser?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  order            Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  walletEntries    WalletLedgerEntry[]
+  bankTransactions BankTransaction[]
+
+  @@index([status, expiresAt])
+  @@index([userId, createdAt])
+  @@index([orderId])
+}
+
+model WalletLedgerEntry {
+  id                 String          @id @default(cuid())
+  userId             String
+  amount             Int
+  type               WalletEntryType
+  referencePaymentId String?
+  referenceOrderId   String?
+  note               String?
+  createdAt          DateTime        @default(now())
+
+  user             TelegramUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referencePayment Payment?     @relation(fields: [referencePaymentId], references: [id], onDelete: SetNull)
+  referenceOrder   Order?       @relation(fields: [referenceOrderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([referencePaymentId])
+  @@index([referenceOrderId])
+}
+
+model BankTransaction {
+  id                    String   @id @default(cuid())
+  provider              String   @default("sepay")
+  providerTransactionId String   @unique
+  gateway               String?
+  transactionDate       DateTime?
+  accountNumber         String?
+  subAccount            String?
+  code                  String?
+  content               String?
+  transferType          String?
+  transferAmount        Int
+  accumulated           Int?
+  referenceCode         String?
+  rawPayload            Json
+  paymentId             String?
+  createdAt             DateTime @default(now())
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([code])
+  @@index([paymentId])
+}
+
+model Broadcast {
+  id             String          @id @default(cuid())
+  title          String
+  message        String
+  status         BroadcastStatus @default(DRAFT)
+  target         String          @default("all")
+  sentCount      Int             @default(0)
+  failedCount    Int             @default(0)
+  createdByAdminId String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  createdBy  Admin?              @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  deliveries BroadcastDelivery[]
+}
+
+model BroadcastDelivery {
+  id          String                  @id @default(cuid())
+  broadcastId String
+  userId      String
+  status      BroadcastDeliveryStatus @default(PENDING)
+  error       String?
+  sentAt      DateTime?
+  createdAt   DateTime                @default(now())
+
+  broadcast Broadcast    @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  user      TelegramUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([broadcastId, userId])
+  @@index([status])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorAdminId String?
+  action       String
+  entityType   String
+  entityId     String?
+  meta         Json?
+  createdAt    DateTime @default(now())
+
+  actorAdmin Admin? @relation(fields: [actorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([actorAdminId, createdAt])
+  @@index([entityType, entityId])
+}
