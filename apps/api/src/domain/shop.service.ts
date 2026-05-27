@@ -14,6 +14,7 @@ import { PrismaService } from "../prisma.service";
 import { DIRECT_ORDER_PREFIX, generatePaymentCode, TOPUP_PREFIX } from "./payment-codes";
 import { assertPositiveVnd, formatVnd } from "./money";
 import { BroadcastService } from "./broadcast.service";
+import { TelegramNotifyService } from "./telegram-notify.service";
 
 export type BotUserInput = {
   telegramId: string;
@@ -44,7 +45,8 @@ export class ShopService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly broadcasts: BroadcastService
+    private readonly broadcasts: BroadcastService,
+    private readonly telegram: TelegramNotifyService
   ) {}
 
   async upsertTelegramUser(input: BotUserInput) {
@@ -404,10 +406,14 @@ export class ShopService {
   }
 
   async recordPaymentTelegramMessage(paymentId: string, telegramChatId: string, telegramMessageId: number) {
-    return this.prisma.payment.update({
+    const payment = await this.prisma.payment.update({
       where: { id: paymentId },
       data: { telegramChatId: String(telegramChatId), telegramMessageId }
     });
+    if (payment.status !== PaymentStatus.PENDING) {
+      await this.telegram.deleteMessage(telegramChatId, telegramMessageId);
+    }
+    return payment;
   }
 
   async getHistory(telegramId: string) {

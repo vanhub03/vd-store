@@ -53,7 +53,7 @@ export class PaymentService {
 
     const expectedAccount = process.env.SEPAY_ACCOUNT_NUMBER;
     const accountMismatch = expectedAccount && normalized.accountNumber && expectedAccount !== normalized.accountNumber;
-    const referenceCode = normalized.referenceCode ?? extractPaymentCode(normalized.content);
+    const paymentCode = normalized.paymentCode ?? extractPaymentCode(normalized.content);
 
     const bankTransaction = await this.prisma.bankTransaction.create({
       data: {
@@ -62,12 +62,12 @@ export class PaymentService {
         transactionDate: normalized.transactionDate,
         accountNumber: normalized.accountNumber,
         subAccount: normalized.subAccount,
-        code: normalized.code,
+        code: paymentCode,
         content: normalized.content,
         transferType: normalized.transferType,
         transferAmount: normalized.transferAmount,
         accumulated: normalized.accumulated,
-        referenceCode,
+        referenceCode: normalized.bankReferenceCode,
         rawPayload: payload as Prisma.InputJsonValue
       }
     });
@@ -77,19 +77,22 @@ export class PaymentService {
       return { ok: true, ignored: "account_mismatch" };
     }
 
-    if (normalized.transferType && normalized.transferType.toLowerCase() !== "in") {
+    if (!normalized.isIncoming) {
+      this.logger.log(`Ignoring outgoing SePay transaction ${normalized.providerTransactionId}.`);
       return { ok: true, ignored: "not_incoming" };
     }
 
-    if (!referenceCode) {
+    if (!paymentCode) {
+      this.logger.warn(`Ignoring SePay transaction ${normalized.providerTransactionId}: missing payment code in content "${normalized.content ?? ""}".`);
       return { ok: true, ignored: "missing_reference_code" };
     }
 
     const payment = await this.prisma.payment.findUnique({
-      where: { code: referenceCode },
+      where: { code: paymentCode },
       include: { user: true, order: true }
     });
     if (!payment) {
+      this.logger.warn(`Ignoring SePay transaction ${normalized.providerTransactionId}: unknown payment code ${paymentCode}.`);
       return { ok: true, ignored: "unknown_reference_code" };
     }
 
@@ -101,7 +104,7 @@ export class PaymentService {
     const expectedAmount = payment.expectedAmount ?? payment.amount;
     if (normalized.transferAmount !== expectedAmount) {
       await this.shop.markPaymentManualReview(payment.id, `Expected ${expectedAmount}, received ${normalized.transferAmount}`);
-      await this.deletePendingPaymentMessage(payment);
+      await this.deletePendingPaymentMessage(payment.id, payment);
       if (payment.user?.telegramId) {
         await this.telegram.notifyManualReview(payment.user.telegramId, payment.code);
       }
@@ -110,7 +113,7 @@ export class PaymentService {
 
     if (payment.kind === PaymentKind.TOPUP) {
       const result = await this.shop.creditTopup(payment.id);
-      await this.deletePendingPaymentMessage(payment);
+      await this.deletePendingPaymentMessage(payment.id, payment);
       if (result.user?.telegramId) {
         await this.telegram.notifyTopup(result.user.telegramId, payment.amount, payment.code);
       }
@@ -119,7 +122,7 @@ export class PaymentService {
 
     if (payment.kind === PaymentKind.DIRECT_ORDER) {
       const result = await this.shop.fulfillDirectOrder(payment.id);
-      await this.deletePendingPaymentMessage(payment);
+      await this.deletePendingPaymentMessage(payment.id, payment);
       if (result.user?.telegramId) {
         if (result.outcome === "fulfilled" && "deliveryText" in result) {
           await this.telegram.notifyDirectOrderFulfilled(result.user.telegramId, payment.code, result.deliveryText);
@@ -135,8 +138,12 @@ export class PaymentService {
     return { ok: true, ignored: "unsupported_payment_kind" };
   }
 
-  private async deletePendingPaymentMessage(payment: { telegramChatId?: string | null; telegramMessageId?: number | null }) {
-    await this.telegram.deleteMessage(payment.telegramChatId, payment.telegramMessageId);
+  private async deletePendingPaymentMessage(paymentId: string, fallback?: { telegramChatId?: string | null; telegramMessageId?: number | null }) {
+    const latest = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: { telegramChatId: true, telegramMessageId: true }
+    });
+    await this.telegram.deleteMessage(latest?.telegramChatId ?? fallback?.telegramChatId, latest?.telegramMessageId ?? fallback?.telegramMessageId);
   }
 }
 
@@ -146,12 +153,16 @@ function firstHeader(value: string | string[] | undefined) {
 }
 
 function normalizeSepayPayload(payload: Record<string, unknown>) {
-  const id = stringValue(payload.id) ?? stringValue(payload.transactionId) ?? stringValue(payload.transaction_id);
+  const bankReferenceCode = stringValue(payload.referenceCode) ?? stringValue(payload.reference_code);
+  const id = stringValue(payload.id) ?? stringValue(payload.transactionId) ?? stringValue(payload.transaction_id) ?? bankReferenceCode;
   const content = stringValue(payload.content) ?? stringValue(payload.description) ?? stringValue(payload.transaction_content);
   const transferType = stringValue(payload.transferType) ?? stringValue(payload.transfer_type);
-  const amount = numberValue(payload.transferAmount ?? payload.transfer_amount ?? payload.amount);
+  const amount = numberValue(payload.transferAmount ?? payload.transfer_amount ?? payload.amount ?? payload.transaction_amount);
   const transactionDate =
     dateValue(payload.transactionDate ?? payload.transaction_date ?? payload.transactionTime ?? payload.transaction_time) ?? undefined;
+  const paymentCode =
+    stringValue(payload.code) ?? stringValue(payload.paymentCode) ?? stringValue(payload.payment_code) ?? stringValue(payload.va) ?? extractPaymentCode(content);
+  const normalizedTransferType = transferType?.toLowerCase();
 
   return {
     providerTransactionId: id,
@@ -159,12 +170,13 @@ function normalizeSepayPayload(payload: Record<string, unknown>) {
     transactionDate,
     accountNumber: stringValue(payload.accountNumber) ?? stringValue(payload.account_number),
     subAccount: stringValue(payload.subAccount) ?? stringValue(payload.sub_account),
-    code: stringValue(payload.code),
+    paymentCode,
     content,
     transferType,
     transferAmount: amount,
     accumulated: numberValue(payload.accumulated),
-    referenceCode: stringValue(payload.code) ?? extractPaymentCode(content)
+    bankReferenceCode,
+    isIncoming: !normalizedTransferType || normalizedTransferType === "in" || normalizedTransferType === "credit"
   };
 }
 

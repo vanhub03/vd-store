@@ -12,6 +12,7 @@ import {
   WalletPurchaseResponse
 } from "./api";
 import { escapeHtml, formatVnd, productAvailableQuantity, productStockLabel } from "./format";
+import { currentCallbackMessageId, isCallbackContext } from "./telegram-context";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) {
@@ -687,14 +688,6 @@ function crc32(buffer: Buffer) {
     crc = table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
   }
   return (crc ^ 0xffffffff) >>> 0;
-}
-
-function isCallbackContext(ctx: Context) {
-  return "callbackQuery" in ctx.update && Boolean(ctx.callbackQuery?.message);
-}
-
-function currentCallbackMessageId(ctx: Context) {
-  return "callbackQuery" in ctx.update && ctx.callbackQuery?.message ? ctx.callbackQuery.message.message_id : undefined;
 }
 
 function toTelegramPhoto(media: ScreenMedia) {
