@@ -46,6 +46,7 @@ export type ProductSummary = {
   name: string;
   description?: string;
   imageUrl?: string | null;
+  buttonIcon?: string | null;
   price: number;
   deliveryType: string;
   manualStock?: number;

@@ -39,6 +39,10 @@ class ProductDto {
   @IsString()
   imageUrl?: string | null;
 
+  @IsOptional()
+  @IsString()
+  buttonIcon?: string | null;
+
   @IsInt()
   @Min(1)
   price!: number;

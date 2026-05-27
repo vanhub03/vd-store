@@ -28,6 +28,7 @@ type Product = {
   name: string;
   description?: string;
   imageUrl?: string | null;
+  buttonIcon?: string | null;
   price: number;
   manualStock?: number;
   status: string;
@@ -68,10 +69,33 @@ type ProductForm = {
   manualStock: number;
   description: string;
   imageUrl: string;
+  buttonIcon: string;
   sharedContent: string;
   sharedFilePath: string;
   manualInstructions: string;
 };
+
+const defaultProductIcon = "🛍️";
+const brandIconOptions = [
+  { label: "ChatGPT", value: "🤖", keywords: ["chatgpt", "openai", "gpt"] },
+  { label: "Claude", value: "🟫", keywords: ["claude", "anthropic"] },
+  { label: "Gemini", value: "✦", keywords: ["gemini"] },
+  { label: "Adobe", value: "🅰️", keywords: ["adobe", "photoshop", "premiere", "after effect", "illustrator"] },
+  { label: "CapCut", value: "🎬", keywords: ["capcut"] },
+  { label: "YouTube", value: "▶️", keywords: ["youtube", "yt"] },
+  { label: "Canva", value: "🟣", keywords: ["canva"] },
+  { label: "Grok/X", value: "𝕏", keywords: ["grok", "twitter", "x premium"] },
+  { label: "Google", value: "🌐", keywords: ["google", "drive", "gmail"] },
+  { label: "Microsoft", value: "🪟", keywords: ["microsoft", "office", "copilot", "onedrive"] },
+  { label: "Cursor", value: "⌘", keywords: ["cursor"] },
+  { label: "Midjourney", value: "🎨", keywords: ["midjourney", "mj"] },
+  { label: "Notion", value: "▣", keywords: ["notion"] },
+  { label: "Spotify", value: "🎧", keywords: ["spotify"] },
+  { label: "Netflix", value: "🎞️", keywords: ["netflix"] },
+  { label: "AI chung", value: "🧠", keywords: ["ai"] },
+  { label: "API", value: "🔗", keywords: ["api"] },
+  { label: "Mặc định", value: defaultProductIcon, keywords: [] }
+];
 
 const tokenKey = "vd-store-admin-token";
 
@@ -321,6 +345,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       manualStock: product.manualStock ?? 0,
       description: product.description ?? "",
       imageUrl: product.imageUrl ?? "",
+      buttonIcon: product.buttonIcon ?? defaultProductIcon,
       sharedContent: product.sharedContent ?? "",
       sharedFilePath: product.sharedFilePath ?? "",
       manualInstructions: product.manualInstructions ?? "Vui lòng ib admin @vanhdao99 để nhận hàng."
@@ -380,7 +405,15 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
         <form className="formGrid" onSubmit={submitProduct}>
           <label>
             Tên
-            <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+            <input
+              value={form.name}
+              onChange={(event) => {
+                const name = event.target.value;
+                const buttonIcon = shouldAutoIcon(form.buttonIcon) ? inferBrandIcon(name) : form.buttonIcon;
+                setForm({ ...form, name, buttonIcon });
+              }}
+              required
+            />
           </label>
           <label>
             Logo URL
@@ -391,6 +424,26 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
               placeholder="https://example.com/logo.png"
             />
           </label>
+          <div className="fieldBlock wide">
+            <label>
+              Icon button
+              <input value={form.buttonIcon} onChange={(event) => setForm({ ...form, buttonIcon: event.target.value })} placeholder={defaultProductIcon} />
+            </label>
+            <div className="iconPresetGrid">
+              {brandIconOptions.map((option) => (
+                <button
+                  className={form.buttonIcon === option.value ? "iconPreset active" : "iconPreset"}
+                  key={option.label}
+                  type="button"
+                  onClick={() => setForm({ ...form, buttonIcon: option.value })}
+                  title={option.label}
+                >
+                  <span>{option.value}</span>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <label>
             Giá VND
             <input type="number" value={form.price} onChange={(event) => setForm({ ...form, price: Number(event.target.value) })} min={1} />
@@ -515,6 +568,7 @@ function ProductNameCell({ product }: { product: Product }) {
       ) : (
         <div className="productLogo productLogoPlaceholder">VD</div>
       )}
+      <span className="productButtonIcon">{product.buttonIcon || defaultProductIcon}</span>
       <div>
         <strong>{product.name}</strong>
         {product.category?.name && <span>{product.category.name}</span>}
@@ -533,6 +587,7 @@ function emptyProductForm(): ProductForm {
     manualStock: 0,
     description: "",
     imageUrl: "",
+    buttonIcon: defaultProductIcon,
     sharedContent: "",
     sharedFilePath: "",
     manualInstructions: "Vui lòng ib admin @vanhdao99 để nhận hàng."
@@ -546,6 +601,7 @@ function serializeProductForm(form: ProductForm) {
     price: Number(form.price),
     manualStock: Number(form.manualStock) || 0,
     imageUrl: form.imageUrl || null,
+    buttonIcon: form.buttonIcon.trim() || defaultProductIcon,
     sharedContent: form.sharedContent || null,
     sharedFilePath: form.sharedFilePath || null,
     description: form.description || null,
@@ -557,6 +613,16 @@ function productQuantityLabel(product: Product) {
   if (product.deliveryType === "STOCK_ITEM") return String(product._count?.inventoryItems ?? 0);
   if (product.deliveryType === "MANUAL") return String(product.manualStock ?? 0);
   return "Không giới hạn";
+}
+
+function shouldAutoIcon(currentIcon: string) {
+  return !currentIcon.trim() || currentIcon === defaultProductIcon;
+}
+
+function inferBrandIcon(name: string) {
+  const normalizedName = name.toLocaleLowerCase("vi-VN");
+  const matched = brandIconOptions.find((option) => option.keywords.some((keyword) => normalizedName.includes(keyword)));
+  return matched?.value ?? defaultProductIcon;
 }
 
 function UsersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {

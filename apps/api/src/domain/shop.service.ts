@@ -30,6 +30,7 @@ export type ProductInput = {
   slug?: string;
   description?: string | null;
   imageUrl?: string | null;
+  buttonIcon?: string | null;
   price: number;
   status?: ProductStatus;
   deliveryType: ProductDeliveryType;
@@ -498,6 +499,7 @@ export class ShopService {
       data: {
         ...input,
         slug: input.slug ? slugify(input.slug) : slugify(input.name),
+        buttonIcon: normalizeProductIcon(input.buttonIcon, input.name),
         manualInstructions: input.manualInstructions?.trim() || defaultManualInstructions()
       }
     });
@@ -517,6 +519,7 @@ export class ShopService {
       data: {
         ...input,
         slug: input.slug ? slugify(input.slug) : undefined,
+        buttonIcon: input.buttonIcon === undefined ? undefined : normalizeProductIcon(input.buttonIcon, input.name),
         manualInstructions: input.manualInstructions === null ? defaultManualInstructions() : input.manualInstructions
       }
     });
@@ -942,6 +945,39 @@ export function slugify(input: string) {
 function defaultManualInstructions() {
   const username = process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99";
   return `Vui lòng ib admin @${username} để nhận hàng.`;
+}
+
+const defaultProductIcon = "🛍️";
+const brandIconRules = [
+  { icon: "🤖", keywords: ["chatgpt", "openai", "gpt"] },
+  { icon: "🟫", keywords: ["claude", "anthropic"] },
+  { icon: "✦", keywords: ["gemini"] },
+  { icon: "🅰️", keywords: ["adobe", "photoshop", "premiere", "after effect", "illustrator"] },
+  { icon: "🎬", keywords: ["capcut"] },
+  { icon: "▶️", keywords: ["youtube", "yt"] },
+  { icon: "🟣", keywords: ["canva"] },
+  { icon: "𝕏", keywords: ["grok", "twitter", "x premium"] },
+  { icon: "🌐", keywords: ["google", "drive", "gmail"] },
+  { icon: "🪟", keywords: ["microsoft", "office", "copilot", "onedrive"] },
+  { icon: "⌘", keywords: ["cursor"] },
+  { icon: "🎨", keywords: ["midjourney", "mj"] },
+  { icon: "▣", keywords: ["notion"] },
+  { icon: "🎧", keywords: ["spotify"] },
+  { icon: "🎞️", keywords: ["netflix"] },
+  { icon: "🧠", keywords: ["ai"] },
+  { icon: "🔗", keywords: ["api"] }
+];
+
+function normalizeProductIcon(input?: string | null, productName?: string) {
+  const icon = input?.trim();
+  if (icon && icon !== defaultProductIcon) return icon;
+  const inferred = inferBrandIcon(productName);
+  return inferred ?? icon ?? defaultProductIcon;
+}
+
+function inferBrandIcon(productName?: string) {
+  const normalizedName = productName?.toLocaleLowerCase("vi-VN") ?? "";
+  return brandIconRules.find((rule) => rule.keywords.some((keyword) => normalizedName.includes(keyword)))?.icon;
 }
 
 function buildNewStockBroadcastMessage(

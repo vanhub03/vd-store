@@ -132,6 +132,7 @@ model Product {
   slug               String              @unique
   description        String?
   imageUrl           String?
+  buttonIcon         String              @default("🛍️")
   price              Int
   status             ProductStatus       @default(ACTIVE)
   deliveryType       ProductDeliveryType

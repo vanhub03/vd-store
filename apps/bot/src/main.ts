@@ -186,7 +186,7 @@ async function showCatalog(ctx: Context) {
   const catalog = await api.get<CatalogResponse>("/bot/catalog");
   const products = flattenProducts(catalog);
   const buttons = products.slice(0, CATALOG_BUTTON_LIMIT).map((product, index) => [
-    Markup.button.callback(`${index + 1}. ${product.name} - ${formatVnd(product.price)} - SL: ${productQuantityText(product)}`, `prod:${product.id}`)
+    Markup.button.callback(productButtonLabel(product, index), `prod:${product.id}`)
   ]);
   buttons.push([Markup.button.callback("Quay lại", "home")]);
   await renderScreen(ctx, buildCatalogText(products), Markup.inlineKeyboard(buttons));
@@ -249,7 +249,7 @@ async function showProduct(ctx: Context, productId: string) {
 async function showProductDetail(ctx: Context, product: ProductDetail) {
   const description = product.description ? `\n${escapeHtml(product.description)}` : "";
   const categoryLine = product.category?.name ? `Danh mục: <b>${escapeHtml(product.category.name)}</b>\n` : "";
-  const caption = `${categoryLine}<b>${escapeHtml(product.name)}</b>${description}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(
+  const caption = `${categoryLine}<b>${escapeHtml(productIcon(product))} ${escapeHtml(product.name)}</b>${description}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(
     product
   )}\n\nChat nhanh: /mua ${escapeHtml(product.name)} vi hoặc /mua ${escapeHtml(product.name)} ck`;
   const keyboard = Markup.inlineKeyboard([
@@ -330,10 +330,11 @@ async function purchaseWithWallet(ctx: Context, productId: string) {
     productId,
     quantity: 1
   });
-  await renderScreen(
+  await renderFinalDelivery(
     ctx,
-    `Mua hàng thành công.\nSố dư còn lại: <b>${formatVnd(result.balanceAfter)}</b>\n\nHàng của bạn:\n<pre>${escapeHtml(result.deliveryText)}</pre>`,
-    mainKeyboard()
+    `Mua hàng thành công.\nSố dư còn lại: <b>${formatVnd(
+      result.balanceAfter
+    )}</b>\n\nHàng của bạn:\n<pre>${escapeHtml(result.deliveryText)}</pre>`
   );
 }
 
@@ -370,6 +371,21 @@ async function renderScreen(ctx: Context, caption: string, keyboard?: ScreenKeyb
   return sent.message_id;
 }
 
+async function renderFinalDelivery(ctx: Context, caption: string) {
+  const safeCaption = fitCaption(caption);
+  if (isCallbackContext(ctx)) {
+    const updatedCaption = await editCurrentCaption(ctx, safeCaption, undefined, true);
+    if (updatedCaption) return updatedCaption;
+
+    const updatedText = await editCurrentText(ctx, safeCaption, undefined, true);
+    if (updatedText) return updatedText;
+  }
+
+  const sent = await replyWithScreenPhoto(ctx, BOT_CARD_PNG, safeCaption);
+  if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
+  return sent.message_id;
+}
+
 async function replyWithScreenPhoto(ctx: Context, media: ScreenMedia, caption: string, keyboard?: ScreenKeyboard) {
   try {
     return await ctx.replyWithPhoto(toTelegramPhoto(media), {
@@ -388,7 +404,7 @@ async function replyWithScreenPhoto(ctx: Context, media: ScreenMedia, caption: s
   }
 }
 
-async function editCurrentMedia(ctx: Context, media: ScreenMedia, caption: string, keyboard?: ScreenKeyboard) {
+async function editCurrentMedia(ctx: Context, media: ScreenMedia, caption: string, keyboard?: ScreenKeyboard, removeKeyboard = false) {
   const chatId = ctx.chat?.id;
   const messageId = currentCallbackMessageId(ctx);
   if (!chatId || !messageId) return null;
@@ -401,7 +417,7 @@ async function editCurrentMedia(ctx: Context, media: ScreenMedia, caption: strin
         caption,
         parse_mode: "HTML"
       },
-      (keyboard ?? {}) as never
+      editMarkupOptions(keyboard, removeKeyboard) as never
     );
     rememberBotMessage(chatId, messageId);
     return messageId;
@@ -420,7 +436,7 @@ async function editCurrentMedia(ctx: Context, media: ScreenMedia, caption: strin
           caption,
           parse_mode: "HTML"
         },
-        (keyboard ?? {}) as never
+        editMarkupOptions(keyboard, removeKeyboard) as never
       );
       rememberBotMessage(chatId, messageId);
       return messageId;
@@ -432,7 +448,7 @@ async function editCurrentMedia(ctx: Context, media: ScreenMedia, caption: strin
   }
 }
 
-async function editCurrentCaption(ctx: Context, caption: string, keyboard?: ScreenKeyboard) {
+async function editCurrentCaption(ctx: Context, caption: string, keyboard?: ScreenKeyboard, removeKeyboard = false) {
   const chatId = ctx.chat?.id;
   const messageId = currentCallbackMessageId(ctx);
   if (!chatId || !messageId) return null;
@@ -440,7 +456,7 @@ async function editCurrentCaption(ctx: Context, caption: string, keyboard?: Scre
   try {
     await ctx.editMessageCaption(caption, {
       parse_mode: "HTML",
-      ...(keyboard ?? {})
+      ...editMarkupOptions(keyboard, removeKeyboard)
     } as never);
     rememberBotMessage(chatId, messageId);
     return messageId;
@@ -452,7 +468,7 @@ async function editCurrentCaption(ctx: Context, caption: string, keyboard?: Scre
   }
 }
 
-async function editCurrentText(ctx: Context, text: string, keyboard?: ScreenKeyboard) {
+async function editCurrentText(ctx: Context, text: string, keyboard?: ScreenKeyboard, removeKeyboard = false) {
   const chatId = ctx.chat?.id;
   const messageId = currentCallbackMessageId(ctx);
   if (!chatId || !messageId) return null;
@@ -460,7 +476,7 @@ async function editCurrentText(ctx: Context, text: string, keyboard?: ScreenKeyb
   try {
     await ctx.editMessageText(text, {
       parse_mode: "HTML",
-      ...(keyboard ?? {})
+      ...editMarkupOptions(keyboard, removeKeyboard)
     } as ExtraEditMessageText);
     rememberBotMessage(chatId, messageId);
     return messageId;
@@ -523,7 +539,9 @@ function buildCatalogText(products: ProductSummary[]) {
 
   const productLines = products.slice(0, CATALOG_TEXT_LIMIT).map((product, index) => {
     const category = product.category?.name ? ` - ${escapeHtml(singleLine(product.category.name))}` : "";
-    return `${index + 1}. ${escapeHtml(singleLine(product.name))} - ${formatVnd(product.price)} - SL: ${productQuantityText(product)}${category}`;
+    return `${index + 1}. ${escapeHtml(productStateIcon(product))} ${escapeHtml(singleLine(product.name))} - ${formatVnd(
+      product.price
+    )} - 📦 ${productQuantityText(product)}${category}`;
   });
   const moreLine = products.length > CATALOG_TEXT_LIMIT ? `\n\nCòn ${products.length - CATALOG_TEXT_LIMIT} sản phẩm khác. Bấm nút bên dưới để xem tiếp.` : "";
 
@@ -540,6 +558,20 @@ function buildCatalogText(products: ProductSummary[]) {
 function productQuantityText(product: ProductSummary | ProductDetail) {
   const quantity = productAvailableQuantity(product);
   return quantity === null ? "không giới hạn" : String(quantity);
+}
+
+function productButtonLabel(product: ProductSummary, index: number) {
+  return `${index + 1}. ${productStateIcon(product)} ${product.name} - ${formatVnd(product.price)} | 📦 ${productQuantityText(product)}`;
+}
+
+function productStateIcon(product: ProductSummary | ProductDetail) {
+  const quantity = productAvailableQuantity(product);
+  if (quantity === 0) return "❌";
+  return productIcon(product);
+}
+
+function productIcon(product: ProductSummary | ProductDetail) {
+  return product.buttonIcon?.trim() || "🛍️";
 }
 
 async function findProductByReference(reference: string) {
@@ -693,6 +725,11 @@ function crc32(buffer: Buffer) {
 function toTelegramPhoto(media: ScreenMedia) {
   if (typeof media === "string") return media;
   return { source: media, filename: "vd-store.png" };
+}
+
+function editMarkupOptions(keyboard?: ScreenKeyboard, removeKeyboard = false) {
+  if (keyboard) return keyboard;
+  return removeKeyboard ? { reply_markup: { inline_keyboard: [] } } : {};
 }
 
 function fitCaption(caption: string) {
