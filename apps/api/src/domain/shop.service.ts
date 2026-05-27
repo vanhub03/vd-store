@@ -34,6 +34,7 @@ export type ProductInput = {
   sharedContent?: string | null;
   sharedFilePath?: string | null;
   manualInstructions?: string | null;
+  manualStock?: number;
 };
 
 @Injectable()
@@ -480,6 +481,7 @@ export class ShopService {
 
   async createProduct(input: ProductInput, adminId: string) {
     assertPositiveVnd(input.price);
+    assertNonNegativeStock(input.manualStock);
     const product = await this.prisma.product.create({
       data: {
         ...input,
@@ -493,6 +495,7 @@ export class ShopService {
 
   async updateProduct(productId: string, input: Partial<ProductInput>, adminId: string) {
     if (input.price !== undefined) assertPositiveVnd(input.price);
+    assertNonNegativeStock(input.manualStock);
     const product = await this.prisma.product.update({
       where: { id: productId },
       data: {
@@ -669,7 +672,7 @@ export class ShopService {
   }
 
   private async ensurePurchasable(
-    product: { id: string; deliveryType: ProductDeliveryType; status: ProductStatus },
+    product: { id: string; deliveryType: ProductDeliveryType; status: ProductStatus; manualStock?: number | null },
     quantity: number,
     tx: Prisma.TransactionClient | PrismaService = this.prisma
   ) {
@@ -684,6 +687,9 @@ export class ShopService {
         throw new BadRequestException("Sản phẩm đã hết hàng.");
       }
     }
+    if (product.deliveryType === ProductDeliveryType.MANUAL && (product.manualStock ?? 0) < quantity) {
+      throw new BadRequestException("Sáº£n pháº©m Ä‘Ã£ háº¿t hÃ ng.");
+    }
   }
 
   private async fulfillOrderItems(
@@ -696,10 +702,18 @@ export class ShopService {
       sharedContent?: string | null;
       sharedFilePath?: string | null;
       manualInstructions?: string | null;
+      manualStock?: number | null;
     },
     quantity: number
   ) {
     if (product.deliveryType === ProductDeliveryType.MANUAL) {
+      const updated = await tx.product.updateMany({
+        where: { id: product.id, manualStock: { gte: quantity } },
+        data: { manualStock: { decrement: quantity } }
+      });
+      if (updated.count !== 1) {
+        throw new BadRequestException("San pham da het hang.");
+      }
       return product.manualInstructions || defaultManualInstructions();
     }
 
@@ -802,6 +816,13 @@ export class ShopService {
 
 function minutesFromNow(minutes: number) {
   return new Date(Date.now() + minutes * 60_000);
+}
+
+function assertNonNegativeStock(value?: number) {
+  if (value === undefined) return;
+  if (!Number.isInteger(value) || value < 0) {
+    throw new BadRequestException("So luong phai la so nguyen khong am.");
+  }
 }
 
 export function slugify(input: string) {

@@ -61,6 +61,11 @@ class ProductDto {
   @IsOptional()
   @IsString()
   manualInstructions?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  manualStock?: number;
 }
 
 class InventoryImportDto {

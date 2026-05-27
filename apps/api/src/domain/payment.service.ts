@@ -101,6 +101,7 @@ export class PaymentService {
     const expectedAmount = payment.expectedAmount ?? payment.amount;
     if (normalized.transferAmount !== expectedAmount) {
       await this.shop.markPaymentManualReview(payment.id, `Expected ${expectedAmount}, received ${normalized.transferAmount}`);
+      await this.deletePendingPaymentMessage(payment);
       if (payment.user?.telegramId) {
         await this.telegram.notifyManualReview(payment.user.telegramId, payment.code);
       }
@@ -109,6 +110,7 @@ export class PaymentService {
 
     if (payment.kind === PaymentKind.TOPUP) {
       const result = await this.shop.creditTopup(payment.id);
+      await this.deletePendingPaymentMessage(payment);
       if (result.user?.telegramId) {
         await this.telegram.notifyTopup(result.user.telegramId, payment.amount, payment.code);
       }
@@ -117,6 +119,7 @@ export class PaymentService {
 
     if (payment.kind === PaymentKind.DIRECT_ORDER) {
       const result = await this.shop.fulfillDirectOrder(payment.id);
+      await this.deletePendingPaymentMessage(payment);
       if (result.user?.telegramId) {
         if (result.outcome === "fulfilled" && "deliveryText" in result) {
           await this.telegram.notifyDirectOrderFulfilled(result.user.telegramId, payment.code, result.deliveryText);
@@ -130,6 +133,10 @@ export class PaymentService {
     }
 
     return { ok: true, ignored: "unsupported_payment_kind" };
+  }
+
+  private async deletePendingPaymentMessage(payment: { telegramChatId?: string | null; telegramMessageId?: number | null }) {
+    await this.telegram.deleteMessage(payment.telegramChatId, payment.telegramMessageId);
   }
 }
 

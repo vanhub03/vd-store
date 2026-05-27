@@ -29,6 +29,7 @@ type Product = {
   description?: string;
   imageUrl?: string | null;
   price: number;
+  manualStock?: number;
   status: string;
   deliveryType: string;
   sharedContent?: string;
@@ -64,6 +65,7 @@ type ProductForm = {
   categoryId: string;
   deliveryType: string;
   status: string;
+  manualStock: number;
   description: string;
   imageUrl: string;
   sharedContent: string;
@@ -316,6 +318,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       categoryId: product.categoryId ?? product.category?.id ?? "",
       deliveryType: product.deliveryType,
       status: product.status,
+      manualStock: product.manualStock ?? 0,
       description: product.description ?? "",
       imageUrl: product.imageUrl ?? "",
       sharedContent: product.sharedContent ?? "",
@@ -418,6 +421,17 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
               <option value="INACTIVE">Tạm ẩn</option>
             </select>
           </label>
+          {form.deliveryType === "MANUAL" && (
+            <label>
+              Số lượng manual
+              <input
+                type="number"
+                value={form.manualStock}
+                onChange={(event) => setForm({ ...form, manualStock: Number(event.target.value) })}
+                min={0}
+              />
+            </label>
+          )}
           <label className="wide">
             Mô tả
             <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} />
@@ -471,7 +485,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
           <ProductNameCell product={product} />,
           formatVnd(product.price),
           product.deliveryType,
-          String(product._count?.inventoryItems ?? 0),
+          productQuantityLabel(product),
           product.status,
           <div className="rowActions">
             <button className="smallButton" type="button" onClick={() => editProduct(product)} disabled={creating || deletingProductId === product.id}>
@@ -516,6 +530,7 @@ function emptyProductForm(): ProductForm {
     categoryId: "",
     deliveryType: "STOCK_ITEM",
     status: "ACTIVE",
+    manualStock: 0,
     description: "",
     imageUrl: "",
     sharedContent: "",
@@ -529,12 +544,19 @@ function serializeProductForm(form: ProductForm) {
     ...form,
     categoryId: form.categoryId || null,
     price: Number(form.price),
+    manualStock: Number(form.manualStock) || 0,
     imageUrl: form.imageUrl || null,
     sharedContent: form.sharedContent || null,
     sharedFilePath: form.sharedFilePath || null,
     description: form.description || null,
     manualInstructions: form.manualInstructions || null
   };
+}
+
+function productQuantityLabel(product: Product) {
+  if (product.deliveryType === "STOCK_ITEM") return String(product._count?.inventoryItems ?? 0);
+  if (product.deliveryType === "MANUAL") return String(product.manualStock ?? 0);
+  return "Không giới hạn";
 }
 
 function UsersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {

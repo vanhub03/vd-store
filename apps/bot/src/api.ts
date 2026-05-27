@@ -48,6 +48,7 @@ export type ProductSummary = {
   imageUrl?: string | null;
   price: number;
   deliveryType: string;
+  manualStock?: number;
   category?: { id: string; name: string } | null;
   _count?: { inventoryItems: number };
 };

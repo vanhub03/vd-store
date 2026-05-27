@@ -10,7 +10,7 @@ import {
   ProductSummary,
   WalletPurchaseResponse
 } from "./api";
-import { escapeHtml, formatVnd, productStockLabel } from "./format";
+import { escapeHtml, formatVnd, productAvailableQuantity, productStockLabel } from "./format";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) {
@@ -171,7 +171,7 @@ async function showCatalog(ctx: Context) {
   const catalog = await api.get<CatalogResponse>("/bot/catalog");
   const products = flattenProducts(catalog);
   const buttons = products.slice(0, CATALOG_BUTTON_LIMIT).map((product, index) => [
-    Markup.button.callback(`${index + 1}. ${product.name} - ${formatVnd(product.price)}`, `prod:${product.id}`)
+    Markup.button.callback(`${index + 1}. ${product.name} - ${formatVnd(product.price)} - SL: ${productQuantityText(product)}`, `prod:${product.id}`)
   ]);
   buttons.push([Markup.button.callback("Quay lại", "home")]);
   await updateText(ctx, buildCatalogText(products), Markup.inlineKeyboard(buttons));
@@ -389,12 +389,11 @@ async function updateText(ctx: Context, text: string, extra?: ExtraReplyMessage)
 
 async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, caption: string) {
   const buffer = await fetchQrImage(qrImageUrl);
-  await clearPreviousBotMessage(ctx);
-  const sent = await ctx.replyWithPhoto({ source: buffer, filename: "vietqr.png" }, { caption, parse_mode: "HTML" });
-  if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
+  const editedMessageId = await editQrIntoCurrentMessage(ctx, qrImageUrl, caption);
+  const messageId = editedMessageId ?? (await sendQrPhoto(ctx, buffer, caption));
   await api.post(`/bot/payments/${paymentId}/telegram-message`, {
     telegramChatId: String(ctx.chat!.id),
-    telegramMessageId: sent.message_id
+    telegramMessageId: messageId
   });
 }
 
@@ -410,21 +409,39 @@ async function fetchQrImage(qrImageUrl: string) {
   return Buffer.from(await image.arrayBuffer());
 }
 
-async function clearPreviousBotMessage(ctx: Context) {
+async function editQrIntoCurrentMessage(ctx: Context, qrImageUrl: string, caption: string) {
   const chatId = ctx.chat?.id;
-  if (!chatId) return;
+  if (!chatId) return null;
 
   const currentMessageId = "callbackQuery" in ctx.update && ctx.callbackQuery?.message ? ctx.callbackQuery.message.message_id : undefined;
   const messageId = currentMessageId ?? lastBotMessages.get(chatId);
-  if (!messageId) return;
+  if (!messageId) return null;
 
   try {
-    await ctx.telegram.deleteMessage(chatId, messageId);
+    await ctx.telegram.editMessageMedia(
+      chatId,
+      messageId,
+      undefined,
+      {
+        type: "photo",
+        media: qrImageUrl,
+        caption,
+        parse_mode: "HTML"
+      },
+      {} as never
+    );
+    rememberBotMessage(chatId, messageId);
+    return messageId;
   } catch (error) {
-    console.error("Could not delete previous Telegram message:", error);
-  } finally {
-    if (lastBotMessages.get(chatId) === messageId) lastBotMessages.delete(chatId);
+    console.error("Could not edit Telegram message to QR:", error);
+    return null;
   }
+}
+
+async function sendQrPhoto(ctx: Context, buffer: Buffer, caption: string) {
+  const sent = await ctx.replyWithPhoto({ source: buffer, filename: "vietqr.png" }, { caption, parse_mode: "HTML" });
+  if (ctx.chat) rememberBotMessage(ctx.chat.id, sent.message_id);
+  return sent.message_id;
 }
 
 function rememberBotMessage(chatId: number, messageId: number) {
@@ -442,7 +459,7 @@ function buildCatalogText(products: ProductSummary[]) {
 
   const productLines = products.slice(0, CATALOG_TEXT_LIMIT).map((product, index) => {
     const category = product.category?.name ? ` - ${singleLine(product.category.name)}` : "";
-    return `${index + 1}. ${singleLine(product.name)} - ${formatVnd(product.price)}${category}`;
+    return `${index + 1}. ${singleLine(product.name)} - ${formatVnd(product.price)} - SL: ${productQuantityText(product)}${category}`;
   });
   const moreLine = products.length > CATALOG_TEXT_LIMIT ? `\n\nCòn ${products.length - CATALOG_TEXT_LIMIT} sản phẩm khác. Bấm nút bên dưới để xem tiếp.` : "";
 
@@ -454,6 +471,11 @@ function buildCatalogText(products: ProductSummary[]) {
     "",
     productLines.join("\n") + moreLine
   ].join("\n");
+}
+
+function productQuantityText(product: ProductSummary | ProductDetail) {
+  const quantity = productAvailableQuantity(product);
+  return quantity === null ? "không giới hạn" : String(quantity);
 }
 
 async function findProductByReference(reference: string) {

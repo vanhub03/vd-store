@@ -138,6 +138,7 @@ model Product {
   sharedContent      String?
   sharedFilePath     String?
   manualInstructions String              @default("Vui lòng ib admin @vanhdao99 để nhận hàng.")
+  manualStock        Int                 @default(0)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
