@@ -1,5 +1,6 @@
 import express from "express";
-import { deflateSync } from "node:zlib";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Context, Markup, Telegraf } from "telegraf";
 import { ExtraEditMessageText, ExtraReplyMessage } from "telegraf/typings/telegram-types";
 import {
@@ -24,7 +25,7 @@ const bot = new Telegraf(token);
 const CATALOG_BUTTON_LIMIT = 40;
 const CATALOG_TEXT_LIMIT = 12;
 const CAPTION_LIMIT = 1000;
-const BOT_CARD_PNG = createBotCardPng();
+const BOT_CARD_PNG = loadBotBannerPng();
 const lastBotMessages = new Map<number, number>();
 const BOT_COMMANDS = [
   { command: "start", description: "Bắt đầu sử dụng bot" },
@@ -647,84 +648,24 @@ function singleLine(input: string) {
   return input.replace(/\s+/g, " ").trim();
 }
 
-function createBotCardPng() {
-  const width = 900;
-  const height = 420;
-  const channels = 3;
-  const raw = Buffer.alloc((1 + width * channels) * height);
-  const colors = {
-    background: [248, 250, 252],
-    border: [203, 213, 225],
-    dark: [15, 23, 42],
-    teal: [15, 118, 110],
-    mint: [20, 184, 166],
-    white: [255, 255, 255]
-  } as const;
-
-  for (let y = 0; y < height; y += 1) {
-    const rowStart = y * (1 + width * channels);
-    raw[rowStart] = 0;
-    for (let x = 0; x < width; x += 1) {
-      let color: readonly [number, number, number] = colors.background;
-      if (y < 92) color = colors.teal;
-      if (x < 10 || x >= width - 10 || y < 10 || y >= height - 10) color = colors.border;
-      if (x >= 355 && x <= 545 && y >= 135 && y <= 285) color = colors.teal;
-      if (x >= 385 && x <= 515 && y >= 165 && y <= 255) color = colors.white;
-      if (x >= 415 && x <= 485 && y >= 190 && y <= 230) color = colors.mint;
-      if (x >= 280 && x <= 620 && y >= 330 && y <= 344) color = colors.dark;
-      if (x >= 330 && x <= 570 && y >= 360 && y <= 372) color = colors.mint;
-
-      const offset = rowStart + 1 + x * channels;
-      raw[offset] = color[0];
-      raw[offset + 1] = color[1];
-      raw[offset + 2] = color[2];
-    }
-  }
-
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 2;
-  ihdr[10] = 0;
-  ihdr[11] = 0;
-  ihdr[12] = 0;
-
-  return Buffer.concat([
-    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", deflateSync(raw)),
-    pngChunk("IEND", Buffer.alloc(0))
-  ]);
-}
-
-function pngChunk(type: string, data: Buffer) {
-  const typeBuffer = Buffer.from(type, "ascii");
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const checksum = Buffer.alloc(4);
-  checksum.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
-  return Buffer.concat([length, typeBuffer, data, checksum]);
-}
-
-function crc32(buffer: Buffer) {
-  const table = Array.from({ length: 256 }, (_, index) => {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) {
-      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    }
-    return value >>> 0;
-  });
-  let crc = 0xffffffff;
-  for (const byte of buffer) {
-    crc = table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
 function toTelegramPhoto(media: ScreenMedia) {
   if (typeof media === "string") return media;
   return { source: media, filename: "vd-store.png" };
+}
+
+function loadBotBannerPng() {
+  const configuredPath = process.env.BOT_BANNER_PATH?.trim();
+  const candidates = [
+    ...(configuredPath ? [configuredPath] : []),
+    resolve(process.cwd(), "assets", "banner.png"),
+    resolve(__dirname, "..", "assets", "banner.png"),
+    resolve(__dirname, "..", "..", "apps", "bot", "assets", "banner.png")
+  ];
+  const bannerPath = candidates.find((candidate) => existsSync(candidate));
+  if (!bannerPath) {
+    throw new Error(`Không tìm thấy banner bot. Đã thử: ${candidates.join(", ")}`);
+  }
+  return readFileSync(bannerPath);
 }
 
 function editMarkupOptions(keyboard?: ScreenKeyboard, removeKeyboard = false) {
