@@ -3,10 +3,11 @@ import crypto from "node:crypto";
 export type SepayAuthMode = "none" | "api-key" | "hmac";
 
 export function verifyApiKeyHeader(headerValue: string | undefined, expectedApiKey: string | undefined) {
-  if (!expectedApiKey) return false;
+  const apiKey = expectedApiKey?.trim();
+  if (!apiKey) return false;
   const prefix = "Apikey ";
   if (!headerValue?.startsWith(prefix)) return false;
-  return timingSafeEqual(headerValue.slice(prefix.length), expectedApiKey);
+  return timingSafeEqual(headerValue.slice(prefix.length).trim(), apiKey);
 }
 
 export function signSepayBody(timestamp: string, rawBody: Buffer | string, secret: string) {
@@ -24,14 +25,15 @@ export function verifySepayHmac(options: {
   maxSkewSeconds?: number;
 }) {
   const { rawBody, signature, timestamp, secret, maxSkewSeconds = 300 } = options;
-  if (!secret || !signature || !timestamp) return false;
+  const hmacSecret = secret?.trim();
+  if (!hmacSecret || !signature || !timestamp) return false;
 
   const timestampSeconds = Number(timestamp);
   if (!Number.isFinite(timestampSeconds)) return false;
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (Math.abs(nowSeconds - timestampSeconds) > maxSkewSeconds) return false;
 
-  return timingSafeEqual(signSepayBody(timestamp, rawBody, secret), signature);
+  return timingSafeEqual(signSepayBody(timestamp, rawBody, hmacSecret), signature.trim());
 }
 
 function timingSafeEqual(a: string, b: string) {
