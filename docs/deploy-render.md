@@ -28,11 +28,7 @@ The Render Hobby plan includes 2 custom domains. This config uses them for `admi
    VIETQR_ACCOUNT_NAME=VANH DAO
    ```
 
-5. After the first API deploy succeeds, open the API service shell or one-off job and seed the first admin:
-
-   ```bash
-   pnpm --filter @vd-store/api prisma:seed
-   ```
+5. On the first successful API deploy, Render runs the seed command automatically and creates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
 6. Check health:
 

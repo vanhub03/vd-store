@@ -14,6 +14,7 @@ services:
       - api.vanhdao.io.vn
     buildCommand: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @vd-store/api prisma:generate && pnpm --filter @vd-store/api build
     preDeployCommand: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm --filter @vd-store/api exec prisma migrate deploy
+    initialDeployHook: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm --filter @vd-store/api prisma:seed
     startCommand: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm --filter @vd-store/api start
     healthCheckPath: /health
     envVars:
