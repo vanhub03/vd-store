@@ -349,8 +349,13 @@ async function createBankOrderQr(ctx: Context, productId: string) {
 async function renderScreen(ctx: Context, caption: string, keyboard?: ScreenKeyboard, media?: ScreenMedia) {
   const safeCaption = fitCaption(caption);
   if (isCallbackContext(ctx)) {
-    const updatedMedia = await editCurrentMedia(ctx, media ?? BOT_CARD_PNG, safeCaption, keyboard);
-    if (updatedMedia) return updatedMedia;
+    if (media) {
+      const updatedMedia = await editCurrentMedia(ctx, media, safeCaption, keyboard);
+      if (updatedMedia) return updatedMedia;
+    }
+
+    const updatedCaption = await editCurrentCaption(ctx, safeCaption, keyboard);
+    if (updatedCaption) return updatedCaption;
 
     const updatedText = await editCurrentText(ctx, safeCaption, keyboard);
     if (updatedText) return updatedText;
@@ -426,6 +431,26 @@ async function editCurrentMedia(ctx: Context, media: ScreenMedia, caption: strin
   }
 }
 
+async function editCurrentCaption(ctx: Context, caption: string, keyboard?: ScreenKeyboard) {
+  const chatId = ctx.chat?.id;
+  const messageId = currentCallbackMessageId(ctx);
+  if (!chatId || !messageId) return null;
+
+  try {
+    await ctx.editMessageCaption(caption, {
+      parse_mode: "HTML",
+      ...(keyboard ?? {})
+    } as never);
+    rememberBotMessage(chatId, messageId);
+    return messageId;
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.includes("message is not modified")) return messageId;
+    console.error("Could not edit Telegram caption:", error);
+    return null;
+  }
+}
+
 async function editCurrentText(ctx: Context, text: string, keyboard?: ScreenKeyboard) {
   const chatId = ctx.chat?.id;
   const messageId = currentCallbackMessageId(ctx);
@@ -450,7 +475,7 @@ async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, capti
   const buffer = await fetchQrImage(qrImageUrl);
   const messageId = isCallbackContext(ctx) ? await editCurrentMedia(ctx, buffer, caption) : await sendQrPhoto(ctx, buffer, caption);
   if (!messageId) {
-    await editCurrentText(
+    await editCurrentCaption(
       ctx,
       `${caption}\n\nKhông thể đổi menu cũ sang ảnh QR. Gửi lại bằng cú pháp /nap số_tiền hoặc /mua sản_phẩm ck để tạo QR mới.`,
       mainKeyboard()
