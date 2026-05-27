@@ -11,6 +11,14 @@ if (!token) {
 
 const api = new ApiClient();
 const bot = new Telegraf(token);
+const BOT_COMMANDS = [
+  { command: "menu", description: "Mở menu chính" },
+  { command: "sanpham", description: "Xem tất cả sản phẩm" },
+  { command: "nap", description: "Nạp tiền vào ví" },
+  { command: "sodu", description: "Xem số dư ví" },
+  { command: "lichsu", description: "Xem lịch sử mua/nạp" },
+  { command: "hotro", description: "Liên hệ hỗ trợ" }
+];
 
 function mainKeyboard() {
   return Markup.inlineKeyboard([
@@ -33,11 +41,15 @@ async function upsertUser(ctx: Context) {
 
 bot.start(async (ctx) => {
   await upsertUser(ctx);
-  await ctx.reply(
-    "Chào bạn. Đây là bot bán hàng tự động.\nBạn có thể xem sản phẩm, nạp tiền, mua hàng và kiểm tra lịch sử ngay trong bot.",
-    mainKeyboard()
-  );
+  await showHome(ctx, "Chào bạn. Đây là bot bán hàng tự động.\nBạn có thể xem sản phẩm, nạp tiền, mua hàng và kiểm tra lịch sử ngay trong bot.");
 });
+
+bot.command("menu", (ctx) => showHome(ctx));
+bot.command("sanpham", (ctx) => showCatalog(ctx));
+bot.command("nap", (ctx) => showTopup(ctx));
+bot.command("sodu", (ctx) => showWallet(ctx));
+bot.command("lichsu", (ctx) => showHistory(ctx));
+bot.command("hotro", (ctx) => showSupport(ctx));
 
 bot.action("catalog", async (ctx) => {
   await ctx.answerCbQuery();
@@ -56,23 +68,12 @@ bot.action(/^prod:(.+)$/, async (ctx) => {
 
 bot.action("wallet", async (ctx) => {
   await ctx.answerCbQuery();
-  await upsertUser(ctx);
-  const wallet = await api.get<{ balance: number }>(`/bot/wallet/${ctx.from!.id}`);
-  await updateText(ctx, `Số dư hiện tại: ${formatVnd(wallet.balance)}`, mainKeyboard());
+  await showWallet(ctx);
 });
 
 bot.action("topup", async (ctx) => {
   await ctx.answerCbQuery();
-  await upsertUser(ctx);
-  await updateText(
-    ctx,
-    "Chọn số tiền cần nạp. QR có hiệu lực trong 10 phút.",
-    Markup.inlineKeyboard([
-      [Markup.button.callback("50.000đ", "topup:50000"), Markup.button.callback("100.000đ", "topup:100000")],
-      [Markup.button.callback("200.000đ", "topup:200000"), Markup.button.callback("500.000đ", "topup:500000")],
-      [Markup.button.callback("Quay lại", "home")]
-    ])
-  );
+  await showTopup(ctx);
 });
 
 bot.action(/^topup:(\d+)$/, async (ctx) => {
@@ -113,25 +114,17 @@ bot.action(/^buy_bank:(.+)$/, async (ctx) => {
 
 bot.action("history", async (ctx) => {
   await ctx.answerCbQuery();
-  await upsertUser(ctx);
-  const history = await api.get<HistoryResponse>(`/bot/history/${ctx.from!.id}`);
-  const orderLines = history.orders.length
-    ? history.orders.map((order) => `${order.code} - ${order.product.name} - ${formatVnd(order.totalAmount)} - ${order.status}`).join("\n")
-    : "Chưa có đơn hàng.";
-  const ledgerLines = history.ledger.length
-    ? history.ledger.map((entry) => `${formatVnd(entry.amount)} - ${entry.type}${entry.note ? ` - ${entry.note}` : ""}`).join("\n")
-    : "Chưa có giao dịch ví.";
-  await updateText(ctx, `Đơn hàng gần đây:\n${orderLines}\n\nGiao dịch ví gần đây:\n${ledgerLines}`, mainKeyboard());
+  await showHistory(ctx);
 });
 
 bot.action("support", async (ctx) => {
   await ctx.answerCbQuery();
-  await updateText(ctx, `Vui lòng liên hệ admin @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} để được hỗ trợ.`, mainKeyboard());
+  await showSupport(ctx);
 });
 
 bot.action("home", async (ctx) => {
   await ctx.answerCbQuery();
-  await updateText(ctx, "Menu chính", mainKeyboard());
+  await showHome(ctx);
 });
 
 bot.catch(async (error, ctx) => {
@@ -148,6 +141,45 @@ async function showCatalog(ctx: Context) {
   ]);
   buttons.push([Markup.button.callback("Quay lại", "home")]);
   await updateText(ctx, products.length ? "Chọn sản phẩm:" : "Hiện chưa có sản phẩm đang bán.", Markup.inlineKeyboard(buttons));
+}
+
+async function showWallet(ctx: Context) {
+  await upsertUser(ctx);
+  const wallet = await api.get<{ balance: number }>(`/bot/wallet/${ctx.from!.id}`);
+  await updateText(ctx, `Số dư hiện tại: ${formatVnd(wallet.balance)}`, mainKeyboard());
+}
+
+async function showTopup(ctx: Context) {
+  await upsertUser(ctx);
+  await updateText(
+    ctx,
+    "Chọn số tiền cần nạp. QR có hiệu lực trong 10 phút.",
+    Markup.inlineKeyboard([
+      [Markup.button.callback("50.000đ", "topup:50000"), Markup.button.callback("100.000đ", "topup:100000")],
+      [Markup.button.callback("200.000đ", "topup:200000"), Markup.button.callback("500.000đ", "topup:500000")],
+      [Markup.button.callback("Quay lại", "home")]
+    ])
+  );
+}
+
+async function showHistory(ctx: Context) {
+  await upsertUser(ctx);
+  const history = await api.get<HistoryResponse>(`/bot/history/${ctx.from!.id}`);
+  const orderLines = history.orders.length
+    ? history.orders.map((order) => `${order.code} - ${order.product.name} - ${formatVnd(order.totalAmount)} - ${order.status}`).join("\n")
+    : "Chưa có đơn hàng.";
+  const ledgerLines = history.ledger.length
+    ? history.ledger.map((entry) => `${formatVnd(entry.amount)} - ${entry.type}${entry.note ? ` - ${entry.note}` : ""}`).join("\n")
+    : "Chưa có giao dịch ví.";
+  await updateText(ctx, `Đơn hàng gần đây:\n${orderLines}\n\nGiao dịch ví gần đây:\n${ledgerLines}`, mainKeyboard());
+}
+
+async function showSupport(ctx: Context) {
+  await updateText(ctx, `Vui lòng liên hệ admin @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} để được hỗ trợ.`, mainKeyboard());
+}
+
+async function showHome(ctx: Context, message = "Menu chính") {
+  await updateText(ctx, message, mainKeyboard());
 }
 
 async function showProduct(ctx: Context, productId: string) {
@@ -220,6 +252,7 @@ function flattenProducts(catalog: CatalogResponse) {
 }
 
 async function launch() {
+  await configureTelegramMenu();
   const mode = process.env.TELEGRAM_BOT_MODE ?? "polling";
   if (mode === "webhook") {
     const publicUrl = process.env.TELEGRAM_WEBHOOK_PUBLIC_URL;
@@ -238,6 +271,11 @@ async function launch() {
 
   await bot.launch();
   console.log("VD Store bot started in polling mode.");
+}
+
+async function configureTelegramMenu() {
+  await bot.telegram.setMyCommands(BOT_COMMANDS);
+  await bot.telegram.setChatMenuButton({ menuButton: { type: "commands" } });
 }
 
 launch();
