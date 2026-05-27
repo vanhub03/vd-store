@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Bell, Boxes, LogOut, PackagePlus, RefreshCw, Save, Send, ShoppingCart, Users, Wallet } from "lucide-react";
+import { Bell, Boxes, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, Trash2, Users, Wallet, X } from "lucide-react";
 import { AdminSession, Api, formatVnd } from "./api";
 
 type Tab = "overview" | "products" | "users" | "orders" | "broadcasts";
@@ -24,6 +24,7 @@ type Dashboard = {
 type Category = { id: string; name: string };
 type Product = {
   id: string;
+  categoryId?: string | null;
   name: string;
   description?: string;
   imageUrl?: string | null;
@@ -57,6 +58,18 @@ type Payment = {
   order?: { product?: Product };
 };
 type Broadcast = { id: string; title: string; message: string; status: string; sentCount: number; failedCount: number; createdAt: string };
+type ProductForm = {
+  name: string;
+  price: number;
+  categoryId: string;
+  deliveryType: string;
+  status: string;
+  description: string;
+  imageUrl: string;
+  sharedContent: string;
+  sharedFilePath: string;
+  manualInstructions: string;
+};
 
 const tokenKey = "vd-store-admin-token";
 
@@ -253,20 +266,12 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [inventoryProductId, setInventoryProductId] = useState("");
   const [inventoryContent, setInventoryContent] = useState("");
-  const [form, setForm] = useState({
-    name: "",
-    price: 10000,
-    categoryId: "",
-    deliveryType: "STOCK_ITEM",
-    description: "",
-    imageUrl: "",
-    sharedContent: "",
-    sharedFilePath: "",
-    manualInstructions: "Vui lòng ib admin @vanhdao99 để nhận hàng."
-  });
+  const [form, setForm] = useState<ProductForm>(() => emptyProductForm());
 
   async function load() {
     setLoading(true);
@@ -287,21 +292,57 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
     event.preventDefault();
     setCreating(true);
     try {
-      await api.post("/admin/products", {
-        ...form,
-        categoryId: form.categoryId || null,
-        price: Number(form.price),
-        imageUrl: form.imageUrl || null,
-        sharedContent: form.sharedContent || null,
-        sharedFilePath: form.sharedFilePath || null
-      });
-      setForm({ ...form, name: "", description: "", imageUrl: "", sharedContent: "", sharedFilePath: "" });
+      const payload = serializeProductForm(form);
+      if (editingProductId) {
+        await api.put(`/admin/products/${editingProductId}`, payload);
+      } else {
+        await api.post("/admin/products", payload);
+      }
+      resetProductForm();
       await load();
       onError(null);
     } catch (err) {
       onError((err as Error).message);
     } finally {
       setCreating(false);
+    }
+  }
+
+  function editProduct(product: Product) {
+    setEditingProductId(product.id);
+    setForm({
+      name: product.name,
+      price: product.price,
+      categoryId: product.categoryId ?? product.category?.id ?? "",
+      deliveryType: product.deliveryType,
+      status: product.status,
+      description: product.description ?? "",
+      imageUrl: product.imageUrl ?? "",
+      sharedContent: product.sharedContent ?? "",
+      sharedFilePath: product.sharedFilePath ?? "",
+      manualInstructions: product.manualInstructions ?? "Vui lòng ib admin @vanhdao99 để nhận hàng."
+    });
+    onError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetProductForm() {
+    setEditingProductId(null);
+    setForm(emptyProductForm());
+  }
+
+  async function deleteProduct(product: Product) {
+    if (!confirm(`Xóa sản phẩm "${product.name}" khỏi danh sách bán?`)) return;
+    setDeletingProductId(product.id);
+    try {
+      await api.delete(`/admin/products/${product.id}`);
+      if (editingProductId === product.id) resetProductForm();
+      await load();
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setDeletingProductId(null);
     }
   }
 
@@ -325,7 +366,14 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
     <div className="stack">
       {loading && <LoadingBlock label="Đang tải sản phẩm..." />}
       <section className="panel">
-        <h2>Tạo sản phẩm</h2>
+        <div className="panelHeader">
+          <h2>{editingProductId ? "Cập nhật sản phẩm" : "Tạo sản phẩm"}</h2>
+          {editingProductId && (
+            <button className="smallButton secondaryButton" type="button" onClick={resetProductForm}>
+              <X size={14} /> Hủy sửa
+            </button>
+          )}
+        </div>
         <form className="formGrid" onSubmit={submitProduct}>
           <label>
             Tên
@@ -363,6 +411,13 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
               <option value="MANUAL">Liên hệ admin</option>
             </select>
           </label>
+          <label>
+            Trạng thái
+            <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+              <option value="ACTIVE">Đang bán</option>
+              <option value="INACTIVE">Tạm ẩn</option>
+            </select>
+          </label>
           <label className="wide">
             Mô tả
             <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} />
@@ -380,7 +435,8 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             <input value={form.manualInstructions} onChange={(event) => setForm({ ...form, manualInstructions: event.target.value })} />
           </label>
           <button className="primaryButton" disabled={creating}>
-            {creating ? <RefreshCw className="spin" size={16} /> : <PackagePlus size={16} />} {creating ? "Đang tạo..." : "Tạo sản phẩm"}
+            {creating ? <RefreshCw className="spin" size={16} /> : editingProductId ? <Save size={16} /> : <PackagePlus size={16} />}{" "}
+            {creating ? "Đang lưu..." : editingProductId ? "Cập nhật sản phẩm" : "Tạo sản phẩm"}
           </button>
         </form>
       </section>
@@ -410,13 +466,27 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       </section>
 
       <DataTable
-        columns={["Tên", "Giá", "Loại", "Tồn", "Trạng thái"]}
+        columns={["Tên", "Giá", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
         rows={products.map((product) => [
           <ProductNameCell product={product} />,
           formatVnd(product.price),
           product.deliveryType,
           String(product._count?.inventoryItems ?? 0),
-          product.status
+          product.status,
+          <div className="rowActions">
+            <button className="smallButton" type="button" onClick={() => editProduct(product)} disabled={creating || deletingProductId === product.id}>
+              <Pencil size={14} /> Sửa
+            </button>
+            <button
+              className="smallButton dangerButton"
+              type="button"
+              onClick={() => deleteProduct(product)}
+              disabled={deletingProductId === product.id || product.status === "INACTIVE"}
+            >
+              {deletingProductId === product.id ? <RefreshCw className="spin" size={14} /> : <Trash2 size={14} />}
+              {deletingProductId === product.id ? "Đang xóa..." : product.status === "INACTIVE" ? "Đã xóa" : "Xóa"}
+            </button>
+          </div>
         ])}
       />
     </div>
@@ -437,6 +507,34 @@ function ProductNameCell({ product }: { product: Product }) {
       </div>
     </div>
   );
+}
+
+function emptyProductForm(): ProductForm {
+  return {
+    name: "",
+    price: 10000,
+    categoryId: "",
+    deliveryType: "STOCK_ITEM",
+    status: "ACTIVE",
+    description: "",
+    imageUrl: "",
+    sharedContent: "",
+    sharedFilePath: "",
+    manualInstructions: "Vui lòng ib admin @vanhdao99 để nhận hàng."
+  };
+}
+
+function serializeProductForm(form: ProductForm) {
+  return {
+    ...form,
+    categoryId: form.categoryId || null,
+    price: Number(form.price),
+    imageUrl: form.imageUrl || null,
+    sharedContent: form.sharedContent || null,
+    sharedFilePath: form.sharedFilePath || null,
+    description: form.description || null,
+    manualInstructions: form.manualInstructions || null
+  };
 }
 
 function UsersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {

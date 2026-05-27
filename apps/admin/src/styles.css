@@ -367,6 +367,23 @@ textarea {
   white-space: nowrap;
 }
 
+.secondaryButton {
+  color: #334155;
+  background: #f1f5f9;
+}
+
+.dangerButton {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 .productNameCell {
   display: inline-flex;
   align-items: center;
