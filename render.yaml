@@ -94,7 +94,6 @@ services:
   - type: web
     name: vd-store-admin
     runtime: static
-    plan: free
     domains:
       - admin.vanhdao.io.vn
     buildCommand: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @vd-store/admin build
