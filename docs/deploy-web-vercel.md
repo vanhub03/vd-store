@@ -12,7 +12,7 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
 
 1. Go to Vercel > Add New > Project.
 2. Import GitHub repo `vanhub03/vd-store`.
-3. Use the repo root. The root `vercel.json` already tells Vercel to build `apps/web`.
+3. Use the repo root. The root `vercel.json` already tells Vercel to build `apps/web` and copy the output to root `dist`.
 4. Add environment variable:
 
    ```env
@@ -20,6 +20,15 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
    ```
 
 5. Deploy.
+   If you already created the project and Vercel still says `No Output Directory named "dist"`, go to Settings > Build and Development Settings and set:
+
+   ```text
+   Root Directory: ./
+   Framework Preset: Other
+   Build Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @vd-store/web build && node scripts/copy-web-dist.mjs
+   Output Directory: dist
+   Install Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile
+   ```
 6. In Vercel project > Settings > Domains, add:
 
    ```text
