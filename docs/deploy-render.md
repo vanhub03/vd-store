@@ -108,3 +108,16 @@ TELEGRAM_WEBHOOK_PATH=/telegram/webhook
 ```
 
 If Render assigns a different default domain, update `TELEGRAM_WEBHOOK_PUBLIC_URL` in the `vd-store-bot` service.
+
+## Free Tier Sleep And Slow Bot Replies
+
+Render Free web services can spin down after a period without traffic. When that happens, Telegram webhook requests must wait for the `vd-store-bot` service to wake up, and the bot may appear slow or miss the first user message.
+
+This repo includes `.github/workflows/render-keepalive.yml`, which pings these health endpoints every 10 minutes:
+
+```text
+https://api.vanhdao.io.vn/health
+https://vd-store-bot.onrender.com/health
+```
+
+After this workflow is pushed to GitHub, open **GitHub > Actions > Render keepalive** and run it once with **Run workflow**. The scheduled pings will then help keep both services warm. This is a free mitigation, not a hard uptime guarantee. For production-grade Telegram response time, move the bot/API to a paid Render instance or a small VPS that does not sleep.
