@@ -31,7 +31,11 @@ export type ProductInput = {
   description?: string | null;
   imageUrl?: string | null;
   buttonIcon?: string | null;
-  price: number;
+  price?: number;
+  botPrice?: number;
+  webPrice?: number;
+  showInBot?: boolean;
+  showInWeb?: boolean;
   status?: ProductStatus;
   deliveryType: ProductDeliveryType;
   sharedContent?: string | null;
@@ -39,6 +43,8 @@ export type ProductInput = {
   manualInstructions?: string | null;
   manualStock?: number;
 };
+
+type SalesChannel = "bot" | "web";
 
 @Injectable()
 export class ShopService {
@@ -70,13 +76,13 @@ export class ShopService {
     });
   }
 
-  async getCatalog() {
+  async getCatalog(channel: SalesChannel = "bot") {
     const categories = await this.prisma.category.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       include: {
         products: {
-          where: { status: ProductStatus.ACTIVE },
+          where: productVisibilityWhere(channel),
           orderBy: { createdAt: "desc" },
           include: {
             _count: {
@@ -90,7 +96,7 @@ export class ShopService {
     });
 
     const uncategorized = await this.prisma.product.findMany({
-      where: { categoryId: null, status: ProductStatus.ACTIVE },
+      where: { categoryId: null, ...productVisibilityWhere(channel) },
       orderBy: { createdAt: "desc" },
       include: {
         _count: {
@@ -101,10 +107,16 @@ export class ShopService {
       }
     });
 
-    return { categories, uncategorized };
+    return {
+      categories: categories.map((category) => ({
+        ...category,
+        products: category.products.map((product) => applyChannelPrice(product, channel))
+      })),
+      uncategorized: uncategorized.map((product) => applyChannelPrice(product, channel))
+    };
   }
 
-  async getProduct(productId: string) {
+  async getProduct(productId: string, channel: SalesChannel = "bot") {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
       include: {
@@ -116,10 +128,10 @@ export class ShopService {
         }
       }
     });
-    if (!product || product.status !== ProductStatus.ACTIVE) {
+    if (!product || !isVisibleForChannel(product, channel)) {
       throw new NotFoundException("Không tìm thấy sản phẩm.");
     }
-    return product;
+    return applyChannelPrice(product, channel);
   }
 
   async getWalletBalanceByTelegramId(telegramId: string) {
@@ -160,13 +172,13 @@ export class ShopService {
     return { payment, code, amount, expiresAt, qrImageUrl };
   }
 
-  async createBankOrder(telegramId: string, productId: string, quantity = 1) {
+  async createBankOrder(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException("Số lượng không hợp lệ.");
     }
 
     const user = await this.requireTelegramUser(telegramId);
-    const product = await this.getActiveProduct(productId);
+    const product = await this.getActiveProduct(productId, channel);
     await this.ensurePurchasable(product, quantity);
 
     const code = await this.createUniqueCode(DIRECT_ORDER_PREFIX);
@@ -205,7 +217,7 @@ export class ShopService {
     return { order, payment: order.payments[0], code, amount: totalAmount, expiresAt, qrImageUrl };
   }
 
-  async purchaseWithWallet(telegramId: string, productId: string, quantity = 1) {
+  async purchaseWithWallet(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException("Số lượng không hợp lệ.");
     }
@@ -216,12 +228,13 @@ export class ShopService {
         if (!user) throw new NotFoundException("User chưa đăng ký bot.");
 
         const product = await tx.product.findUnique({ where: { id: productId } });
-        if (!product || product.status !== ProductStatus.ACTIVE) {
+        if (!product || !isVisibleForChannel(product, channel)) {
           throw new NotFoundException("Không tìm thấy sản phẩm.");
         }
         await this.ensurePurchasable(product, quantity, tx);
 
-        const totalAmount = product.price * quantity;
+        const unitPrice = channelPrice(product, channel);
+        const totalAmount = unitPrice * quantity;
         const balance = await this.getWalletBalance(user.id, tx);
         if (balance < totalAmount) {
           throw new BadRequestException("Số dư không đủ.");
@@ -234,7 +247,7 @@ export class ShopService {
             userId: user.id,
             productId: product.id,
             quantity,
-            unitPrice: product.price,
+            unitPrice,
             totalAmount,
             status: OrderStatus.PAID,
             paymentMethod: PaymentMethod.WALLET
@@ -511,15 +524,16 @@ export class ShopService {
   }
 
   async createProduct(input: ProductInput, adminId: string) {
-    assertPositiveVnd(input.price);
+    const priceData = normalizeProductPrices(input, true);
     assertNonNegativeStock(input.manualStock);
     const product = await this.prisma.product.create({
       data: {
         ...input,
+        ...priceData,
         slug: input.slug ? slugify(input.slug) : slugify(input.name),
         buttonIcon: normalizeProductIcon(input.buttonIcon, input.name),
         manualInstructions: input.manualInstructions?.trim() || defaultManualInstructions()
-      }
+      } as Prisma.ProductUncheckedCreateInput
     });
     await this.audit(adminId, "PRODUCT_CREATE", "Product", product.id, { name: product.name });
     await this.announceNewProductIfReady(product, adminId);
@@ -527,7 +541,7 @@ export class ShopService {
   }
 
   async updateProduct(productId: string, input: Partial<ProductInput>, adminId: string) {
-    if (input.price !== undefined) assertPositiveVnd(input.price);
+    const priceData = normalizeProductPrices(input, false);
     assertNonNegativeStock(input.manualStock);
     const previous = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!previous) throw new NotFoundException("Không tìm thấy sản phẩm.");
@@ -536,6 +550,7 @@ export class ShopService {
       where: { id: productId },
       data: {
         ...input,
+        ...priceData,
         slug: input.slug ? slugify(input.slug) : undefined,
         buttonIcon: input.buttonIcon === undefined ? undefined : normalizeProductIcon(input.buttonIcon, input.name),
         manualInstructions: input.manualInstructions === null ? defaultManualInstructions() : input.manualInstructions
@@ -702,12 +717,12 @@ export class ShopService {
     return user;
   }
 
-  private async getActiveProduct(productId: string) {
+  private async getActiveProduct(productId: string, channel: SalesChannel = "bot") {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
-    if (!product || product.status !== ProductStatus.ACTIVE) {
+    if (!product || !isVisibleForChannel(product, channel)) {
       throw new NotFoundException("Không tìm thấy sản phẩm.");
     }
-    return product;
+    return applyChannelPrice(product, channel);
   }
 
   private async ensurePurchasable(
@@ -857,6 +872,8 @@ export class ShopService {
     name: string;
     description?: string | null;
     price: number;
+    botPrice?: number | null;
+    webPrice?: number | null;
     status: ProductStatus;
     deliveryType: ProductDeliveryType;
     manualStock?: number | null;
@@ -886,6 +903,8 @@ export class ShopService {
       name: string;
       description?: string | null;
       price: number;
+      botPrice?: number | null;
+      webPrice?: number | null;
       status: ProductStatus;
       deliveryType: ProductDeliveryType;
       manualStock?: number | null;
@@ -906,6 +925,8 @@ export class ShopService {
       name: string;
       description?: string | null;
       price: number;
+      botPrice?: number | null;
+      webPrice?: number | null;
       status: ProductStatus;
       deliveryType: ProductDeliveryType;
     },
@@ -924,6 +945,8 @@ export class ShopService {
       name: string;
       description?: string | null;
       price: number;
+      botPrice?: number | null;
+      webPrice?: number | null;
       deliveryType: ProductDeliveryType;
     },
     addedCount: number | null,
@@ -949,6 +972,69 @@ function assertNonNegativeStock(value?: number) {
   if (!Number.isInteger(value) || value < 0) {
     throw new BadRequestException("So luong phai la so nguyen khong am.");
   }
+}
+
+function normalizeProductPrices(input: Partial<ProductInput>, required: boolean) {
+  const basePrice = input.price ?? input.webPrice ?? input.botPrice;
+  if (required && basePrice === undefined) {
+    throw new BadRequestException("Can nhap gia bot va gia web.");
+  }
+
+  const botPrice = input.botPrice ?? input.price;
+  const webPrice = input.webPrice ?? input.price;
+  const data: { price?: number; botPrice?: number; webPrice?: number } = {};
+
+  if (botPrice !== undefined) {
+    assertPositiveVnd(botPrice);
+    data.botPrice = botPrice;
+  }
+  if (webPrice !== undefined) {
+    assertPositiveVnd(webPrice);
+    data.webPrice = webPrice;
+    data.price = webPrice;
+  } else if (input.price !== undefined) {
+    assertPositiveVnd(input.price);
+    data.price = input.price;
+  }
+
+  if (required) {
+    const finalBotPrice = data.botPrice ?? basePrice!;
+    const finalWebPrice = data.webPrice ?? basePrice!;
+    assertPositiveVnd(finalBotPrice);
+    assertPositiveVnd(finalWebPrice);
+    data.botPrice = finalBotPrice;
+    data.webPrice = finalWebPrice;
+    data.price = finalWebPrice;
+  }
+
+  return data;
+}
+
+function productVisibilityWhere(channel: SalesChannel): Prisma.ProductWhereInput {
+  return {
+    status: ProductStatus.ACTIVE,
+    ...(channel === "bot" ? { showInBot: true } : { showInWeb: true })
+  };
+}
+
+function isVisibleForChannel(
+  product: { status: ProductStatus; showInBot?: boolean | null; showInWeb?: boolean | null },
+  channel: SalesChannel
+) {
+  if (product.status !== ProductStatus.ACTIVE) return false;
+  return channel === "bot" ? product.showInBot !== false : product.showInWeb !== false;
+}
+
+function channelPrice(product: { price: number; botPrice?: number | null; webPrice?: number | null }, channel: SalesChannel) {
+  const price = channel === "bot" ? product.botPrice : product.webPrice;
+  return price && price > 0 ? price : product.price;
+}
+
+function applyChannelPrice<T extends { price: number; botPrice?: number | null; webPrice?: number | null }>(product: T, channel: SalesChannel) {
+  return {
+    ...product,
+    price: channelPrice(product, channel)
+  };
 }
 
 export function slugify(input: string) {
@@ -1003,6 +1089,8 @@ function buildNewStockBroadcastMessage(
     name: string;
     description?: string | null;
     price: number;
+    botPrice?: number | null;
+    webPrice?: number | null;
     deliveryType: ProductDeliveryType;
   },
   addedCount: number | null,
@@ -1018,7 +1106,7 @@ function buildNewStockBroadcastMessage(
     "🚀 THÔNG BÁO HÀNG MỚI 🚀",
     "✨ ──────────────────────── ✨",
     addedLine,
-    `💰 Giá: ${formatVnd(product.price)}`,
+    `💰 Giá: ${formatVnd(channelPrice(product, "bot"))}`,
     `💾 Kho: ${escapeHtml(stockText)}`,
     `✨ Ghi chú: ${escapeHtml(note)}`,
     "✨ ──────────────────────── ✨",

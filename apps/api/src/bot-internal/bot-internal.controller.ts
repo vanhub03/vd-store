@@ -66,12 +66,12 @@ export class BotInternalController {
 
   @Get("catalog")
   catalog() {
-    return this.shop.getCatalog();
+    return this.shop.getCatalog("bot");
   }
 
   @Get("products/:id")
   product(@Param("id") id: string) {
-    return this.shop.getProduct(id);
+    return this.shop.getProduct(id, "bot");
   }
 
   @Get("wallet/:telegramId")
@@ -91,12 +91,12 @@ export class BotInternalController {
 
   @Post("orders/wallet")
   purchaseWithWallet(@Body() body: OrderDto) {
-    return this.shop.purchaseWithWallet(body.telegramId, body.productId, body.quantity ?? 1);
+    return this.shop.purchaseWithWallet(body.telegramId, body.productId, body.quantity ?? 1, "bot");
   }
 
   @Post("orders/bank")
   createBankOrder(@Body() body: OrderDto) {
-    return this.shop.createBankOrder(body.telegramId, body.productId, body.quantity ?? 1);
+    return this.shop.createBankOrder(body.telegramId, body.productId, body.quantity ?? 1, "bot");
   }
 
   @Post("payments/:id/telegram-message")

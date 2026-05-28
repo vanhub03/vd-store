@@ -137,6 +137,10 @@ model Product {
   imageUrl           String?
   buttonIcon         String              @default("🛍️")
   price              Int
+  botPrice           Int                 @default(0)
+  webPrice           Int                 @default(0)
+  showInBot          Boolean             @default(true)
+  showInWeb          Boolean             @default(true)
   status             ProductStatus       @default(ACTIVE)
   deliveryType       ProductDeliveryType
   sharedContent      String?

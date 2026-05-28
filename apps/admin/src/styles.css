@@ -336,6 +336,34 @@ label.wide {
   grid-column: 1 / -1;
 }
 
+.checkboxGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.checkboxGroup.wide {
+  grid-column: 1 / -1;
+}
+
+.checkboxLabel {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+  display: inline-flex;
+  flex-direction: row;
+  font-weight: 600;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.checkboxLabel input {
+  height: 16px;
+  width: 16px;
+}
+
 .fieldBlock {
   display: grid;
   gap: 9px;
@@ -354,6 +382,10 @@ textarea {
   padding: 10px 11px;
   color: #0f172a;
   background: white;
+}
+
+input[type="checkbox"] {
+  accent-color: #0f766e;
 }
 
 textarea {

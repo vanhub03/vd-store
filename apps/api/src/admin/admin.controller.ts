@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { ProductDeliveryType, ProductStatus } from "@prisma/client";
-import { IsEnum, IsInt, IsOptional, IsString, Min } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
 import { ShopService, slugify } from "../domain/shop.service";
@@ -43,9 +43,28 @@ class ProductDto {
   @IsString()
   buttonIcon?: string | null;
 
+  @IsOptional()
   @IsInt()
   @Min(1)
-  price!: number;
+  price?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  botPrice!: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  webPrice!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  showInBot!: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showInWeb!: boolean;
 
   @IsOptional()
   @IsEnum(ProductStatus)

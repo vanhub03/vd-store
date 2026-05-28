@@ -52,11 +52,11 @@ export class StoreService {
   }
 
   catalog() {
-    return this.shop.getCatalog();
+    return this.shop.getCatalog("web");
   }
 
   product(productId: string) {
-    return this.shop.getProduct(productId);
+    return this.shop.getProduct(productId, "web");
   }
 
   async wallet(customerId: string) {
@@ -72,11 +72,11 @@ export class StoreService {
   }
 
   purchaseWithWallet(telegramId: string, productId: string, quantity: number) {
-    return this.shop.purchaseWithWallet(telegramId, productId, quantity);
+    return this.shop.purchaseWithWallet(telegramId, productId, quantity, "web");
   }
 
   createBankOrder(telegramId: string, productId: string, quantity: number) {
-    return this.shop.createBankOrder(telegramId, productId, quantity);
+    return this.shop.createBankOrder(telegramId, productId, quantity, "web");
   }
 
   private session(customer: { id: string; email: string | null; displayName: string | null; telegramId: string }) {

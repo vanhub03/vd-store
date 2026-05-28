@@ -48,6 +48,10 @@ async function main() {
       slug: slugify(productName),
       description: "Sản phẩm mẫu dùng để kiểm thử luồng mua bằng ví hoặc chuyển khoản.",
       price: 10000,
+      botPrice: 10000,
+      webPrice: 10000,
+      showInBot: true,
+      showInWeb: true,
       deliveryType: ProductDeliveryType.STOCK_ITEM
     }
   });

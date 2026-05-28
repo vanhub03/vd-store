@@ -30,6 +30,10 @@ type Product = {
   imageUrl?: string | null;
   buttonIcon?: string | null;
   price: number;
+  botPrice: number;
+  webPrice: number;
+  showInBot: boolean;
+  showInWeb: boolean;
   manualStock?: number;
   status: string;
   deliveryType: string;
@@ -62,7 +66,10 @@ type Payment = {
 type Broadcast = { id: string; title: string; message: string; status: string; sentCount: number; failedCount: number; createdAt: string };
 type ProductForm = {
   name: string;
-  price: number;
+  botPrice: number;
+  webPrice: number;
+  showInBot: boolean;
+  showInWeb: boolean;
   categoryId: string;
   deliveryType: string;
   status: string;
@@ -338,7 +345,10 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
     setEditingProductId(product.id);
     setForm({
       name: product.name,
-      price: product.price,
+      botPrice: product.botPrice || product.price,
+      webPrice: product.webPrice || product.price,
+      showInBot: product.showInBot,
+      showInWeb: product.showInWeb,
       categoryId: product.categoryId ?? product.category?.id ?? "",
       deliveryType: product.deliveryType,
       status: product.status,
@@ -445,9 +455,23 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             </div>
           </div>
           <label>
-            Giá VND
-            <input type="number" value={form.price} onChange={(event) => setForm({ ...form, price: Number(event.target.value) })} min={1} />
+            Giá ở bot VND
+            <input type="number" value={form.botPrice} onChange={(event) => setForm({ ...form, botPrice: Number(event.target.value) })} min={1} />
           </label>
+          <label>
+            Giá ở web VND
+            <input type="number" value={form.webPrice} onChange={(event) => setForm({ ...form, webPrice: Number(event.target.value) })} min={1} />
+          </label>
+          <div className="checkboxGroup wide">
+            <label className="checkboxLabel">
+              <input type="checkbox" checked={form.showInBot} onChange={(event) => setForm({ ...form, showInBot: event.target.checked })} />
+              Hiển thị ở bot
+            </label>
+            <label className="checkboxLabel">
+              <input type="checkbox" checked={form.showInWeb} onChange={(event) => setForm({ ...form, showInWeb: event.target.checked })} />
+              Hiển thị ở web
+            </label>
+          </div>
           <label>
             Danh mục
             <select value={form.categoryId} onChange={(event) => setForm({ ...form, categoryId: event.target.value })}>
@@ -533,10 +557,12 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       </section>
 
       <DataTable
-        columns={["Tên", "Giá", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
+        columns={["Tên", "Giá bot", "Giá web", "Hiển thị", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
         rows={products.map((product) => [
           <ProductNameCell product={product} />,
-          formatVnd(product.price),
+          formatVnd(product.botPrice || product.price),
+          formatVnd(product.webPrice || product.price),
+          channelVisibilityLabel(product),
           product.deliveryType,
           productQuantityLabel(product),
           product.status,
@@ -580,7 +606,10 @@ function ProductNameCell({ product }: { product: Product }) {
 function emptyProductForm(): ProductForm {
   return {
     name: "",
-    price: 10000,
+    botPrice: 10000,
+    webPrice: 10000,
+    showInBot: true,
+    showInWeb: true,
     categoryId: "",
     deliveryType: "STOCK_ITEM",
     status: "ACTIVE",
@@ -598,7 +627,11 @@ function serializeProductForm(form: ProductForm) {
   return {
     ...form,
     categoryId: form.categoryId || null,
-    price: Number(form.price),
+    botPrice: Number(form.botPrice),
+    webPrice: Number(form.webPrice),
+    price: Number(form.webPrice),
+    showInBot: Boolean(form.showInBot),
+    showInWeb: Boolean(form.showInWeb),
     manualStock: Number(form.manualStock) || 0,
     imageUrl: form.imageUrl || null,
     buttonIcon: form.buttonIcon.trim() || defaultProductIcon,
@@ -613,6 +646,13 @@ function productQuantityLabel(product: Product) {
   if (product.deliveryType === "STOCK_ITEM") return String(product._count?.inventoryItems ?? 0);
   if (product.deliveryType === "MANUAL") return String(product.manualStock ?? 0);
   return "Không giới hạn";
+}
+
+function channelVisibilityLabel(product: Product) {
+  if (product.showInBot && product.showInWeb) return "Bot + Web";
+  if (product.showInBot) return "Bot";
+  if (product.showInWeb) return "Web";
+  return "Ẩn cả hai";
 }
 
 function shouldAutoIcon(currentIcon: string) {
