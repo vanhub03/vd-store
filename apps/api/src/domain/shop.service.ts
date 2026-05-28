@@ -456,6 +456,29 @@ export class ShopService {
       include: { product: true, user: true }
     });
     if (!order || order.product.deliveryType !== ProductDeliveryType.MANUAL) return;
+    const existingAudit = await this.prisma.auditLog.findFirst({
+      where: {
+        action: "MANUAL_ORDER_NOTIFY",
+        entityType: "Order",
+        entityId: order.id
+      }
+    });
+    if (existingAudit) return;
+
+    await this.prisma.auditLog.create({
+      data: {
+        action: "MANUAL_ORDER_NOTIFY",
+        entityType: "Order",
+        entityId: order.id,
+        meta: {
+          code: order.code,
+          productName: order.product.name,
+          quantity: order.quantity,
+          totalAmount: order.totalAmount,
+          customerLabel: order.user.email ?? order.user.username ?? order.user.telegramId
+        }
+      }
+    });
     await this.telegram.notifyAdminManualOrder({
       code: order.code,
       productName: order.product.name,
@@ -622,7 +645,17 @@ export class ShopService {
       kind: { in: [PaymentKind.DIRECT_ORDER, PaymentKind.WALLET_PURCHASE] }
     };
 
-    const [stats, dailyPayments, monthlyPayments, walletTotal, walletCredits, walletDebits, topWalletGroups, recentWalletEntries] =
+    const [
+      stats,
+      dailyPayments,
+      monthlyPayments,
+      walletTotal,
+      walletCredits,
+      walletDebits,
+      topWalletGroups,
+      recentWalletEntries,
+      manualOrderAlerts
+    ] =
       await Promise.all([
         this.getStats(),
         this.prisma.payment.findMany({
@@ -644,6 +677,15 @@ export class ShopService {
           orderBy: { createdAt: "desc" },
           take: 20,
           include: { user: true }
+        }),
+        this.prisma.order.findMany({
+          where: {
+            status: { in: [OrderStatus.PAID, OrderStatus.FULFILLED] },
+            product: { deliveryType: ProductDeliveryType.MANUAL }
+          },
+          orderBy: { createdAt: "desc" },
+          take: 8,
+          include: { user: true, product: true }
         })
       ]);
 
@@ -682,6 +724,17 @@ export class ShopService {
         note: entry.note,
         createdAt: entry.createdAt,
         user: entry.user
+      })),
+      manualOrderAlerts: manualOrderAlerts.map((order) => ({
+        id: order.id,
+        code: order.code,
+        quantity: order.quantity,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        deliveryText: order.deliveryText,
+        createdAt: order.createdAt,
+        user: order.user,
+        product: order.product
       }))
     };
   }

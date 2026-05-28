@@ -227,6 +227,64 @@ button:disabled {
   gap: 12px;
 }
 
+.panelHeader span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.manualAlerts {
+  background: #fffdf7;
+  border-color: #ead9ad;
+}
+
+.manualAlertGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.manualAlertCard {
+  background: #ffffff;
+  border: 1px solid #ead9ad;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.manualAlertCard > div {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.manualAlertCard strong {
+  color: #92400e;
+}
+
+.manualAlertCard span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.manualAlertCard p {
+  color: #475569;
+  margin: 0;
+}
+
+.manualAlertCard code {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  color: #0f172a;
+  font-family: Consolas, monospace;
+  line-height: 1.5;
+  padding: 10px;
+  white-space: pre-wrap;
+}
+
 .chartPanel {
   min-width: 0;
 }

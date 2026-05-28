@@ -20,6 +20,7 @@ type Dashboard = {
   revenueByMonth: RevenuePoint[];
   topWallets: Array<{ balance: number; user?: User }>;
   recentWalletEntries: Array<{ id: string; amount: number; type: string; note?: string; createdAt: string; user?: User }>;
+  manualOrderAlerts: Order[];
 };
 type Category = { id: string; name: string };
 type Product = {
@@ -47,8 +48,10 @@ type User = { id: string; telegramId: string; username?: string; firstName?: str
 type Order = {
   id: string;
   code: string;
+  quantity: number;
   totalAmount: number;
   status: string;
+  deliveryText?: string | null;
   createdAt: string;
   user: User;
   product: Product;
@@ -251,6 +254,7 @@ function Overview({ api, onError }: { api: Api; onError: (error: string | null) 
   return (
     <div className="stack">
       {loading && <LoadingBlock label="Đang tải tổng quan..." />}
+      <ManualOrderAlerts orders={dashboard?.manualOrderAlerts ?? []} />
       <section className="metricsGrid">
         <Metric label="Doanh thu hôm nay" value={formatVnd(dashboard?.todayRevenue ?? 0)} />
         <Metric label="Doanh thu tháng này" value={formatVnd(dashboard?.monthRevenue ?? 0)} />
@@ -760,13 +764,15 @@ function OrdersView({ api, onError }: { api: Api; onError: (error: string | null
       {loading && <LoadingBlock label="Đang tải đơn hàng và thanh toán..." />}
       <DataTable
         title="Đơn hàng"
-        columns={["Mã", "User", "Sản phẩm", "Số tiền", "Trạng thái"]}
+        columns={["Mã", "User", "Sản phẩm", "SL", "Số tiền", "Trạng thái", "Thời gian"]}
         rows={orders.map((order) => [
           order.code,
           order.user?.username ? `@${order.user.username}` : order.user?.telegramId,
           order.product?.name,
+          order.quantity,
           formatVnd(order.totalAmount),
-          order.status
+          order.status,
+          new Date(order.createdAt).toLocaleString("vi-VN")
         ])}
       />
       <DataTable
@@ -781,6 +787,41 @@ function OrdersView({ api, onError }: { api: Api; onError: (error: string | null
         ])}
       />
     </div>
+  );
+}
+
+function ManualOrderAlerts({ orders }: { orders: Order[] }) {
+  return (
+    <section className="manualAlerts panel">
+      <div className="panelHeader">
+        <h2>Đơn liên hệ admin mới</h2>
+        <span>{orders.length} đơn cần theo dõi</span>
+      </div>
+      {orders.length === 0 ? (
+        <p className="emptyText">Chưa có đơn liên hệ admin đã thanh toán.</p>
+      ) : (
+        <div className="manualAlertGrid">
+          {orders.map((order) => (
+            <article className="manualAlertCard" key={order.id}>
+              <div>
+                <strong>{order.code}</strong>
+                <span>{new Date(order.createdAt).toLocaleString("vi-VN")}</span>
+              </div>
+              <b>{order.product?.name}</b>
+              <p>
+                {displayUser(order.user)} mua {order.quantity} sản phẩm, tổng {formatVnd(order.totalAmount)}.
+              </p>
+              <code>
+                Mã đơn: {order.code}
+                {"\n"}Sản phẩm: {order.product?.name}
+                {"\n"}Số lượng: {order.quantity}
+                {"\n"}Khách: {displayUser(order.user)}
+              </code>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
