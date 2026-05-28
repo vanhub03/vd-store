@@ -2,6 +2,8 @@
 
 Render is the recommended free deployment target for this project because it can run Node web services, Redis-compatible Key Value, custom domains, and TLS from one place.
 
+If your Render workspace has already used all free custom-domain slots, keep API/admin on Render and deploy the public storefront on Vercel Free instead. See `docs/deploy-web-vercel.md`.
+
 Use an external managed PostgreSQL provider such as Neon or Supabase for `DATABASE_URL`. Render Free Postgres works for tests, but it has limits such as one active free database per workspace and 30-day expiration, so this project does not create a Render database in the Blueprint.
 
 ## Target URLs
