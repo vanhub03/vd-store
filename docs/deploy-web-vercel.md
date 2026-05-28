@@ -27,8 +27,8 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
    ```text
    Root Directory: ./
    Framework Preset: Other
-   Build Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @vd-store/web build
-   Output Directory: apps/web/dist
+   Build Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @vd-store/web build:vercel
+   Output Directory: dist
    Install Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile
    ```
 
@@ -37,7 +37,7 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
    ```text
    Root Directory: apps/web
    Framework Preset: Vite
-   Build Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm build
+   Build Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm build:vercel
    Output Directory: dist
    Install Command: corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile
    ```
