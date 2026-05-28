@@ -47,6 +47,14 @@ type DeliveryNotice = {
   title: string;
   deliveryText: string;
   balanceAfter?: number;
+  order?: {
+    code: string;
+    status?: string;
+    quantity: number;
+    totalAmount: number;
+    deliveryText?: string | null;
+    product?: { name: string; deliveryType?: Product["deliveryType"] };
+  };
 };
 
 function App() {
@@ -144,7 +152,18 @@ function App() {
       setDelivery({
         title: "Mua hàng thành công",
         deliveryText: result.deliveryText,
-        balanceAfter: result.balanceAfter
+        balanceAfter: result.balanceAfter,
+        order: {
+          code: result.order?.code ?? "",
+          status: result.order?.status,
+          quantity,
+          totalAmount: product.price * quantity,
+          deliveryText: result.deliveryText,
+          product: {
+            name: product.name,
+            deliveryType: product.deliveryType
+          }
+        }
       });
       setQr(null);
       setQrStatus(null);
@@ -190,7 +209,8 @@ function App() {
         setDelivery({
           title: "Mua hàng thành công",
           deliveryText: status.order.deliveryText,
-          balanceAfter: status.balance
+          balanceAfter: status.balance,
+          order: status.order
         });
         return;
       }
@@ -665,6 +685,12 @@ function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory |
             <div className="history-row" key={order.code}>
               <div>
                 <span>{order.product.name}</span>
+                <div className="history-order-meta">
+                  <b>Mã đơn: {order.code}</b>
+                  <b>SL: {order.quantity}</b>
+                  <b>{new Date(order.createdAt).toLocaleString("vi-VN")}</b>
+                </div>
+                <pre className="history-order-copy">{buildOrderCopyText(order)}</pre>
                 {order.deliveryText ? <pre className="history-delivery">{order.deliveryText}</pre> : null}
               </div>
               <b>{formatVnd(order.totalAmount)}</b>
@@ -820,12 +846,41 @@ function QrDialog({
 }
 
 function DeliveryDialog({ delivery, onClose }: { delivery: DeliveryNotice; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const orderCopyText = delivery.order ? buildOrderCopyText(delivery.order) : "";
+  const isManualOrder = delivery.order?.product?.deliveryType === "MANUAL";
+
+  async function copyOrder() {
+    if (!orderCopyText) return;
+    try {
+      await navigator.clipboard.writeText(orderCopyText);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <div className="overlay">
       <div className="dialog">
         <button className="close" onClick={onClose}>×</button>
         <h2>{delivery.title}</h2>
         {delivery.balanceAfter !== undefined ? <p>Số dư hiện tại: <b>{formatVnd(delivery.balanceAfter)}</b></p> : null}
+        {isManualOrder ? (
+          <div className="manual-contact-hint">
+            Sản phẩm này cần admin giao thủ công. Bạn hãy bấm nút <b>Zalo</b> ở góc phải bên dưới, gửi kèm thông tin đơn hàng này để admin kiểm tra và giao hàng.
+          </div>
+        ) : null}
+        {delivery.order ? (
+          <div className="order-copy-card">
+            <div>
+              <span>Thông tin đơn hàng</span>
+              <button className="ghost-button" onClick={copyOrder}>{copied ? "Đã copy" : "Copy gửi admin"}</button>
+            </div>
+            <pre>{orderCopyText}</pre>
+          </div>
+        ) : null}
         <pre className="delivery-box">{delivery.deliveryText}</pre>
       </div>
     </div>
@@ -875,6 +930,26 @@ function statusLabel(status: PaymentStatusResult["status"]) {
     MANUAL_REVIEW: "Cần admin kiểm tra"
   };
   return labels[status];
+}
+
+function buildOrderCopyText(order: {
+  code: string;
+  status?: string;
+  quantity: number;
+  totalAmount: number;
+  deliveryText?: string | null;
+  product?: { name: string; deliveryType?: Product["deliveryType"] };
+}) {
+  return [
+    `Mã đơn: ${order.code || "Đang cập nhật"}`,
+    `Sản phẩm: ${order.product?.name ?? "Đang cập nhật"}`,
+    `Số lượng: ${order.quantity}`,
+    `Tổng tiền: ${formatVnd(order.totalAmount)}`,
+    order.status ? `Trạng thái: ${order.status}` : null,
+    order.product?.deliveryType === "MANUAL" ? "Yêu cầu: Nhận hàng thủ công qua admin/Zalo" : null
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function readStoredToken() {

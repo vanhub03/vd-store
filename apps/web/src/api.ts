@@ -46,6 +46,14 @@ export type PaymentResult = {
 export type WalletPurchaseResult = {
   deliveryText: string;
   balanceAfter: number;
+  order?: {
+    code: string;
+    status?: string;
+    quantity: number;
+    totalAmount: number;
+    deliveryText?: string | null;
+    product?: { id?: string; name: string; deliveryType?: Product["deliveryType"] };
+  };
 };
 
 export type PaymentStatusResult = {
@@ -71,8 +79,9 @@ export type History = {
     totalAmount: number;
     status: string;
     createdAt: string;
+    quantity: number;
     deliveryText?: string | null;
-    product: { name: string };
+    product: { name: string; deliveryType?: Product["deliveryType"] };
   }>;
   ledger: Array<{
     amount: number;

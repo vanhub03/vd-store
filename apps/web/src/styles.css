@@ -898,6 +898,24 @@ h1 {
   font-style: normal;
 }
 
+.history-order-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.history-order-meta b {
+  background: rgba(37, 213, 242, 0.08);
+  border: 1px solid rgba(37, 213, 242, 0.18);
+  border-radius: var(--radius-sm);
+  color: #c8f3ff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 7px;
+}
+
+.history-order-copy,
 .history-delivery {
   background: #06111f;
   border: 1px solid var(--line);
@@ -907,6 +925,10 @@ h1 {
   overflow: auto;
   padding: 10px;
   white-space: pre-wrap;
+}
+
+.history-order-copy {
+  color: #dceeff;
 }
 
 .empty-state,
@@ -1082,6 +1104,53 @@ h1 {
   color: #c8f3ff;
   overflow: auto;
   padding: 16px;
+  white-space: pre-wrap;
+}
+
+.manual-contact-hint {
+  background: rgba(37, 213, 242, 0.1);
+  border: 1px solid rgba(37, 213, 242, 0.28);
+  border-radius: var(--radius);
+  color: #dceeff;
+  line-height: 1.55;
+  margin: 14px 0;
+  padding: 14px;
+}
+
+.order-copy-card {
+  background: #091827;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 14px 0;
+  padding: 14px;
+}
+
+.order-copy-card > div {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.order-copy-card span {
+  color: #d8edff;
+  font-weight: 900;
+}
+
+.order-copy-card button {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.order-copy-card pre {
+  background: #06111f;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: #dceeff;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
   white-space: pre-wrap;
 }
 
