@@ -555,23 +555,26 @@ function ProductCard({
   const stock = availableQuantity(product);
   const disabled = stock <= 0;
   const icon = product.buttonIcon ?? brandGlyph(product.name);
+  const stockLabel = product.deliveryType === "SHARED_CONTENT" ? "Không giới hạn" : `${stock} còn lại`;
   return (
     <article className="product-card" data-brand={brandTone(product.name)}>
-      <div className="product-art">
-        <div className="product-media">
-          {product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>{icon}</span>}
-        </div>
+      <div className="product-media">
+        {product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>{icon}</span>}
         <span className="product-brand-mark">{icon}</span>
       </div>
       <div className="product-body">
+        <div className="product-kicker">
+          <span>{product.category?.name ?? "Sản phẩm số"}</span>
+          <span>{stockLabel}</span>
+        </div>
         <div className="product-title">
-          <h3><span>{icon}</span>{product.name}</h3>
+          <h3>{product.name}</h3>
           <strong className="product-price">{formatVnd(product.price)}</strong>
         </div>
         <p>{product.description || "Thông tin nhận hàng sẽ hiển thị sau khi thanh toán thành công."}</p>
         <div className="product-meta">
           <span className="stock-pill">
-            <Boxes size={15} /> Kho: {product.deliveryType === "SHARED_CONTENT" ? "không giới hạn" : stock}
+            <Boxes size={15} /> {stockLabel}
           </span>
           <span>{postPaymentLabel(product.deliveryType)}</span>
         </div>
