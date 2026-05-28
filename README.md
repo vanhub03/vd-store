@@ -1,6 +1,6 @@
 # VD Store
 
-Telegram sales bot with a Vietnamese admin dashboard, wallet balance, VietQR/SePay bank-transfer payments, automatic fulfillment, and transaction history.
+Telegram sales bot with a Vietnamese admin dashboard, public storefront website, wallet balance, VietQR/SePay bank-transfer payments, automatic fulfillment, and transaction history.
 
 ## Local Setup
 
@@ -26,8 +26,9 @@ Telegram sales bot with a Vietnamese admin dashboard, wallet balance, VietQR/SeP
    pnpm dev:api
    pnpm dev:bot
    pnpm dev:admin
+   pnpm dev:web
    ```
 
-Admin UI runs on `http://localhost:5173`, API on `http://localhost:3000`.
+Admin UI runs on `http://localhost:5173`, public storefront on `http://localhost:5174`, API on `http://localhost:3000`.
 
 For SePay and Telegram webhooks during local development, expose the API/bot ports through a public HTTPS tunnel such as ngrok or cloudflared.

@@ -7,10 +7,11 @@ Use an external managed PostgreSQL provider such as Neon or Supabase for `DATABA
 ## Target URLs
 
 - Admin dashboard: `https://admin.vanhdao.io.vn`
+- Public storefront: `https://vanhdao.io.vn`
 - API and SePay webhook: `https://api.vanhdao.io.vn`
 - Telegram bot webhook: Render default domain, usually `https://vd-store-bot.onrender.com`
 
-The Render Hobby plan includes 2 custom domains. This config uses them for `admin` and `api`. The bot can use the default Render domain because Telegram does not require your own domain.
+The bot can use the default Render domain because Telegram does not require your own domain. The Blueprint also creates a static storefront service for the root domain.
 
 ## Deploy Steps
 
@@ -32,7 +33,10 @@ The Render Hobby plan includes 2 custom domains. This config uses them for `admi
    VIETQR_BANK_CODE=TPB
    VIETQR_ACCOUNT_NUMBER=your_bank_account_number
    VIETQR_ACCOUNT_NAME=VANH DAO
+   ADMIN_TELEGRAM_CHAT_ID=your_private_or_group_chat_id
    ```
+
+   `ADMIN_TELEGRAM_CHAT_ID` is recommended for manual-delivery order alerts. A username such as `@vanhdao99` is not always enough for Bot API private messages unless Telegram has an addressable chat id.
 
 6. On API startup, Render runs Prisma migrations and the seed command automatically. This creates or updates the first admin account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
 
@@ -60,6 +64,17 @@ Name: admin
 Value: vd-store-admin.onrender.com
 TTL: Auto or 300
 ```
+
+For the root storefront domain, Render usually asks for one of these records on the `vd-store-web` domain page. Use the exact value Render shows:
+
+```text
+Type: CNAME
+Name: @
+Value: vd-store-web.onrender.com
+TTL: Auto or 300
+```
+
+If Nhan Hoa does not allow CNAME at root, use the A records Render displays for apex/root domains instead. After adding the record, open Render > `vd-store-web` > Settings > Custom Domains and click verify.
 
 Then go back to Render service settings and verify the custom domains. Render will issue TLS automatically.
 

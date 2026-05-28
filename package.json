@@ -9,6 +9,7 @@
     "dev:api": "pnpm --filter @vd-store/api dev",
     "dev:bot": "pnpm --filter @vd-store/bot dev",
     "dev:admin": "pnpm --filter @vd-store/admin dev",
+    "dev:web": "pnpm --filter @vd-store/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "prisma:generate": "pnpm --filter @vd-store/api prisma:generate",
