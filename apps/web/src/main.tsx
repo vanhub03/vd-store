@@ -39,7 +39,8 @@ import {
 } from "./api";
 import "./styles.css";
 
-const savedToken = localStorage.getItem("vd_store_token");
+const TOKEN_KEY = "vd_store_token";
+const savedToken = readStoredToken();
 const api = new StoreApi(savedToken);
 type Tab = "home" | "products" | "wallet" | "history";
 type DeliveryNotice = {
@@ -111,7 +112,7 @@ function App() {
   }
 
   function saveSession(session: Session) {
-    localStorage.setItem("vd_store_token", session.token);
+    persistSessionToken(session.token);
     api.setToken(session.token);
     setToken(session.token);
     setCustomer(session.customer);
@@ -119,7 +120,7 @@ function App() {
   }
 
   function logout() {
-    localStorage.removeItem("vd_store_token");
+    clearSessionToken();
     api.setToken(null);
     setToken(null);
     setCustomer(null);
@@ -533,26 +534,30 @@ function ProductCard({
 }) {
   const stock = availableQuantity(product);
   const disabled = stock <= 0;
+  const icon = product.buttonIcon ?? brandGlyph(product.name);
   return (
-    <article className="product-card">
-      <div className="product-media">
-        {product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>{product.buttonIcon ?? brandGlyph(product.name)}</span>}
+    <article className="product-card" data-brand={brandTone(product.name)}>
+      <div className="product-art">
+        <div className="product-media">
+          {product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>{icon}</span>}
+        </div>
+        <span className="product-brand-mark">{icon}</span>
       </div>
       <div className="product-body">
         <div className="product-title">
-          <h3>{product.buttonIcon ?? brandGlyph(product.name)} {product.name}</h3>
-          <strong>{formatVnd(product.price)}</strong>
+          <h3><span>{icon}</span>{product.name}</h3>
+          <strong className="product-price">{formatVnd(product.price)}</strong>
         </div>
         <p>{product.description || "Thông tin nhận hàng sẽ hiển thị sau khi thanh toán thành công."}</p>
         <div className="product-meta">
-          <span>
+          <span className="stock-pill">
             <Boxes size={15} /> Kho: {product.deliveryType === "SHARED_CONTENT" ? "không giới hạn" : stock}
           </span>
           <span>{postPaymentLabel(product.deliveryType)}</span>
         </div>
       </div>
       <div className="product-actions">
-        <button onClick={onView}>Chi tiết</button>
+        <button onClick={onView}><Search size={16} /> Chi tiết</button>
         <button onClick={onView} disabled={loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
           {loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={16} /> : <ShoppingBag size={16} />}
           Mua hàng
@@ -870,6 +875,40 @@ function statusLabel(status: PaymentStatusResult["status"]) {
     MANUAL_REVIEW: "Cần admin kiểm tra"
   };
   return labels[status];
+}
+
+function readStoredToken() {
+  return readCookie(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
+}
+
+function persistSessionToken(token: string) {
+  const maxAge = 60 * 60 * 24 * 400;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  localStorage.setItem(TOKEN_KEY, token);
+  document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`;
+}
+
+function clearSessionToken() {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  localStorage.removeItem(TOKEN_KEY);
+  document.cookie = `${TOKEN_KEY}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+}
+
+function readCookie(name: string) {
+  const prefix = `${name}=`;
+  const cookie = document.cookie.split("; ").find((item) => item.startsWith(prefix));
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+}
+
+function brandTone(name: string) {
+  const lower = name.toLocaleLowerCase("vi-VN");
+  if (lower.includes("chatgpt") || lower.includes("openai")) return "openai";
+  if (lower.includes("claude")) return "claude";
+  if (lower.includes("gemini")) return "gemini";
+  if (lower.includes("canva")) return "canva";
+  if (lower.includes("youtube")) return "youtube";
+  if (lower.includes("adobe")) return "adobe";
+  return "default";
 }
 
 function brandGlyph(name: string) {
