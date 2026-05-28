@@ -24,3 +24,7 @@ for (const target of targets) {
 
 writeFileSync(resolve(source, ".vercel-output-ok"), new Date().toISOString());
 console.log(`Vercel output confirmed at ${source}`);
+console.log(`cwd=${cwd}`);
+for (const target of targets) {
+  console.log(`${existsSync(resolve(target, "index.html")) ? "OK" : "MISSING"} ${target}`);
+}
