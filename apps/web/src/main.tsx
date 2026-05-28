@@ -233,6 +233,19 @@ function App() {
           balanceAfter: status.balance
         });
       }
+
+      if (status.status === "EXPIRED" || status.status === "FAILED") {
+        setQr(null);
+        setDelivery({
+          title: status.status === "EXPIRED" ? "QR đã hết hạn" : "Thanh toán thất bại",
+          deliveryText:
+            status.status === "EXPIRED"
+              ? "Mã QR này đã quá thời gian 10 phút. Bạn có thể tạo QR mới để nạp ví hoặc mua hàng. Nếu chuyển khoản sau khi QR hết hạn, hệ thống vẫn ghi nhận và xử lý theo trạng thái giao dịch."
+              : "Giao dịch chưa hoàn tất. Vui lòng tạo lại QR hoặc liên hệ hỗ trợ nếu bạn đã chuyển khoản.",
+          balanceAfter: status.balance
+        });
+        return;
+      }
     } catch (err) {
       if (showLoading) setError((err as Error).message);
     } finally {

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
+import { OrderStatus, PaymentStatus } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
 import { ShopService } from "../domain/shop.service";
 
@@ -89,17 +90,21 @@ export class StoreService {
     });
     if (!payment) throw new BadRequestException("Khong tim thay giao dich.");
 
+    const effectiveStatus = await this.resolvePaymentStatus(payment);
+    const effectiveOrderStatus =
+      effectiveStatus === PaymentStatus.EXPIRED && payment.order?.status === OrderStatus.PENDING_PAYMENT ? OrderStatus.EXPIRED : payment.order?.status;
+
     return {
       code: payment.code,
       kind: payment.kind,
-      status: payment.status,
+      status: effectiveStatus,
       amount: payment.amount,
       expiresAt: payment.expiresAt,
       balance: await this.shop.getWalletBalance(customerId),
       order: payment.order
         ? {
             code: payment.order.code,
-            status: payment.order.status,
+            status: effectiveOrderStatus,
             quantity: payment.order.quantity,
             totalAmount: payment.order.totalAmount,
             deliveryText: payment.order.deliveryText,
@@ -107,6 +112,30 @@ export class StoreService {
           }
         : null
     };
+  }
+
+  private async resolvePaymentStatus(payment: {
+    id: string;
+    status: PaymentStatus;
+    expiresAt: Date | null;
+    order: { id: string; status: OrderStatus; expiresAt: Date | null } | null;
+  }) {
+    if (payment.status !== PaymentStatus.PENDING) return payment.status;
+
+    const expiresAt = payment.expiresAt ?? payment.order?.expiresAt;
+    if (!expiresAt || expiresAt >= new Date()) return payment.status;
+
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.EXPIRED }
+    });
+    if (payment.order?.status === OrderStatus.PENDING_PAYMENT) {
+      await this.prisma.order.update({
+        where: { id: payment.order.id },
+        data: { status: OrderStatus.EXPIRED }
+      });
+    }
+    return PaymentStatus.EXPIRED;
   }
 
   createTopup(telegramId: string, amount: number) {
