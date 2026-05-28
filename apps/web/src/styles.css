@@ -200,7 +200,6 @@ p {
 .primary-button::before,
 .ghost-button::before,
 .icon-button::before,
-.product-actions button::before,
 .amount-grid button::before {
   animation: buttonSheen 4.8s ease-in-out infinite;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.34), transparent);
@@ -562,132 +561,98 @@ h1 {
 
 .product-grid {
   display: grid;
-  gap: 22px;
+  gap: 20px;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
 .product-card {
-  animation: productIn 580ms ease both;
-  background:
-    linear-gradient(135deg, rgba(37, 213, 242, 0.13), transparent 36%),
-    linear-gradient(315deg, rgba(143, 92, 255, 0.15), transparent 34%),
-    linear-gradient(180deg, rgba(17, 35, 56, 0.98), rgba(7, 17, 31, 0.98));
-  border-color: rgba(67, 143, 190, 0.48);
+  --accent: #25d5f2;
+  --accent-rgb: 37, 213, 242;
+  background: #0b1828;
+  border-color: rgba(80, 119, 154, 0.62);
   display: grid;
-  grid-template-rows: 192px 1fr auto;
+  grid-template-rows: 188px 1fr auto;
   overflow: hidden;
   position: relative;
-  transition: border-color 220ms ease, filter 220ms ease, transform 220ms ease, box-shadow 220ms ease;
+  transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .product-card[data-brand="openai"] {
-  background:
-    linear-gradient(135deg, rgba(37, 213, 242, 0.2), transparent 38%),
-    linear-gradient(315deg, rgba(50, 210, 150, 0.15), transparent 32%),
-    linear-gradient(180deg, rgba(14, 28, 45, 0.98), rgba(6, 17, 31, 0.98));
+  --accent: #58d6b7;
+  --accent-rgb: 88, 214, 183;
 }
 
 .product-card[data-brand="canva"] {
-  background:
-    linear-gradient(135deg, rgba(25, 119, 255, 0.2), transparent 38%),
-    linear-gradient(315deg, rgba(143, 92, 255, 0.2), transparent 32%),
-    linear-gradient(180deg, rgba(14, 28, 45, 0.98), rgba(6, 17, 31, 0.98));
+  --accent: #8c7cf5;
+  --accent-rgb: 140, 124, 245;
 }
 
 .product-card[data-brand="youtube"] {
-  background:
-    linear-gradient(135deg, rgba(255, 73, 95, 0.22), transparent 38%),
-    linear-gradient(315deg, rgba(255, 209, 102, 0.12), transparent 32%),
-    linear-gradient(180deg, rgba(14, 28, 45, 0.98), rgba(6, 17, 31, 0.98));
+  --accent: #ff5b6e;
+  --accent-rgb: 255, 91, 110;
 }
 
 .product-card[data-brand="claude"] {
-  background:
-    linear-gradient(135deg, rgba(217, 151, 104, 0.2), transparent 38%),
-    linear-gradient(315deg, rgba(37, 213, 242, 0.1), transparent 32%),
-    linear-gradient(180deg, rgba(14, 28, 45, 0.98), rgba(6, 17, 31, 0.98));
+  --accent: #d99768;
+  --accent-rgb: 217, 151, 104;
 }
 
 .product-card[data-brand="gemini"] {
-  background:
-    linear-gradient(135deg, rgba(25, 119, 255, 0.2), transparent 38%),
-    linear-gradient(315deg, rgba(255, 209, 102, 0.16), transparent 32%),
-    linear-gradient(180deg, rgba(14, 28, 45, 0.98), rgba(6, 17, 31, 0.98));
+  --accent: #ffd166;
+  --accent-rgb: 255, 209, 102;
 }
 
-.product-card:nth-child(1) { animation-delay: 40ms; }
-.product-card:nth-child(2) { animation-delay: 80ms; }
-.product-card:nth-child(3) { animation-delay: 120ms; }
-.product-card:nth-child(4) { animation-delay: 160ms; }
-.product-card:nth-child(5) { animation-delay: 200ms; }
-.product-card:nth-child(6) { animation-delay: 240ms; }
-.product-card:nth-child(7) { animation-delay: 280ms; }
-.product-card:nth-child(8) { animation-delay: 320ms; }
-.product-card:nth-child(9) { animation-delay: 360ms; }
-.product-card:nth-child(10) { animation-delay: 400ms; }
-.product-card:nth-child(11) { animation-delay: 440ms; }
-.product-card:nth-child(12) { animation-delay: 480ms; }
-
-.product-card::after {
-  animation: cardScanner 4.6s ease-in-out infinite;
-  background: linear-gradient(90deg, transparent, rgba(37, 213, 242, 0.62), rgba(143, 92, 255, 0.38), transparent);
+.product-card::before {
+  background: var(--accent);
   content: "";
-  height: 1px;
-  left: 14px;
-  opacity: 0;
+  inset: 14px auto 14px 0;
   position: absolute;
-  right: 14px;
-  top: 0;
-  transition: opacity 180ms ease;
-}
-
-.product-card:hover::after {
-  opacity: 1;
+  width: 3px;
+  z-index: 2;
 }
 
 .product-art {
-  margin: 10px 10px 0;
+  background: #07111f;
+  border: 1px solid rgba(80, 119, 154, 0.5);
+  margin: 12px 12px 0;
   overflow: hidden;
+  padding: 8px;
   position: relative;
 }
 
 .product-art::before {
-  animation: artSweep 6.4s ease-in-out infinite;
-  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.38), transparent);
+  background: var(--accent);
   content: "";
-  inset: 0 auto 0 -70%;
+  height: 32px;
+  left: -1px;
   pointer-events: none;
   position: absolute;
-  transform: skewX(-16deg);
-  width: 48%;
-  z-index: 3;
+  top: -1px;
+  width: 32px;
+  z-index: 2;
 }
 
 .product-art::after {
-  background:
-    linear-gradient(90deg, rgba(37, 213, 242, 0.82), transparent 32%, rgba(143, 92, 255, 0.72)),
-    linear-gradient(180deg, transparent, rgba(7, 17, 31, 0.46));
-  bottom: 0;
+  border-bottom: 1px solid rgba(var(--accent-rgb), 0.7);
+  border-right: 1px solid rgba(var(--accent-rgb), 0.7);
   content: "";
-  height: 34px;
-  left: 0;
+  height: 42px;
   pointer-events: none;
   position: absolute;
-  right: 0;
+  right: 10px;
+  top: 10px;
+  width: 42px;
   z-index: 2;
 }
 
 .product-media {
   align-items: center;
-  animation: mediaBreath 7s ease-in-out infinite;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(223, 241, 255, 0.96)),
-    radial-gradient(circle at 18% 24%, rgba(37, 213, 242, 0.24), transparent 28%);
+  background: #eef6ff;
   display: flex;
-  height: 182px;
+  height: 168px;
   justify-content: center;
   overflow: hidden;
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   position: relative;
 }
 
@@ -699,8 +664,8 @@ h1 {
 }
 
 .product-card:hover .product-media img {
-  filter: saturate(1.14) contrast(1.04);
-  transform: scale(1.055);
+  filter: saturate(1.06) contrast(1.03);
+  transform: scale(1.025);
 }
 
 .product-media span,
@@ -710,11 +675,10 @@ h1 {
 
 .product-brand-mark {
   align-items: center;
-  animation: brandBadgeFloat 4s ease-in-out infinite;
-  background: rgba(6, 17, 31, 0.76);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.26);
+  background: #07111f;
+  border: 1px solid rgba(var(--accent-rgb), 0.72);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
   display: inline-flex;
   font-size: 18px;
   height: 38px;
@@ -752,13 +716,11 @@ h1 {
 
 .product-price {
   align-self: start;
-  background:
-    linear-gradient(180deg, rgba(37, 213, 242, 0.2), rgba(37, 213, 242, 0.08)),
-    rgba(8, 24, 40, 0.88);
-  border: 1px solid rgba(37, 213, 242, 0.42);
+  background: #071a27;
+  border: 1px solid rgba(var(--accent-rgb), 0.58);
   border-radius: var(--radius-sm);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 26px rgba(37, 213, 242, 0.08);
-  color: var(--cyan);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+  color: var(--accent);
   font-size: 14px;
   padding: 7px 10px;
   white-space: nowrap;
@@ -790,7 +752,8 @@ h1 {
 }
 
 .product-meta .stock-pill {
-  background: linear-gradient(180deg, rgba(37, 213, 242, 0.13), rgba(9, 24, 39, 0.8));
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.5);
 }
 
 .product-actions {
@@ -814,15 +777,15 @@ h1 {
 }
 
 .product-actions button:last-child {
-  background: linear-gradient(135deg, #25d5f2, #1977ff 56%, #8f5cff);
-  border-color: rgba(255, 255, 255, 0.28);
-  box-shadow: 0 14px 32px rgba(25, 119, 255, 0.22);
-  color: #ffffff;
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 14px 30px rgba(var(--accent-rgb), 0.2);
+  color: #06111f;
 }
 
 .product-actions button:hover:not(:disabled) {
-  border-color: rgba(113, 239, 255, 0.72);
-  box-shadow: 0 16px 34px rgba(37, 213, 242, 0.14);
+  border-color: rgba(var(--accent-rgb), 0.74);
+  box-shadow: 0 16px 34px rgba(var(--accent-rgb), 0.16);
   transform: translateY(-1px);
 }
 
@@ -1309,68 +1272,6 @@ footer button {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes productIn {
-  from {
-    opacity: 0;
-    transform: translateY(24px) rotateX(4deg);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) rotateX(0);
-  }
-}
-
-@keyframes cardScanner {
-  0%,
-  45% {
-    opacity: 0;
-    transform: translateX(-35%);
-  }
-  60% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translateX(35%);
-  }
-}
-
-@keyframes mediaBreath {
-  0%,
-  100% {
-    box-shadow: inset 0 0 0 rgba(25, 119, 255, 0);
-  }
-  50% {
-    box-shadow: inset 0 0 42px rgba(25, 119, 255, 0.14);
-  }
-}
-
-@keyframes artSweep {
-  0%,
-  56% {
-    left: -70%;
-    opacity: 0;
-  }
-  68% {
-    opacity: 0.82;
-  }
-  86%,
-  100% {
-    left: 142%;
-    opacity: 0;
-  }
-}
-
-@keyframes brandBadgeFloat {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
   }
 }
 
