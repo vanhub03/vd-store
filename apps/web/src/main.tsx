@@ -704,7 +704,7 @@ function AuthDialog({ onClose, onSession }: { onClose: () => void; onSession: (s
   }
 
   return (
-    <div className="overlay">
+    <div className="overlay auth-overlay">
       <div className="dialog auth-dialog">
         <button className="close" onClick={onClose}>×</button>
         <h2>{mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}</h2>
