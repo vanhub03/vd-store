@@ -388,6 +388,28 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
       <div className="hero-backdrop">
         <img src="/banner.png" alt="" />
       </div>
+      <div className="hero-motion" aria-hidden="true">
+        <div className="orbit orbit-one">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div className="orbit orbit-two">
+          <span />
+          <span />
+        </div>
+        <div className="signal-board">
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+        <div className="ledger-rail">
+          <span>QR</span>
+          <span>SePay</span>
+          <span>Order</span>
+        </div>
+      </div>
       <div className="hero-content reveal">
         <img className="hero-logo" src="/logo.png" alt="VD AI Shop" />
         <p className="eyebrow">Digital goods, ví VietQR, tự đối soát</p>
