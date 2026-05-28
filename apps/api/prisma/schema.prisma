@@ -86,6 +86,9 @@ enum PaymentMethod {
 model TelegramUser {
   id           String              @id @default(cuid())
   telegramId   String              @unique
+  email        String?             @unique
+  passwordHash String?
+  displayName  String?
   username     String?
   firstName    String?
   lastName     String?

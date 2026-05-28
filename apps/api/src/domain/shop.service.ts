@@ -210,7 +210,7 @@ export class ShopService {
       throw new BadRequestException("Số lượng không hợp lệ.");
     }
 
-    return this.prisma.$transaction(
+    const result = await this.prisma.$transaction(
       async (tx) => {
         const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
         if (!user) throw new NotFoundException("User chưa đăng ký bot.");
@@ -278,6 +278,8 @@ export class ShopService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
+    await this.notifyManualOrderIfNeeded(result.order.id);
+    return result;
   }
 
   async fulfillDirectOrder(paymentId: string) {
@@ -433,6 +435,22 @@ export class ShopService {
       })
     ]);
     return { orders, ledger };
+  }
+
+  async notifyManualOrderIfNeeded(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { product: true, user: true }
+    });
+    if (!order || order.product.deliveryType !== ProductDeliveryType.MANUAL) return;
+    await this.telegram.notifyAdminManualOrder({
+      code: order.code,
+      productName: order.product.name,
+      quantity: order.quantity,
+      totalAmount: order.totalAmount,
+      customerLabel: order.user.email ?? order.user.username ?? order.user.telegramId,
+      deliveryText: order.deliveryText
+    });
   }
 
   async listAdminUsers() {

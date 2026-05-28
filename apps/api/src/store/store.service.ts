@@ -1,0 +1,111 @@
+import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
+import { PrismaService } from "../prisma.service";
+import { ShopService } from "../domain/shop.service";
+
+@Injectable()
+export class StoreService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly shop: ShopService
+  ) {}
+
+  async register(email: string, password: string, name?: string) {
+    const normalizedEmail = normalizeEmail(email);
+    const existing = await this.prisma.telegramUser.findUnique({ where: { email: normalizedEmail } });
+    if (existing) throw new BadRequestException("Email đã được đăng ký.");
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const customer = await this.prisma.telegramUser.create({
+      data: {
+        telegramId: `web:${randomUUID()}`,
+        email: normalizedEmail,
+        passwordHash,
+        displayName: name?.trim() || normalizedEmail.split("@")[0],
+        username: normalizedEmail
+      }
+    });
+
+    return this.session(customer);
+  }
+
+  async login(email: string, password: string) {
+    const normalizedEmail = normalizeEmail(email);
+    const customer = await this.prisma.telegramUser.findUnique({ where: { email: normalizedEmail } });
+    if (!customer?.passwordHash) throw new UnauthorizedException("Email hoặc mật khẩu không đúng.");
+
+    const ok = await bcrypt.compare(password, customer.passwordHash);
+    if (!ok) throw new UnauthorizedException("Email hoặc mật khẩu không đúng.");
+    return this.session(customer);
+  }
+
+  async profile(customerId: string) {
+    const customer = await this.prisma.telegramUser.findUnique({ where: { id: customerId } });
+    if (!customer?.email) throw new UnauthorizedException("Customer no longer exists.");
+    const balance = await this.shop.getWalletBalance(customer.id);
+    return {
+      customer: this.publicCustomer(customer),
+      wallet: { balance }
+    };
+  }
+
+  catalog() {
+    return this.shop.getCatalog();
+  }
+
+  product(productId: string) {
+    return this.shop.getProduct(productId);
+  }
+
+  async wallet(customerId: string) {
+    return { balance: await this.shop.getWalletBalance(customerId) };
+  }
+
+  history(telegramId: string) {
+    return this.shop.getHistory(telegramId);
+  }
+
+  createTopup(telegramId: string, amount: number) {
+    return this.shop.createTopup(telegramId, amount);
+  }
+
+  purchaseWithWallet(telegramId: string, productId: string, quantity: number) {
+    return this.shop.purchaseWithWallet(telegramId, productId, quantity);
+  }
+
+  createBankOrder(telegramId: string, productId: string, quantity: number) {
+    return this.shop.createBankOrder(telegramId, productId, quantity);
+  }
+
+  private session(customer: { id: string; email: string | null; displayName: string | null; telegramId: string }) {
+    if (!customer.email) throw new UnauthorizedException("Customer email missing.");
+    const token = jwt.sign(
+      {
+        sub: customer.id,
+        email: customer.email,
+        kind: "customer"
+      },
+      process.env.JWT_SECRET ?? "dev-secret",
+      { expiresIn: "14d" }
+    );
+
+    return {
+      token,
+      customer: this.publicCustomer(customer)
+    };
+  }
+
+  private publicCustomer(customer: { id: string; email: string | null; displayName: string | null }) {
+    return {
+      id: customer.id,
+      email: customer.email,
+      displayName: customer.displayName
+    };
+  }
+}
+
+function normalizeEmail(email: string) {
+  return email.toLowerCase().trim();
+}

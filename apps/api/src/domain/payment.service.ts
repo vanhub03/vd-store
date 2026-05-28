@@ -123,6 +123,9 @@ export class PaymentService {
     if (payment.kind === PaymentKind.DIRECT_ORDER) {
       const result = await this.shop.fulfillDirectOrder(payment.id);
       await this.deletePendingPaymentMessage(payment.id, payment);
+      if (result.outcome === "fulfilled" && "deliveryText" in result) {
+        await this.shop.notifyManualOrderIfNeeded(result.order.id);
+      }
       if (result.user?.telegramId) {
         if (result.outcome === "fulfilled" && "deliveryText" in result) {
           await this.telegram.notifyDirectOrderFulfilled(result.user.telegramId, payment.code, result.deliveryText);

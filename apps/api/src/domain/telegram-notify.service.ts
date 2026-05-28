@@ -21,7 +21,11 @@ export class TelegramNotifyService {
     }
 
     for (const chunk of splitTelegramMessage(message)) {
-      await this.telegram.sendMessage(chatId, chunk, { parse_mode: "HTML" });
+      try {
+        await this.telegram.sendMessage(chatId, chunk, { parse_mode: "HTML" });
+      } catch (error) {
+        this.logger.warn(`Could not send Telegram message to ${chatId}: ${(error as Error).message}`);
+      }
     }
   }
 
@@ -55,6 +59,40 @@ export class TelegramNotifyService {
       `Thanh toán <b>${code}</b> đã được cộng vào ví.\nSố tiền: <b>${formatVnd(amount)}</b>\nLý do: ${escapeHtml(reason)}`
     );
   }
+
+  async notifyAdminManualOrder(input: {
+    code: string;
+    productName: string;
+    quantity: number;
+    totalAmount: number;
+    customerLabel: string;
+    deliveryText?: string | null;
+  }) {
+    const adminChatId = process.env.ADMIN_TELEGRAM_CHAT_ID ?? usernameChatId(process.env.ADMIN_TELEGRAM_USERNAME);
+    const message = [
+      "Đơn hàng cần giao thủ công",
+      `Mã đơn: <b>${escapeHtml(input.code)}</b>`,
+      `Sản phẩm: <b>${escapeHtml(input.productName)}</b>`,
+      `Số lượng: <b>${input.quantity}</b>`,
+      `Tổng tiền: <b>${formatVnd(input.totalAmount)}</b>`,
+      `Khách: ${escapeHtml(input.customerLabel)}`,
+      input.deliveryText ? `Ghi chú giao hàng: ${escapeHtml(input.deliveryText)}` : null
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    if (!adminChatId) {
+      this.logger.warn(`ADMIN_TELEGRAM_CHAT_ID missing. Manual order notification: ${message}`);
+      return;
+    }
+    await this.sendMessage(adminChatId, message);
+  }
+}
+
+function usernameChatId(username?: string) {
+  const trimmed = username?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
 }
 
 function splitTelegramMessage(message: string) {
