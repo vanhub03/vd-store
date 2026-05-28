@@ -874,11 +874,12 @@ export class ShopService {
     price: number;
     botPrice?: number | null;
     webPrice?: number | null;
+    showInBot?: boolean | null;
     status: ProductStatus;
     deliveryType: ProductDeliveryType;
     manualStock?: number | null;
   }, adminId: string) {
-    if (product.status !== ProductStatus.ACTIVE) return;
+    if (product.status !== ProductStatus.ACTIVE || product.showInBot === false) return;
     if (product.deliveryType === ProductDeliveryType.STOCK_ITEM) return;
 
     if (product.deliveryType === ProductDeliveryType.MANUAL) {
@@ -905,13 +906,14 @@ export class ShopService {
       price: number;
       botPrice?: number | null;
       webPrice?: number | null;
+      showInBot?: boolean | null;
       status: ProductStatus;
       deliveryType: ProductDeliveryType;
       manualStock?: number | null;
     },
     adminId: string
   ) {
-    if (product.status !== ProductStatus.ACTIVE || product.deliveryType !== ProductDeliveryType.MANUAL) return;
+    if (product.status !== ProductStatus.ACTIVE || product.showInBot === false || product.deliveryType !== ProductDeliveryType.MANUAL) return;
     const previousStock = previous.deliveryType === ProductDeliveryType.MANUAL && previous.status === ProductStatus.ACTIVE ? previous.manualStock ?? 0 : 0;
     const currentStock = product.manualStock ?? 0;
     const addedCount = currentStock - previousStock;
@@ -927,13 +929,14 @@ export class ShopService {
       price: number;
       botPrice?: number | null;
       webPrice?: number | null;
+      showInBot?: boolean | null;
       status: ProductStatus;
       deliveryType: ProductDeliveryType;
     },
     addedCount: number,
     adminId: string
   ) {
-    if (product.status !== ProductStatus.ACTIVE || product.deliveryType !== ProductDeliveryType.STOCK_ITEM || addedCount <= 0) return;
+    if (product.status !== ProductStatus.ACTIVE || product.showInBot === false || product.deliveryType !== ProductDeliveryType.STOCK_ITEM || addedCount <= 0) return;
     const availableStock = await this.prisma.inventoryItem.count({
       where: { productId: product.id, status: InventoryStatus.AVAILABLE }
     });
