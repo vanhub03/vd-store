@@ -83,6 +83,12 @@ export class StoreController {
     return this.store.history(request.customer!.telegramId);
   }
 
+  @Get("payments/:code")
+  @UseGuards(CustomerAuthGuard)
+  paymentStatus(@Req() request: CustomerRequest, @Param("code") code: string) {
+    return this.store.paymentStatus(request.customer!.id, code);
+  }
+
   @Post("topups")
   @UseGuards(CustomerAuthGuard)
   topup(@Req() request: CustomerRequest, @Body() body: TopupDto) {

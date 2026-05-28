@@ -67,6 +67,48 @@ export class StoreService {
     return this.shop.getHistory(telegramId);
   }
 
+  async paymentStatus(customerId: string, code: string) {
+    const payment = await this.prisma.payment.findFirst({
+      where: {
+        code: code.trim().toUpperCase(),
+        userId: customerId
+      },
+      include: {
+        order: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                deliveryType: true
+              }
+            }
+          }
+        }
+      }
+    });
+    if (!payment) throw new BadRequestException("Khong tim thay giao dich.");
+
+    return {
+      code: payment.code,
+      kind: payment.kind,
+      status: payment.status,
+      amount: payment.amount,
+      expiresAt: payment.expiresAt,
+      balance: await this.shop.getWalletBalance(customerId),
+      order: payment.order
+        ? {
+            code: payment.order.code,
+            status: payment.order.status,
+            quantity: payment.order.quantity,
+            totalAmount: payment.order.totalAmount,
+            deliveryText: payment.order.deliveryText,
+            product: payment.order.product
+          }
+        : null
+    };
+  }
+
   createTopup(telegramId: string, amount: number) {
     return this.shop.createTopup(telegramId, amount);
   }

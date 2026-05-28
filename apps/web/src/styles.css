@@ -30,6 +30,27 @@ body {
   background:
     linear-gradient(180deg, rgba(7, 17, 31, 0.82), #07111f 42%),
     url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='3' cy='3' r='1.15' fill='%231d5b99'/%3E%3C/svg%3E");
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  animation: ambientGrid 22s linear infinite;
+  background-image:
+    linear-gradient(rgba(37, 213, 242, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 213, 242, 0.06) 1px, transparent 1px);
+  background-size: 80px 80px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(180deg, black 0%, transparent 72%);
+  opacity: 0.28;
+  pointer-events: none;
+  position: fixed;
+  z-index: -1;
+}
+
+main {
+  isolation: isolate;
 }
 
 button,
@@ -170,8 +191,24 @@ p {
   gap: 8px;
   justify-content: center;
   min-height: 42px;
+  overflow: hidden;
   padding: 0 16px;
+  position: relative;
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
+}
+
+.primary-button::before,
+.ghost-button::before,
+.icon-button::before,
+.product-actions button::before,
+.amount-grid button::before {
+  animation: buttonSheen 4.8s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.34), transparent);
+  content: "";
+  inset: 0 auto 0 -90%;
+  position: absolute;
+  transform: skewX(-18deg);
+  width: 60%;
 }
 
 .primary-button {
@@ -227,6 +264,7 @@ p {
 }
 
 .hero-backdrop img {
+  animation: heroPan 18s ease-in-out infinite alternate;
   height: 100%;
   object-fit: cover;
   transform: scale(1.05);
@@ -241,6 +279,7 @@ p {
 }
 
 .hero-content {
+  animation: pageRise 720ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   max-width: 760px;
   position: relative;
   z-index: 2;
@@ -287,6 +326,7 @@ h1 {
 }
 
 .hero-stats {
+  animation: pageRise 820ms cubic-bezier(0.2, 0.8, 0.2, 1) 120ms both;
   bottom: 34px;
   color: #d6eaf8;
   flex-wrap: wrap;
@@ -308,6 +348,7 @@ h1 {
 }
 
 .shell {
+  animation: pageRise 620ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   margin: 0 auto;
   max-width: 1240px;
   padding: 56px 22px;
@@ -355,9 +396,29 @@ h1 {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--soft-shadow);
+  overflow: hidden;
+  position: relative;
+}
+
+.trust-card::before,
+.timeline-item::before,
+.brand-panel::before,
+.panel::before,
+.dialog::before {
+  animation: edgeScan 5.6s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(37, 213, 242, 0.42), transparent);
+  content: "";
+  height: 1px;
+  left: 0;
+  opacity: 0.8;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translateX(-100%);
 }
 
 .trust-card {
+  animation: cardPop 650ms ease both;
   min-height: 220px;
   padding: 22px;
   transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
@@ -413,6 +474,7 @@ h1 {
 
 .timeline-item {
   align-items: start;
+  animation: cardPop 620ms ease both;
   display: grid;
   gap: 16px;
   grid-template-columns: auto 1fr;
@@ -459,7 +521,7 @@ h1 {
 }
 
 .brand-cloud span {
-  animation: floatIn 0.7s ease both;
+  animation: floatIn 0.7s ease both, brandBob 4.6s ease-in-out infinite;
   animation-delay: var(--d);
   background: #091827;
   border: 1px solid var(--line);
@@ -478,6 +540,13 @@ h1 {
   display: flex;
   gap: 10px;
   padding: 0 14px;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.search-box:focus-within {
+  border-color: #4f9ed0;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28), 0 0 0 3px rgba(37, 213, 242, 0.1);
+  transform: translateY(-1px);
 }
 
 .search-box input,
@@ -498,6 +567,7 @@ h1 {
 }
 
 .product-card {
+  animation: productIn 580ms ease both;
   display: grid;
   grid-template-rows: 180px 1fr auto;
   overflow: hidden;
@@ -505,8 +575,22 @@ h1 {
   transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
 
+.product-card:nth-child(1) { animation-delay: 40ms; }
+.product-card:nth-child(2) { animation-delay: 80ms; }
+.product-card:nth-child(3) { animation-delay: 120ms; }
+.product-card:nth-child(4) { animation-delay: 160ms; }
+.product-card:nth-child(5) { animation-delay: 200ms; }
+.product-card:nth-child(6) { animation-delay: 240ms; }
+.product-card:nth-child(7) { animation-delay: 280ms; }
+.product-card:nth-child(8) { animation-delay: 320ms; }
+.product-card:nth-child(9) { animation-delay: 360ms; }
+.product-card:nth-child(10) { animation-delay: 400ms; }
+.product-card:nth-child(11) { animation-delay: 440ms; }
+.product-card:nth-child(12) { animation-delay: 480ms; }
+
 .product-card::after {
-  background: linear-gradient(90deg, transparent, rgba(37, 213, 242, 0.38), transparent);
+  animation: cardScanner 3.8s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(37, 213, 242, 0.5), transparent);
   content: "";
   height: 2px;
   left: 18px;
@@ -523,6 +607,7 @@ h1 {
 
 .product-media {
   align-items: center;
+  animation: mediaBreath 7s ease-in-out infinite;
   background: linear-gradient(180deg, #ffffff, #ecf6ff);
   display: flex;
   justify-content: center;
@@ -595,7 +680,7 @@ h1 {
 .product-actions {
   border-top: 1px solid var(--line);
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 1px;
   padding: 1px;
 }
@@ -633,6 +718,7 @@ h1 {
 }
 
 .wallet-number {
+  animation: walletGlow 3.2s ease-in-out infinite;
   border-bottom: 1px solid var(--line);
   border-top: 1px solid var(--line);
   color: var(--cyan);
@@ -647,6 +733,11 @@ h1 {
   gap: 10px;
   grid-template-columns: repeat(2, 1fr);
 }
+
+.amount-grid button:nth-child(1) { animation: optionIn 420ms ease 50ms both; }
+.amount-grid button:nth-child(2) { animation: optionIn 420ms ease 100ms both; }
+.amount-grid button:nth-child(3) { animation: optionIn 420ms ease 150ms both; }
+.amount-grid button:nth-child(4) { animation: optionIn 420ms ease 200ms both; }
 
 .custom-topup {
   border-top: 1px solid var(--line);
@@ -685,6 +776,7 @@ h1 {
 
 .history-row {
   align-items: start;
+  animation: rowIn 480ms ease both;
   background: #091827;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -693,6 +785,15 @@ h1 {
   grid-template-columns: 1fr auto auto;
   padding: 12px;
 }
+
+.history-row:nth-child(1) { animation-delay: 40ms; }
+.history-row:nth-child(2) { animation-delay: 80ms; }
+.history-row:nth-child(3) { animation-delay: 120ms; }
+.history-row:nth-child(4) { animation-delay: 160ms; }
+.history-row:nth-child(5) { animation-delay: 200ms; }
+.history-row:nth-child(6) { animation-delay: 240ms; }
+.history-row:nth-child(7) { animation-delay: 280ms; }
+.history-row:nth-child(8) { animation-delay: 320ms; }
 
 .history-row em {
   color: var(--green);
@@ -732,6 +833,7 @@ h1 {
 
 .overlay {
   align-items: center;
+  animation: overlayIn 180ms ease both;
   background: rgba(2, 8, 16, 0.76);
   display: flex;
   inset: 0;
@@ -742,12 +844,29 @@ h1 {
 }
 
 .dialog {
+  animation: dialogIn 240ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   max-height: calc(100vh - 36px);
   max-width: 560px;
   overflow: auto;
   padding: 24px;
   position: relative;
   width: 100%;
+}
+
+.dialog > *:not(.close) {
+  animation: dialogContentIn 380ms ease both;
+}
+
+.dialog > *:not(.close):nth-child(3) {
+  animation-delay: 60ms;
+}
+
+.dialog > *:not(.close):nth-child(4) {
+  animation-delay: 110ms;
+}
+
+.dialog > *:not(.close):nth-child(5) {
+  animation-delay: 160ms;
 }
 
 .close {
@@ -810,6 +929,41 @@ h1 {
   color: var(--muted);
 }
 
+.quantity-box {
+  background: #091827;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: 18px 0;
+  padding: 14px;
+}
+
+.quantity-box label {
+  color: #d8edff;
+  display: block;
+  font-weight: 850;
+  margin-bottom: 10px;
+}
+
+.quantity-box > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 42px 1fr 42px;
+}
+
+.quantity-box button,
+.quantity-box input {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  min-height: 42px;
+  text-align: center;
+}
+
+.quantity-box input {
+  background: #06111f;
+  color: var(--ink);
+  font-weight: 900;
+}
+
 .qr-image {
   background: #ffffff;
   border-radius: var(--radius);
@@ -827,6 +981,73 @@ h1 {
   overflow: auto;
   padding: 16px;
   white-space: pre-wrap;
+}
+
+.floating-ctas {
+  animation: ctaDockIn 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  bottom: 22px;
+  display: grid;
+  gap: 8px;
+  position: fixed;
+  right: 18px;
+  z-index: 45;
+}
+
+.floating-ctas a {
+  align-items: center;
+  animation: ctaPulse 4.2s ease-in-out infinite;
+  background: rgba(7, 17, 31, 0.9);
+  border: 1px solid rgba(37, 213, 242, 0.28);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.26);
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 8px;
+  min-height: 42px;
+  overflow: hidden;
+  padding: 0 12px;
+  position: relative;
+  text-decoration: none;
+  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.floating-ctas a:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.floating-ctas a:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+.floating-ctas a::before {
+  animation: buttonSheen 4.8s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  content: "";
+  inset: 0 auto 0 -90%;
+  position: absolute;
+  transform: skewX(-18deg);
+  width: 60%;
+}
+
+.floating-ctas a:hover {
+  border-color: #71efff;
+  box-shadow: 0 22px 48px rgba(37, 213, 242, 0.16);
+  transform: translateX(-3px);
+}
+
+.brand-letter {
+  align-items: center;
+  background: #1877f2;
+  border-radius: 4px;
+  color: #ffffff;
+  display: inline-flex;
+  font-family: Arial, sans-serif;
+  font-size: 18px;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
 }
 
 .boot {
@@ -889,6 +1110,172 @@ footer button {
   }
 }
 
+@keyframes ambientGrid {
+  from {
+    background-position: 0 0, 0 0;
+  }
+  to {
+    background-position: 160px 80px, 80px 160px;
+  }
+}
+
+@keyframes pageRise {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes heroPan {
+  from {
+    transform: scale(1.05) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.1) translate3d(-18px, -10px, 0);
+  }
+}
+
+@keyframes buttonSheen {
+  0%,
+  64% {
+    left: -90%;
+    opacity: 0;
+  }
+  72% {
+    opacity: 0.72;
+  }
+  88%,
+  100% {
+    left: 140%;
+    opacity: 0;
+  }
+}
+
+@keyframes edgeScan {
+  0%,
+  45% {
+    transform: translateX(-100%);
+  }
+  75%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes cardPop {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes productIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px) rotateX(4deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotateX(0);
+  }
+}
+
+@keyframes cardScanner {
+  0%,
+  45% {
+    opacity: 0;
+    transform: translateX(-35%);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(35%);
+  }
+}
+
+@keyframes mediaBreath {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 rgba(25, 119, 255, 0);
+  }
+  50% {
+    box-shadow: inset 0 0 42px rgba(25, 119, 255, 0.14);
+  }
+}
+
+@keyframes walletGlow {
+  0%,
+  100% {
+    text-shadow: 0 0 0 rgba(37, 213, 242, 0);
+  }
+  50% {
+    text-shadow: 0 0 22px rgba(37, 213, 242, 0.42);
+  }
+}
+
+@keyframes optionIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rowIn {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes overlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialogContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes logoPulse {
   0%,
   100% {
@@ -896,6 +1283,16 @@ footer button {
   }
   50% {
     transform: translateY(-8px) scale(1.04);
+  }
+}
+
+@keyframes brandBob {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.18);
   }
 }
 
@@ -938,6 +1335,38 @@ footer button {
   }
   100% {
     transform: translateX(330%);
+  }
+}
+
+@keyframes ctaDockIn {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes ctaPulse {
+  0%,
+  100% {
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.26);
+  }
+  50% {
+    box-shadow: 0 18px 44px rgba(37, 213, 242, 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
   }
 }
 
@@ -1000,5 +1429,15 @@ footer button {
   .dialog-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .floating-ctas {
+    bottom: 12px;
+    right: 10px;
+  }
+
+  .floating-ctas a {
+    min-height: 38px;
+    padding: 0 10px;
   }
 }

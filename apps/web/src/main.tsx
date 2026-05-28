@@ -11,10 +11,12 @@ import {
   Loader2,
   Lock,
   LogOut,
+  MessageCircle,
   PackageCheck,
   QrCode,
   RefreshCw,
   Search,
+  Send,
   ShieldCheck,
   ShoppingBag,
   TimerReset,
@@ -29,6 +31,7 @@ import {
   formatVnd,
   History as StoreHistory,
   PaymentResult,
+  PaymentStatusResult,
   Product,
   Session,
   StoreApi,
@@ -39,6 +42,11 @@ import "./styles.css";
 const savedToken = localStorage.getItem("vd_store_token");
 const api = new StoreApi(savedToken);
 type Tab = "home" | "products" | "wallet" | "history";
+type DeliveryNotice = {
+  title: string;
+  deliveryText: string;
+  balanceAfter?: number;
+};
 
 function App() {
   const [token, setToken] = useState(savedToken);
@@ -48,7 +56,8 @@ function App() {
   const [balance, setBalance] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [qr, setQr] = useState<PaymentResult | null>(null);
-  const [delivery, setDelivery] = useState<WalletPurchaseResult | null>(null);
+  const [qrStatus, setQrStatus] = useState<PaymentStatusResult | null>(null);
+  const [delivery, setDelivery] = useState<DeliveryNotice | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [loading, setLoading] = useState("boot");
   const [error, setError] = useState("");
@@ -71,7 +80,8 @@ function App() {
 
   useEffect(() => {
     if (!qr || !token) return;
-    const timer = window.setInterval(() => void loadPrivateData(false), 7000);
+    void checkPaymentStatus(false);
+    const timer = window.setInterval(() => void checkPaymentStatus(false), 5000);
     return () => window.clearInterval(timer);
   }, [qr, token]);
 
@@ -121,26 +131,92 @@ function App() {
     if (!requireLogin()) return;
     await runAction("topup", async () => {
       setQr(await api.post<PaymentResult>("/store/topups", { amount }));
+      setQrStatus(null);
       setDelivery(null);
     });
   }
 
-  async function buyWithWallet(product: Product) {
+  async function buyWithWallet(product: Product, quantity = 1) {
     if (!requireLogin()) return;
     await runAction(`wallet:${product.id}`, async () => {
-      const result = await api.post<WalletPurchaseResult>("/store/orders/wallet", { productId: product.id, quantity: 1 });
-      setDelivery(result);
+      const result = await api.post<WalletPurchaseResult>("/store/orders/wallet", { productId: product.id, quantity });
+      setDelivery({
+        title: "Mua hàng thành công",
+        deliveryText: result.deliveryText,
+        balanceAfter: result.balanceAfter
+      });
       setQr(null);
+      setQrStatus(null);
+      setSelectedProduct(null);
       await loadPrivateData(false);
     });
   }
 
-  async function buyWithBank(product: Product) {
+  async function buyWithBank(product: Product, quantity = 1) {
     if (!requireLogin()) return;
     await runAction(`bank:${product.id}`, async () => {
-      setQr(await api.post<PaymentResult>("/store/orders/bank", { productId: product.id, quantity: 1 }));
+      setQr(await api.post<PaymentResult>("/store/orders/bank", { productId: product.id, quantity }));
+      setQrStatus(null);
       setDelivery(null);
+      setSelectedProduct(null);
     });
+  }
+
+  async function checkPaymentStatus(showLoading = true) {
+    if (!qr || !token) return;
+    try {
+      if (showLoading) setLoading("payment-status");
+      const status = await api.get<PaymentStatusResult>(`/store/payments/${qr.code}`);
+      setQrStatus(status);
+      setBalance(status.balance);
+
+      if (status.status === "PENDING") return;
+
+      await loadPrivateData(false);
+
+      if (status.kind === "TOPUP" && status.status === "SUCCEEDED") {
+        setQr(null);
+        setDelivery({
+          title: "Nạp tiền thành công",
+          deliveryText: `Đã cộng ${formatVnd(status.amount)} vào ví.`,
+          balanceAfter: status.balance
+        });
+        return;
+      }
+
+      if (status.kind === "DIRECT_ORDER" && status.status === "SUCCEEDED" && status.order?.deliveryText) {
+        setQr(null);
+        setDelivery({
+          title: "Mua hàng thành công",
+          deliveryText: status.order.deliveryText,
+          balanceAfter: status.balance
+        });
+        return;
+      }
+
+      if (status.status === "CREDITED_TO_WALLET") {
+        setQr(null);
+        setDelivery({
+          title: "Tiền đã cộng vào ví",
+          deliveryText: "Đơn hàng chưa thể giao tự động nên hệ thống đã cộng tiền vào ví của bạn.",
+          balanceAfter: status.balance
+        });
+        return;
+      }
+
+      if (status.status === "MANUAL_REVIEW") {
+        setQr(null);
+        setDelivery({
+          title: "Giao dịch cần kiểm tra",
+          deliveryText: "Giao dịch đã được ghi nhận nhưng cần admin kiểm tra lại số tiền hoặc nội dung chuyển khoản.",
+          balanceAfter: status.balance
+        });
+      }
+    } catch (err) {
+      if (showLoading) setError((err as Error).message);
+    } finally {
+      if (showLoading) setLoading("");
+    }
   }
 
   function requireLogin() {
@@ -174,8 +250,6 @@ function App() {
           error={error}
           onQuery={setQuery}
           onView={setSelectedProduct}
-          onWallet={buyWithWallet}
-          onBank={buyWithBank}
         />
       ) : null}
       {activeTab === "wallet" ? (
@@ -197,11 +271,20 @@ function App() {
           product={selectedProduct}
           loading={loading}
           onClose={() => setSelectedProduct(null)}
-          onWallet={() => buyWithWallet(selectedProduct)}
-          onBank={() => buyWithBank(selectedProduct)}
+          onWallet={(quantity) => buyWithWallet(selectedProduct, quantity)}
+          onBank={(quantity) => buyWithBank(selectedProduct, quantity)}
         />
       ) : null}
-      {qr ? <QrDialog payment={qr} onClose={() => setQr(null)} onRefresh={() => token && loadPrivateData()} /> : null}
+      <FloatingCtas />
+      {qr ? (
+        <QrDialog
+          payment={qr}
+          status={qrStatus}
+          loading={loading === "payment-status"}
+          onClose={() => setQr(null)}
+          onRefresh={() => checkPaymentStatus(true)}
+        />
+      ) : null}
       {delivery ? <DeliveryDialog delivery={delivery} onClose={() => setDelivery(null)} /> : null}
       {loading === "boot" ? <div className="boot"><Loader2 className="spin" /> Đang mở VD AI Shop</div> : null}
     </main>
@@ -401,9 +484,7 @@ function ProductsTab({
   loading,
   error,
   onQuery,
-  onView,
-  onWallet,
-  onBank
+  onView
 }: {
   products: Product[];
   query: string;
@@ -411,8 +492,6 @@ function ProductsTab({
   error: string;
   onQuery: (value: string) => void;
   onView: (product: Product) => void;
-  onWallet: (product: Product) => void;
-  onBank: (product: Product) => void;
 }) {
   return (
     <section className="shell product-section">
@@ -435,8 +514,6 @@ function ProductsTab({
             product={product}
             loading={loading}
             onView={() => onView(product)}
-            onWallet={() => onWallet(product)}
-            onBank={() => onBank(product)}
           />
         ))}
       </div>
@@ -448,15 +525,11 @@ function ProductsTab({
 function ProductCard({
   product,
   loading,
-  onView,
-  onWallet,
-  onBank
+  onView
 }: {
   product: Product;
   loading: string;
   onView: () => void;
-  onWallet: () => void;
-  onBank: () => void;
 }) {
   const stock = availableQuantity(product);
   const disabled = stock <= 0;
@@ -480,11 +553,9 @@ function ProductCard({
       </div>
       <div className="product-actions">
         <button onClick={onView}>Chi tiết</button>
-        <button onClick={onWallet} disabled={loading === `wallet:${product.id}` || disabled}>
-          {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={16} /> : <Wallet size={16} />} Ví
-        </button>
-        <button onClick={onBank} disabled={loading === `bank:${product.id}` || disabled}>
-          {loading === `bank:${product.id}` ? <Loader2 className="spin" size={16} /> : <QrCode size={16} />} QR
+        <button onClick={onView} disabled={loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
+          {loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={16} /> : <ShoppingBag size={16} />}
+          Mua hàng
         </button>
       </div>
     </article>
@@ -660,9 +731,14 @@ function ProductDialog({
   product: Product;
   loading: string;
   onClose: () => void;
-  onWallet: () => void;
-  onBank: () => void;
+  onWallet: (quantity: number) => void;
+  onBank: (quantity: number) => void;
 }) {
+  const stock = availableQuantity(product);
+  const maxQuantity = product.deliveryType === "SHARED_CONTENT" ? 999 : stock;
+  const [quantity, setQuantity] = useState(1);
+  const invalidQuantity = quantity < 1 || quantity > maxQuantity;
+
   return (
     <div className="overlay">
       <div className="dialog product-dialog">
@@ -675,11 +751,27 @@ function ProductDialog({
           <span>Kho</span><b>{product.deliveryType === "SHARED_CONTENT" ? "không giới hạn" : availableQuantity(product)}</b>
           <span>Nhận hàng</span><b>Hiển thị sau thanh toán</b>
         </div>
+        <div className="quantity-box">
+          <label htmlFor="order-quantity">Số lượng</label>
+          <div>
+            <button onClick={() => setQuantity((value) => Math.max(1, value - 1))}>-</button>
+            <input
+              id="order-quantity"
+              inputMode="numeric"
+              min={1}
+              max={maxQuantity}
+              value={quantity}
+              onChange={(event) => setQuantity(Number(event.target.value.replace(/[^\d]/g, "")) || 1)}
+            />
+            <button onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}>+</button>
+          </div>
+          <p className="muted">Tổng thanh toán: <b>{formatVnd(product.price * quantity)}</b></p>
+        </div>
         <div className="dialog-actions">
-          <button className="primary-button" onClick={onWallet} disabled={loading === `wallet:${product.id}`}>
+          <button className="primary-button" onClick={() => onWallet(quantity)} disabled={loading === `wallet:${product.id}` || invalidQuantity}>
             {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={18} /> : <Wallet size={18} />} Mua bằng ví
           </button>
-          <button className="ghost-button" onClick={onBank} disabled={loading === `bank:${product.id}`}>
+          <button className="ghost-button" onClick={() => onBank(quantity)} disabled={loading === `bank:${product.id}` || invalidQuantity}>
             {loading === `bank:${product.id}` ? <Loader2 className="spin" size={18} /> : <QrCode size={18} />} Chuyển khoản QR
           </button>
         </div>
@@ -688,7 +780,19 @@ function ProductDialog({
   );
 }
 
-function QrDialog({ payment, onClose, onRefresh }: { payment: PaymentResult; onClose: () => void; onRefresh: () => void }) {
+function QrDialog({
+  payment,
+  status,
+  loading,
+  onClose,
+  onRefresh
+}: {
+  payment: PaymentResult;
+  status: PaymentStatusResult | null;
+  loading: boolean;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
   return (
     <div className="overlay">
       <div className="dialog qr-dialog">
@@ -699,25 +803,42 @@ function QrDialog({ payment, onClose, onRefresh }: { payment: PaymentResult; onC
           <span>Mã</span><b>{payment.code}</b>
           <span>Số tiền</span><b>{formatVnd(payment.amount)}</b>
           <span>Hạn</span><b>{new Date(payment.expiresAt).toLocaleTimeString("vi-VN")}</b>
+          <span>Trạng thái</span><b>{statusLabel(status?.status ?? "PENDING")}</b>
         </div>
         <p className="muted">Sau khi SePay báo tiền vào, hệ thống tự cộng ví hoặc hoàn tất đơn hàng. Thông tin nhận hàng chỉ hiển thị khi đơn đã thanh toán thành công.</p>
-        <button className="ghost-button" onClick={onRefresh}>
-          <RefreshCw size={18} /> Kiểm tra trạng thái
+        <button className="ghost-button" onClick={onRefresh} disabled={loading}>
+          <RefreshCw className={loading ? "spin" : ""} size={18} /> Kiểm tra trạng thái
         </button>
       </div>
     </div>
   );
 }
 
-function DeliveryDialog({ delivery, onClose }: { delivery: WalletPurchaseResult; onClose: () => void }) {
+function DeliveryDialog({ delivery, onClose }: { delivery: DeliveryNotice; onClose: () => void }) {
   return (
     <div className="overlay">
       <div className="dialog">
         <button className="close" onClick={onClose}>×</button>
-        <h2>Mua hàng thành công</h2>
-        <p>Số dư còn lại: <b>{formatVnd(delivery.balanceAfter)}</b></p>
+        <h2>{delivery.title}</h2>
+        {delivery.balanceAfter !== undefined ? <p>Số dư hiện tại: <b>{formatVnd(delivery.balanceAfter)}</b></p> : null}
         <pre className="delivery-box">{delivery.deliveryText}</pre>
       </div>
+    </div>
+  );
+}
+
+function FloatingCtas() {
+  return (
+    <div className="floating-ctas" aria-label="Liên hệ nhanh">
+      <a href="https://zalo.me/0377952999" target="_blank" rel="noreferrer">
+        <MessageCircle size={18} /> Zalo
+      </a>
+      <a href="https://www.facebook.com/vanh.dao.735/" target="_blank" rel="noreferrer">
+        <span className="brand-letter">f</span> Facebook
+      </a>
+      <a href="https://t.me/vanhdao99" target="_blank" rel="noreferrer">
+        <Send size={18} /> Telegram
+      </a>
     </div>
   );
 }
@@ -737,6 +858,18 @@ function postPaymentLabel(type: Product["deliveryType"]) {
   if (type === "STOCK_ITEM") return "Nhận sau thanh toán";
   if (type === "SHARED_CONTENT") return "Mở sau thanh toán";
   return "Xử lý sau thanh toán";
+}
+
+function statusLabel(status: PaymentStatusResult["status"]) {
+  const labels: Record<PaymentStatusResult["status"], string> = {
+    PENDING: "Đang chờ thanh toán",
+    SUCCEEDED: "Đã thanh toán",
+    EXPIRED: "Đã hết hạn",
+    FAILED: "Thất bại",
+    CREDITED_TO_WALLET: "Đã cộng vào ví",
+    MANUAL_REVIEW: "Cần admin kiểm tra"
+  };
+  return labels[status];
 }
 
 function brandGlyph(name: string) {

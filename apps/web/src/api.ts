@@ -48,6 +48,23 @@ export type WalletPurchaseResult = {
   balanceAfter: number;
 };
 
+export type PaymentStatusResult = {
+  code: string;
+  kind: "TOPUP" | "DIRECT_ORDER" | "WALLET_PURCHASE" | "ADMIN_ADJUSTMENT";
+  status: "PENDING" | "SUCCEEDED" | "EXPIRED" | "FAILED" | "CREDITED_TO_WALLET" | "MANUAL_REVIEW";
+  amount: number;
+  expiresAt?: string | null;
+  balance: number;
+  order?: {
+    code: string;
+    status: string;
+    quantity: number;
+    totalAmount: number;
+    deliveryText?: string | null;
+    product: { id: string; name: string; deliveryType: Product["deliveryType"] };
+  } | null;
+};
+
 export type History = {
   orders: Array<{
     code: string;
