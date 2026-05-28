@@ -259,7 +259,7 @@ async function showProductDetail(ctx: Context, product: ProductDetail) {
     [Markup.button.callback("Quay lại", "catalog")]
   ]);
 
-  await renderScreen(ctx, caption, keyboard, product.imageUrl ?? undefined);
+  await renderScreen(ctx, caption, keyboard);
 }
 
 async function showProductByCommand(ctx: Context) {
