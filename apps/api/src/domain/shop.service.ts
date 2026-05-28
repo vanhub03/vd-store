@@ -914,7 +914,7 @@ export class ShopService {
     adminId: string
   ) {
     if (product.status !== ProductStatus.ACTIVE || product.showInBot === false || product.deliveryType !== ProductDeliveryType.MANUAL) return;
-    const previousStock = previous.deliveryType === ProductDeliveryType.MANUAL && previous.status === ProductStatus.ACTIVE ? previous.manualStock ?? 0 : 0;
+    const previousStock = previous.deliveryType === ProductDeliveryType.MANUAL ? previous.manualStock ?? 0 : 0;
     const currentStock = product.manualStock ?? 0;
     const addedCount = currentStock - previousStock;
     if (addedCount <= 0) return;
