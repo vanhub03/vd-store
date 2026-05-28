@@ -105,8 +105,9 @@ export class PaymentService {
     if (normalized.transferAmount !== expectedAmount) {
       await this.shop.markPaymentManualReview(payment.id, `Expected ${expectedAmount}, received ${normalized.transferAmount}`);
       await this.deletePendingPaymentMessage(payment.id, payment);
-      if (payment.user?.telegramId) {
-        await this.telegram.notifyManualReview(payment.user.telegramId, payment.code);
+      const telegramId = payment.user?.telegramId;
+      if (canNotifyTelegramUser(telegramId)) {
+        await this.telegram.notifyManualReview(telegramId, payment.code);
       }
       return { ok: true, status: "manual_review" };
     }
@@ -114,8 +115,9 @@ export class PaymentService {
     if (payment.kind === PaymentKind.TOPUP) {
       const result = await this.shop.creditTopup(payment.id);
       await this.deletePendingPaymentMessage(payment.id, payment);
-      if (result.user?.telegramId) {
-        await this.telegram.notifyTopup(result.user.telegramId, payment.amount, payment.code);
+      const telegramId = result.user?.telegramId;
+      if (canNotifyTelegramUser(telegramId)) {
+        await this.telegram.notifyTopup(telegramId, payment.amount, payment.code);
       }
       return { ok: true, status: result.outcome };
     }
@@ -126,13 +128,14 @@ export class PaymentService {
       if (result.outcome === "fulfilled" && "deliveryText" in result) {
         await this.shop.notifyManualOrderIfNeeded(result.order.id);
       }
-      if (result.user?.telegramId) {
+      const telegramId = result.user?.telegramId;
+      if (canNotifyTelegramUser(telegramId)) {
         if (result.outcome === "fulfilled" && "deliveryText" in result) {
-          await this.telegram.notifyDirectOrderFulfilled(result.user.telegramId, payment.code, result.deliveryText);
+          await this.telegram.notifyDirectOrderFulfilled(telegramId, payment.code, result.deliveryText);
         } else if (result.outcome === "credited_late_payment") {
-          await this.telegram.notifyPaymentCredited(result.user.telegramId, payment.code, payment.amount, "Đơn đã quá hạn 10 phút.");
+          await this.telegram.notifyPaymentCredited(telegramId, payment.code, payment.amount, "Đơn đã quá hạn 10 phút.");
         } else if (result.outcome === "credited_out_of_stock") {
-          await this.telegram.notifyPaymentCredited(result.user.telegramId, payment.code, payment.amount, "Sản phẩm đã hết hàng.");
+          await this.telegram.notifyPaymentCredited(telegramId, payment.code, payment.amount, "Sản phẩm đã hết hàng.");
         }
       }
       return { ok: true, status: result.outcome };
@@ -153,6 +156,10 @@ export class PaymentService {
 function firstHeader(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+function canNotifyTelegramUser(telegramId?: string | null): telegramId is string {
+  return Boolean(telegramId && /^\d+$/.test(telegramId));
 }
 
 function normalizeSepayPayload(payload: Record<string, unknown>) {
