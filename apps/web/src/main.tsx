@@ -93,6 +93,30 @@ function useReveal() {
   }, []);
 }
 
+/* ─── Dialog Close Hook (ESC + click-outside) ─────────────── */
+
+function useDialogClose(onClose: () => void) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  function handleOverlayClick(event: React.MouseEvent<HTMLDivElement>) {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  }
+
+  return { dialogRef, handleOverlayClick };
+}
 /* ─── App ─────────────────────────────────────────────────── */
 
 function App() {
@@ -721,8 +745,10 @@ function WalletDialog({
     onTopup(amount);
   }
 
+  const { handleOverlayClick } = useDialogClose(onClose);
+
   return (
-    <div className="overlay">
+    <div className="overlay" onClick={handleOverlayClick}>
       <div className="dialog">
         <button className="close" onClick={onClose}>&times;</button>
         <h2>Ví VD</h2>
@@ -829,8 +855,10 @@ function AuthDialog({ onClose, onSession }: { onClose: () => void; onSession: (s
     }
   }
 
+  const { handleOverlayClick } = useDialogClose(onClose);
+
   return (
-    <div className="overlay auth-overlay">
+    <div className="overlay auth-overlay" onClick={handleOverlayClick}>
       <div className="dialog auth-dialog">
         <button className="close" onClick={onClose}>&times;</button>
         <h2>{mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}</h2>
@@ -874,8 +902,10 @@ function ProductDialog({
   const imageSrc = productArtUrl(product);
   const deliveryLabel = postPaymentLabel(product.deliveryType);
 
+  const { handleOverlayClick } = useDialogClose(onClose);
+
   return (
-    <div className="overlay">
+    <div className="overlay" onClick={handleOverlayClick}>
       <div className="dialog product-dialog">
         <button className="close" onClick={onClose}>&times;</button>
         <div className="dialog-media">
@@ -950,8 +980,10 @@ function QrDialog({
   onClose: () => void;
   onRefresh: () => void;
 }) {
+  const { handleOverlayClick } = useDialogClose(onClose);
+
   return (
-    <div className="overlay">
+    <div className="overlay" onClick={handleOverlayClick}>
       <div className="dialog qr-dialog">
         <button className="close" onClick={onClose}>&times;</button>
         <h2>Quét QR thanh toán</h2>
@@ -989,8 +1021,10 @@ function DeliveryDialog({ delivery, onClose }: { delivery: DeliveryNotice; onClo
     }
   }
 
+  const { handleOverlayClick } = useDialogClose(onClose);
+
   return (
-    <div className="overlay">
+    <div className="overlay" onClick={handleOverlayClick}>
       <div className="dialog">
         <button className="close" onClick={onClose}>&times;</button>
         <h2>{delivery.title}</h2>
