@@ -245,6 +245,52 @@ describe("ShopService", () => {
     });
     expect(tx.inventoryItem.findMany).not.toHaveBeenCalled();
   });
+
+  it("credits topups exactly once and ignores already-processed topup payments", async () => {
+    const pendingTx = buildTopupTx({
+      status: PaymentStatus.PENDING,
+      paymentId: "payment_topup_1",
+      userId: "user_topup_1",
+      amount: 25000
+    });
+    const processedTx = buildTopupTx({
+      status: PaymentStatus.SUCCEEDED,
+      paymentId: "payment_topup_1",
+      userId: "user_topup_1",
+      amount: 25000
+    });
+    const prisma = {
+      $transaction: vi.fn()
+        .mockImplementationOnce(async (callback) => callback(pendingTx))
+        .mockImplementationOnce(async (callback) => callback(processedTx))
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const first = await service.creditTopup("payment_topup_1");
+    const second = await service.creditTopup("payment_topup_1");
+
+    expect(first.outcome).toBe("credited");
+    expect(pendingTx.walletLedgerEntry.findFirst).toHaveBeenCalledWith({
+      where: { referencePaymentId: "payment_topup_1" }
+    });
+    expect(pendingTx.walletLedgerEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: "user_topup_1",
+        amount: 25000,
+        type: WalletEntryType.TOPUP,
+        referencePaymentId: "payment_topup_1"
+      })
+    });
+    expect(pendingTx.payment.update).toHaveBeenCalledWith({
+      where: { id: "payment_topup_1" },
+      data: { status: PaymentStatus.SUCCEEDED }
+    });
+
+    expect(second.outcome).toBe("already_processed");
+    expect(processedTx.walletLedgerEntry.findFirst).not.toHaveBeenCalled();
+    expect(processedTx.walletLedgerEntry.create).not.toHaveBeenCalled();
+    expect(processedTx.payment.update).not.toHaveBeenCalled();
+  });
 });
 
 function buildPurchaseTx(input: {
@@ -335,6 +381,34 @@ function buildDirectOrderTx(input: {
     walletLedgerEntry: {
       findFirst: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "ledger_direct_1", ...data }))
+    }
+  };
+}
+
+function buildTopupTx(input: {
+  status: PaymentStatus;
+  paymentId: string;
+  userId: string;
+  amount: number;
+}) {
+  const user = { id: input.userId, telegramId: "web:topup_customer" };
+  const payment = {
+    id: input.paymentId,
+    code: "NAPTOPUP1",
+    kind: PaymentKind.TOPUP,
+    status: input.status,
+    amount: input.amount,
+    userId: input.userId,
+    user
+  };
+  return {
+    payment: {
+      findUnique: vi.fn().mockResolvedValue(payment),
+      update: vi.fn().mockImplementation(({ data }) => Promise.resolve({ ...payment, ...data }))
+    },
+    walletLedgerEntry: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "ledger_topup_1", ...data }))
     }
   };
 }
