@@ -12,6 +12,80 @@ import { describe, expect, it, vi } from "vitest";
 import { ShopService } from "../src/domain/shop.service";
 
 describe("ShopService", () => {
+  it("returns only active web-visible catalog products and maps prices to webPrice", async () => {
+    const categoryProduct = {
+      id: "product_web_category_1",
+      name: "Visible web category product",
+      price: 10000,
+      botPrice: 8000,
+      webPrice: 12000,
+      showInWeb: true,
+      showInBot: true,
+      status: ProductStatus.ACTIVE,
+      deliveryType: ProductDeliveryType.MANUAL
+    };
+    const uncategorizedProduct = {
+      id: "product_web_uncategorized_1",
+      name: "Visible web uncategorized product",
+      price: 15000,
+      botPrice: 9000,
+      webPrice: 18000,
+      showInWeb: true,
+      showInBot: false,
+      status: ProductStatus.ACTIVE,
+      deliveryType: ProductDeliveryType.MANUAL
+    };
+    const prisma = {
+      category: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "category_1",
+            name: "Digital",
+            active: true,
+            products: [categoryProduct]
+          }
+        ])
+      },
+      product: {
+        findMany: vi.fn().mockResolvedValue([uncategorizedProduct])
+      }
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const catalog = await service.getCatalog("web");
+
+    expect(prisma.category.findMany).toHaveBeenCalledWith({
+      where: { active: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: {
+        products: {
+          where: { status: ProductStatus.ACTIVE, showInWeb: true },
+          orderBy: { createdAt: "desc" },
+          include: {
+            _count: {
+              select: {
+                inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
+              }
+            }
+          }
+        }
+      }
+    });
+    expect(prisma.product.findMany).toHaveBeenCalledWith({
+      where: { categoryId: null, status: ProductStatus.ACTIVE, showInWeb: true },
+      orderBy: { createdAt: "desc" },
+      include: {
+        _count: {
+          select: {
+            inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
+          }
+        }
+      }
+    });
+    expect(catalog.categories[0].products[0].price).toBe(12000);
+    expect(catalog.uncategorized[0].price).toBe(18000);
+  });
+
   it("fulfills manual web wallet purchases by debiting wallet, reducing manual stock, and returning instructions", async () => {
     const user = { id: "user_1", telegramId: "web:customer_1" };
     const product = {
