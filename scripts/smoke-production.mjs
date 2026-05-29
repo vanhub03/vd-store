@@ -79,6 +79,34 @@ const checks = [
     }
   },
   {
+    name: "protected storefront payment endpoints",
+    run: async () => {
+      const probes = [
+        { method: "GET", path: "/store/wallet" },
+        { method: "GET", path: "/store/history" },
+        { method: "GET", path: "/store/payments/DHSMOKE" },
+        { method: "POST", path: "/store/topups", body: { amount: 1000 } },
+        { method: "POST", path: "/store/orders/wallet", body: { productId: "smoke-product", quantity: 1 } },
+        { method: "POST", path: "/store/orders/bank", body: { productId: "smoke-product", quantity: 1 } }
+      ];
+      const failures = [];
+      for (const probe of probes) {
+        const response = await fetchWithTimeout(`${config.apiUrl}${probe.path}`, {
+          method: probe.method,
+          headers: probe.body ? { "content-type": "application/json" } : undefined,
+          body: probe.body ? JSON.stringify(probe.body) : undefined
+        });
+        if (response.status !== 401) {
+          failures.push(`${probe.method} ${probe.path}: ${response.status}`);
+        }
+      }
+      if (failures.length > 0) {
+        throw new Error(`Expected 401 without token: ${failures.join(", ")}`);
+      }
+      return `${probes.length} endpoint(s)`;
+    }
+  },
+  {
     name: "storefront css does not use gradient tokens",
     run: async () => {
       const html = await fetchText(config.webUrl);
