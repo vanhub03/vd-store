@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   InventoryStatus,
+  ManualOrderStatus,
   OrderStatus,
   PaymentKind,
   PaymentMethod,
@@ -608,6 +609,30 @@ export class ShopService {
     });
   }
 
+  async updateManualOrderStatus(adminId: string, orderId: string, status: ManualOrderStatus) {
+    if (!["COMPLETED", "CANCELLED"].includes(status)) {
+      throw new BadRequestException("Trạng thái xử lý đơn không hợp lệ.");
+    }
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { product: true }
+    });
+    if (!order) throw new NotFoundException("Không tìm thấy đơn hàng.");
+    if (order.product.deliveryType !== ProductDeliveryType.MANUAL) {
+      throw new BadRequestException("Chỉ đơn liên hệ admin mới có trạng thái theo dõi.");
+    }
+    const updated = await this.prisma.order.update({
+      where: { id: orderId },
+      data: { manualStatus: status },
+      include: { user: true, product: true }
+    });
+    await this.audit(adminId, status === "COMPLETED" ? "MANUAL_ORDER_COMPLETE" : "MANUAL_ORDER_CANCEL", "Order", orderId, {
+      code: updated.code,
+      product: updated.product.name
+    });
+    return updated;
+  }
+
   async listPayments() {
     return this.prisma.payment.findMany({
       orderBy: { createdAt: "desc" },
@@ -681,6 +706,7 @@ export class ShopService {
         this.prisma.order.findMany({
           where: {
             status: { in: [OrderStatus.PAID, OrderStatus.FULFILLED] },
+            manualStatus: ManualOrderStatus.PENDING,
             product: { deliveryType: ProductDeliveryType.MANUAL }
           },
           orderBy: { createdAt: "desc" },
@@ -731,6 +757,7 @@ export class ShopService {
         quantity: order.quantity,
         totalAmount: order.totalAmount,
         status: order.status,
+        manualStatus: order.manualStatus,
         deliveryText: order.deliveryText,
         createdAt: order.createdAt,
         user: order.user,

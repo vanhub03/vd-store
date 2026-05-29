@@ -1700,6 +1700,335 @@ footer button {
   }
 }
 
+/* Product surface refresh: flatter, calmer cards with clearer buying hierarchy. */
+.product-section {
+  padding-top: 22px;
+}
+
+.product-section .section-head {
+  align-items: end;
+  margin-bottom: 22px;
+}
+
+.product-section .section-head h2 {
+  color: #f7fbff;
+  font-size: clamp(30px, 4.4vw, 54px);
+  line-height: 1.08;
+  max-width: 760px;
+}
+
+.product-grid {
+  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.product-card {
+  --accent: #8fcfe2;
+  --accent-rgb: 143, 207, 226;
+  background: #f6f8fb;
+  border: 1px solid #d6e0ea;
+  border-radius: 8px;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
+  color: #102033;
+  grid-template-rows: 168px 1fr auto;
+}
+
+.product-card::before {
+  display: none;
+}
+
+.product-card[data-brand="openai"],
+.product-card[data-brand="canva"],
+.product-card[data-brand="youtube"],
+.product-card[data-brand="claude"],
+.product-card[data-brand="gemini"] {
+  background: #f6f8fb;
+}
+
+.product-media {
+  background: #eaf0f6;
+  border: 0;
+  border-bottom: 1px solid #dbe5ee;
+  border-radius: 0;
+  height: 168px;
+}
+
+.product-media img {
+  object-fit: cover;
+}
+
+.product-media span:not(.product-brand-mark) {
+  color: #16304c;
+  font-size: 58px;
+}
+
+.product-brand-mark {
+  background: #ffffff;
+  border: 1px solid #d7e2ed;
+  box-shadow: 0 8px 18px rgba(15, 32, 50, 0.16);
+  color: #102033;
+  left: 14px;
+  top: 14px;
+}
+
+.product-body {
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+.product-kicker {
+  color: #6c7f91;
+  font-size: 11px;
+}
+
+.product-kicker span:first-child {
+  color: #126b80;
+}
+
+.product-kicker .stock-empty {
+  color: #b42339;
+}
+
+.product-body h3 {
+  color: #102033;
+  font-size: 19px;
+  line-height: 1.22;
+  margin: 0;
+}
+
+.product-body p {
+  color: #536678;
+  min-height: 44px;
+}
+
+.product-summary {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: auto;
+}
+
+.product-summary strong {
+  background: #102033;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 15px;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
+.product-summary span {
+  color: #607386;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.product-actions {
+  background: #edf3f8;
+  border-top: 1px solid #d9e4ee;
+  gap: 8px;
+  padding: 10px;
+}
+
+.product-actions button {
+  background: #ffffff;
+  border: 1px solid #cddae6;
+  border-radius: 8px;
+  color: #18304b;
+  min-height: 44px;
+}
+
+.product-actions button:last-child {
+  background: #102033;
+  border-color: #102033;
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.product-actions button:hover:not(:disabled),
+.product-actions button:last-child:hover:not(:disabled) {
+  background: #18304b;
+  border-color: #18304b;
+  box-shadow: 0 12px 22px rgba(15, 32, 50, 0.2);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.trust-card:hover,
+.timeline-item:hover,
+.product-card:hover {
+  border-color: #8fb3c8;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.26);
+  transform: translateY(-2px);
+}
+
+.product-dialog {
+  background: #f7f9fc;
+  color: #102033;
+  max-width: 640px;
+  padding: 0;
+}
+
+.product-dialog .close {
+  background: #ffffff;
+  border-color: #d6e0ea;
+  color: #102033;
+}
+
+.product-dialog .dialog-media {
+  background: #eaf0f6;
+  border-bottom: 1px solid #dbe5ee;
+  height: 230px;
+  margin: 0;
+}
+
+.product-dialog .dialog-media span {
+  color: #102033;
+  font-size: 74px;
+}
+
+.dialog-heading,
+.product-dialog .detail-grid,
+.product-dialog .quantity-box,
+.product-dialog .dialog-actions {
+  margin-left: 24px;
+  margin-right: 24px;
+}
+
+.dialog-heading {
+  padding-top: 22px;
+}
+
+.dialog-heading > span {
+  color: #126b80;
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.dialog-heading h2 {
+  color: #102033;
+  font-size: 28px;
+  line-height: 1.18;
+  margin-bottom: 10px;
+}
+
+.dialog-heading p {
+  color: #536678;
+  line-height: 1.6;
+}
+
+.product-dialog .detail-grid {
+  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.product-dialog .detail-grid div {
+  background: #ffffff;
+  border: 1px solid #d9e4ee;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.product-dialog .detail-grid span {
+  color: #66798b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.product-dialog .detail-grid b {
+  color: #102033;
+  font-size: 15px;
+}
+
+.product-dialog .quantity-box {
+  background: #ffffff;
+  border: 1px solid #d9e4ee;
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 16px;
+}
+
+.quantity-box .quantity-head,
+.quantity-box .quantity-total {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.quantity-head label {
+  color: #102033;
+  margin: 0;
+}
+
+.quantity-head span,
+.quantity-total span {
+  color: #66798b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quantity-stepper {
+  background: #eef4f8;
+  border: 1px solid #d7e2ed;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 46px 1fr 46px;
+  margin: 14px 0;
+  padding: 6px;
+}
+
+.quantity-stepper button,
+.quantity-stepper input {
+  border: 0;
+  border-radius: 8px;
+  min-height: 44px;
+}
+
+.quantity-stepper button {
+  background: #102033;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.quantity-stepper input {
+  background: #ffffff;
+  color: #102033;
+  font-size: 18px;
+  font-weight: 950;
+  text-align: center;
+}
+
+.quantity-total b {
+  color: #102033;
+  font-size: 20px;
+}
+
+.product-dialog .dialog-actions {
+  border-top: 1px solid #d9e4ee;
+  padding: 18px 0 24px;
+}
+
+.product-dialog .primary-button {
+  background: #102033;
+  border-color: #102033;
+  color: #ffffff;
+}
+
+.product-dialog .ghost-button {
+  background: #ffffff;
+  border-color: #cddae6;
+  color: #102033;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1781,6 +2110,18 @@ footer button {
   .dialog-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .product-dialog .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dialog-heading,
+  .product-dialog .detail-grid,
+  .product-dialog .quantity-box,
+  .product-dialog .dialog-actions {
+    margin-left: 16px;
+    margin-right: 16px;
   }
 
   .floating-ctas {

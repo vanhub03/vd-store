@@ -285,6 +285,21 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+.manualAlertActions {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.manualAlertActions .smallButton {
+  width: 100%;
+}
+
+.successButton {
+  background: #ecfdf5;
+  color: #047857;
+}
+
 .chartPanel {
   min-width: 0;
 }

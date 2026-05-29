@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
-import { ProductDeliveryType, ProductStatus } from "@prisma/client";
+import { ManualOrderStatus, ProductDeliveryType, ProductStatus } from "@prisma/client";
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
@@ -113,6 +113,11 @@ class BroadcastDto {
   message!: string;
 }
 
+class ManualOrderStatusDto {
+  @IsEnum(ManualOrderStatus)
+  status!: ManualOrderStatus;
+}
+
 @Controller("admin")
 @UseGuards(AdminAuthGuard)
 export class AdminController {
@@ -196,6 +201,11 @@ export class AdminController {
   @Get("orders")
   orders() {
     return this.shop.listOrders();
+  }
+
+  @Post("orders/:id/manual-status")
+  updateManualOrderStatus(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: ManualOrderStatusDto) {
+    return this.shop.updateManualOrderStatus(request.admin!.id, id, body.status);
   }
 
   @Get("payments")

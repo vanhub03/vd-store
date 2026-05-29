@@ -594,23 +594,18 @@ function ProductCard({
   return (
     <article className="product-card" data-brand={brandTone(product.name)}>
       <div className="product-media">
-        {product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>{icon}</span>}
+        {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} tại VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{icon}</span>}
         <span className="product-brand-mark">{icon}</span>
       </div>
       <div className="product-body">
         <div className="product-kicker">
           <span>{product.category?.name ?? "Sản phẩm số"}</span>
-          <span>{stockLabel}</span>
+          <span className={disabled ? "stock-empty" : ""}>{stockLabel}</span>
         </div>
-        <div className="product-title">
-          <h3>{product.name}</h3>
-          <strong className="product-price">{formatVnd(product.price)}</strong>
-        </div>
+        <h3>{product.name}</h3>
         <p>{product.description || "Thông tin nhận hàng sẽ hiển thị sau khi thanh toán thành công."}</p>
-        <div className="product-meta">
-          <span className="stock-pill">
-            <Boxes size={15} /> {stockLabel}
-          </span>
+        <div className="product-summary">
+          <strong>{formatVnd(product.price)}</strong>
           <span>{postPaymentLabel(product.deliveryType)}</span>
         </div>
       </div>
@@ -807,23 +802,42 @@ function ProductDialog({
   const maxQuantity = product.deliveryType === "SHARED_CONTENT" ? 999 : stock;
   const [quantity, setQuantity] = useState(1);
   const invalidQuantity = quantity < 1 || quantity > maxQuantity;
+  const icon = product.buttonIcon ?? brandGlyph(product.name);
+  const deliveryLabel = postPaymentLabel(product.deliveryType);
 
   return (
     <div className="overlay">
       <div className="dialog product-dialog">
         <button className="close" onClick={onClose}>×</button>
-        <div className="dialog-media">{product.imageUrl ? <img src={product.imageUrl} alt={product.name} /> : <span>{product.buttonIcon ?? brandGlyph(product.name)}</span>}</div>
-        <h2>{product.name}</h2>
-        <p>{product.description || "Thông tin giao hàng sẽ mở sau khi thanh toán thành công."}</p>
+        <div className="dialog-media">
+          {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{icon}</span>}
+        </div>
+        <div className="dialog-heading">
+          <span>{product.category?.name ?? "Sản phẩm số"}</span>
+          <h2>{product.name}</h2>
+          <p>{product.description || "Thông tin giao hàng sẽ mở sau khi thanh toán thành công."}</p>
+        </div>
         <div className="detail-grid">
-          <span>Giá</span><b>{formatVnd(product.price)}</b>
-          <span>Kho</span><b>{product.deliveryType === "SHARED_CONTENT" ? "không giới hạn" : availableQuantity(product)}</b>
-          <span>Nhận hàng</span><b>Hiển thị sau thanh toán</b>
+          <div>
+            <span>Giá</span>
+            <b>{formatVnd(product.price)}</b>
+          </div>
+          <div>
+            <span>Kho</span>
+            <b>{product.deliveryType === "SHARED_CONTENT" ? "Không giới hạn" : availableQuantity(product)}</b>
+          </div>
+          <div>
+            <span>Nhận hàng</span>
+            <b>{deliveryLabel}</b>
+          </div>
         </div>
         <div className="quantity-box">
-          <label htmlFor="order-quantity">Số lượng</label>
-          <div>
-            <button onClick={() => setQuantity((value) => Math.max(1, value - 1))}>-</button>
+          <div className="quantity-head">
+            <label htmlFor="order-quantity">Số lượng</label>
+            <span>Tối đa {maxQuantity}</span>
+          </div>
+          <div className="quantity-stepper">
+            <button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button>
             <input
               id="order-quantity"
               inputMode="numeric"
@@ -832,9 +846,12 @@ function ProductDialog({
               value={quantity}
               onChange={(event) => setQuantity(Number(event.target.value.replace(/[^\d]/g, "")) || 1)}
             />
-            <button onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}>+</button>
+            <button type="button" onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}>+</button>
           </div>
-          <p className="muted">Tổng thanh toán: <b>{formatVnd(product.price * quantity)}</b></p>
+          <div className="quantity-total">
+            <span>Tổng thanh toán</span>
+            <b>{formatVnd(product.price * quantity)}</b>
+          </div>
         </div>
         <div className="dialog-actions">
           <button className="primary-button" onClick={() => onWallet(quantity)} disabled={loading === `wallet:${product.id}` || invalidQuantity}>

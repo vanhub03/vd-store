@@ -39,6 +39,12 @@ enum OrderStatus {
   MANUAL_REVIEW
 }
 
+enum ManualOrderStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
 enum PaymentKind {
   TOPUP
   DIRECT_ORDER
@@ -182,6 +188,7 @@ model Order {
   unitPrice      Int
   totalAmount    Int
   status         OrderStatus
+  manualStatus   ManualOrderStatus @default(PENDING)
   paymentMethod  PaymentMethod
   deliveryText   String?
   expiresAt      DateTime?
@@ -197,6 +204,7 @@ model Order {
 
   @@index([userId, createdAt])
   @@index([status, expiresAt])
+  @@index([manualStatus, createdAt])
 }
 
 model Payment {

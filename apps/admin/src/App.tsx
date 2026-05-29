@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Bell, Boxes, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, Trash2, Users, Wallet, X } from "lucide-react";
+import { Ban, Bell, Boxes, CheckCircle2, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, Trash2, Users, Wallet, X } from "lucide-react";
 import { AdminSession, Api, formatVnd } from "./api";
 
 type Tab = "overview" | "products" | "users" | "orders" | "broadcasts";
@@ -51,6 +51,7 @@ type Order = {
   quantity: number;
   totalAmount: number;
   status: string;
+  manualStatus?: "PENDING" | "COMPLETED" | "CANCELLED";
   deliveryText?: string | null;
   createdAt: string;
   user: User;
@@ -242,19 +243,26 @@ function Login({ api, onLogin }: { api: Api; onLogin: (session: AdminSession) =>
 function Overview({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
+  async function loadDashboard() {
     setLoading(true);
-    api
-      .get<Dashboard>("/admin/dashboard")
-      .then(setDashboard)
-      .catch((err) => onError((err as Error).message))
-      .finally(() => setLoading(false));
+    try {
+      setDashboard(await api.get<Dashboard>("/admin/dashboard"));
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadDashboard();
   }, [api, onError]);
 
   return (
     <div className="stack">
       {loading && <LoadingBlock label="Đang tải tổng quan..." />}
-      <ManualOrderAlerts orders={dashboard?.manualOrderAlerts ?? []} />
+      <ManualOrderAlerts api={api} orders={dashboard?.manualOrderAlerts ?? []} onResolved={loadDashboard} onError={onError} />
       <section className="metricsGrid">
         <Metric label="Doanh thu hôm nay" value={formatVnd(dashboard?.todayRevenue ?? 0)} />
         <Metric label="Doanh thu tháng này" value={formatVnd(dashboard?.monthRevenue ?? 0)} />
@@ -790,7 +798,34 @@ function OrdersView({ api, onError }: { api: Api; onError: (error: string | null
   );
 }
 
-function ManualOrderAlerts({ orders }: { orders: Order[] }) {
+function ManualOrderAlerts({
+  api,
+  orders,
+  onResolved,
+  onError
+}: {
+  api: Api;
+  orders: Order[];
+  onResolved: () => Promise<void>;
+  onError: (error: string | null) => void;
+}) {
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+
+  async function resolveOrder(order: Order, status: "COMPLETED" | "CANCELLED") {
+    const label = status === "COMPLETED" ? "hoàn thành" : "cancel";
+    if (!confirm(`Xác nhận ${label} đơn ${order.code}? Đơn sẽ ẩn khỏi danh sách cần theo dõi.`)) return;
+    setResolvingId(order.id);
+    try {
+      await api.post(`/admin/orders/${order.id}/manual-status`, { status });
+      await onResolved();
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setResolvingId(null);
+    }
+  }
+
   return (
     <section className="manualAlerts panel">
       <div className="panelHeader">
@@ -817,6 +852,16 @@ function ManualOrderAlerts({ orders }: { orders: Order[] }) {
                 {"\n"}Số lượng: {order.quantity}
                 {"\n"}Khách: {displayUser(order.user)}
               </code>
+              <div className="manualAlertActions">
+                <button className="smallButton successButton" type="button" onClick={() => resolveOrder(order, "COMPLETED")} disabled={resolvingId === order.id}>
+                  {resolvingId === order.id ? <RefreshCw className="spin" size={14} /> : <CheckCircle2 size={14} />}
+                  Hoàn thành
+                </button>
+                <button className="smallButton dangerButton" type="button" onClick={() => resolveOrder(order, "CANCELLED")} disabled={resolvingId === order.id}>
+                  {resolvingId === order.id ? <RefreshCw className="spin" size={14} /> : <Ban size={14} />}
+                  Cancel
+                </button>
+              </div>
             </article>
           ))}
         </div>
