@@ -32,3 +32,8 @@ Telegram sales bot with a Vietnamese admin dashboard, public storefront website,
 Admin UI runs on `http://localhost:5173`, public storefront on `http://localhost:5174`, API on `http://localhost:3000`.
 
 For SePay and Telegram webhooks during local development, expose the API/bot ports through a public HTTPS tunnel such as ngrok or cloudflared.
+
+## Deployment
+
+- Render + Vercel: see `docs/deploy-render.md` and `docs/deploy-web-vercel.md`.
+- VPS production without cold start: see `docs/deploy-vps.md`.
