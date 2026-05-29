@@ -147,7 +147,16 @@ const checks = [
     name: "storefront landing animation markers",
     run: async () => {
       const bundle = await storefrontBundleText();
-      const requiredMarkers = ["hero-motion", "orbit", "signal-board", "ledger-rail", "trust-grid", "brand-panel", "reveal"];
+      const requiredMarkers = [
+        "hero-motion",
+        "checkout-stage",
+        "stage-card",
+        "qr-matrix",
+        "route-map",
+        "trust-grid",
+        "brand-panel",
+        "reveal"
+      ];
       const missing = requiredMarkers.filter((marker) => !bundle.includes(marker));
       if (missing.length > 0) {
         throw new Error(`Missing landing animation marker(s): ${missing.join(", ")}.`);
