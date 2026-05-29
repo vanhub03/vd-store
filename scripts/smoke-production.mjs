@@ -146,16 +146,32 @@ const checks = [
   {
     name: "storefront landing animation markers",
     run: async () => {
-      const html = await fetchText(config.webUrl);
-      const assetPathsToCheck = [...assetPaths(html, "js"), ...assetPaths(html, "css")];
-      if (assetPathsToCheck.length === 0) throw new Error("Could not find storefront assets.");
-      const bundle = (
-        await Promise.all(assetPathsToCheck.map((path) => fetchText(new URL(path, config.webUrl).toString())))
-      ).join("\n");
+      const bundle = await storefrontBundleText();
       const requiredMarkers = ["hero-motion", "orbit", "signal-board", "ledger-rail", "trust-grid", "brand-panel", "reveal"];
       const missing = requiredMarkers.filter((marker) => !bundle.includes(marker));
       if (missing.length > 0) {
         throw new Error(`Missing landing animation marker(s): ${missing.join(", ")}.`);
+      }
+      return `${requiredMarkers.length} marker(s)`;
+    }
+  },
+  {
+    name: "storefront wallet and QR purchase flow markers",
+    run: async () => {
+      const bundle = await storefrontBundleText();
+      const requiredMarkers = [
+        "/store/topups",
+        "/store/orders/wallet",
+        "/store/orders/bank",
+        "/store/payments/",
+        "CREDITED_TO_WALLET",
+        "MANUAL_REVIEW",
+        "EXPIRED",
+        "FAILED"
+      ];
+      const missing = requiredMarkers.filter((marker) => !bundle.includes(marker));
+      if (missing.length > 0) {
+        throw new Error(`Missing storefront payment marker(s): ${missing.join(", ")}.`);
       }
       return `${requiredMarkers.length} marker(s)`;
     }
@@ -221,4 +237,13 @@ function assertIncludes(input, needle, label) {
 function assetPaths(html, extension) {
   const pattern = new RegExp(`(?:href|src)="([^"]+\\.${extension})"`, "g");
   return [...html.matchAll(pattern)].map((match) => match[1]);
+}
+
+async function storefrontBundleText() {
+  const html = await fetchText(config.webUrl);
+  const assetPathsToCheck = [...assetPaths(html, "js"), ...assetPaths(html, "css")];
+  if (assetPathsToCheck.length === 0) throw new Error("Could not find storefront assets.");
+  return (
+    await Promise.all(assetPathsToCheck.map((path) => fetchText(new URL(path, config.webUrl).toString())))
+  ).join("\n");
 }
