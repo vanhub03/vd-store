@@ -82,7 +82,7 @@ const checks = [
     name: "storefront css does not use gradient tokens",
     run: async () => {
       const html = await fetchText(config.webUrl);
-      const cssPaths = [...html.matchAll(/href="([^"]+\.css)"/g)].map((match) => match[1]);
+      const cssPaths = assetPaths(html, "css");
       if (cssPaths.length === 0) throw new Error("Could not find storefront CSS asset.");
       for (const path of cssPaths) {
         const cssUrl = new URL(path, config.webUrl).toString();
@@ -92,6 +92,23 @@ const checks = [
         }
       }
       return `${cssPaths.length} css asset(s)`;
+    }
+  },
+  {
+    name: "storefront landing animation markers",
+    run: async () => {
+      const html = await fetchText(config.webUrl);
+      const assetPathsToCheck = [...assetPaths(html, "js"), ...assetPaths(html, "css")];
+      if (assetPathsToCheck.length === 0) throw new Error("Could not find storefront assets.");
+      const bundle = (
+        await Promise.all(assetPathsToCheck.map((path) => fetchText(new URL(path, config.webUrl).toString())))
+      ).join("\n");
+      const requiredMarkers = ["hero-motion", "orbit", "signal-board", "ledger-rail", "trust-grid", "brand-panel", "reveal"];
+      const missing = requiredMarkers.filter((marker) => !bundle.includes(marker));
+      if (missing.length > 0) {
+        throw new Error(`Missing landing animation marker(s): ${missing.join(", ")}.`);
+      }
+      return `${requiredMarkers.length} marker(s)`;
     }
   }
 ];
@@ -150,4 +167,9 @@ function assertIncludes(input, needle, label) {
   if (!input.includes(needle)) {
     throw new Error(`Missing ${label}.`);
   }
+}
+
+function assetPaths(html, extension) {
+  const pattern = new RegExp(`(?:href|src)="([^"]+\\.${extension})"`, "g");
+  return [...html.matchAll(pattern)].map((match) => match[1]);
 }
