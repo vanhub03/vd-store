@@ -68,7 +68,7 @@ export class TelegramNotifyService {
     customerLabel: string;
     deliveryText?: string | null;
   }) {
-    const adminChatId = process.env.ADMIN_TELEGRAM_CHAT_ID ?? usernameChatId(process.env.ADMIN_TELEGRAM_USERNAME);
+    const adminChatId = configuredChatId(process.env.ADMIN_TELEGRAM_CHAT_ID);
     const message = [
       "Đơn hàng cần giao thủ công",
       `Mã đơn: <b>${escapeHtml(input.code)}</b>`,
@@ -82,17 +82,18 @@ export class TelegramNotifyService {
       .join("\n");
 
     if (!adminChatId) {
-      this.logger.warn(`ADMIN_TELEGRAM_CHAT_ID missing. Manual order notification: ${message}`);
+      this.logger.warn(
+        `ADMIN_TELEGRAM_CHAT_ID missing. Manual order remains visible in admin dashboard. Notification payload: ${message}`
+      );
       return;
     }
     await this.sendMessage(adminChatId, message);
   }
 }
 
-function usernameChatId(username?: string) {
-  const trimmed = username?.trim();
-  if (!trimmed) return undefined;
-  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
+function configuredChatId(chatId?: string) {
+  const trimmed = chatId?.trim();
+  return trimmed || undefined;
 }
 
 function splitTelegramMessage(message: string) {
