@@ -3,6 +3,4 @@
   <rect x="42" y="38" width="816" height="444" rx="38" fill="#0d1111" stroke="#263230"/>
   <path d="M176 130c84 118 172 150 264 96 96-56 188-20 276 108" fill="none" stroke="#d8fff5" stroke-width="2" opacity=".24"/>
   <path d="M308 160h284L308 360h284L308 160Zm284 0v200H308" fill="none" stroke="#f1f7f4" stroke-width="26" stroke-linejoin="round"/>
-  <text x="76" y="438" fill="#f5fbf8" font-family="Arial, sans-serif" font-size="44" font-weight="800">CapCut Pro</text>
-  <text x="78" y="468" fill="#9eb5ae" font-family="Arial, sans-serif" font-size="18" letter-spacing="4">VIDEO TOOLKIT</text>
 </svg>

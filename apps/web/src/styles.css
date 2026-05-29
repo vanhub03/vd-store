@@ -1441,9 +1441,8 @@ footer button {
 
 @supports (animation-timeline: view()) {
   .reveal {
-    animation: revealOnScroll both;
-    animation-range: entry 12% cover 34%;
-    animation-timeline: view();
+    animation: revealUp 0.85s ease both;
+    animation-delay: var(--d, 0ms);
   }
 }
 
@@ -2600,6 +2599,134 @@ footer button {
   border-color: rgba(248, 245, 238, 0.16);
   border-radius: 999px;
   color: #f8f5ee;
+}
+
+/* Contrast fix after visual QA: no icon over product art, no pale card body. */
+.hero {
+  margin-bottom: 40px;
+}
+
+.trust-showcase {
+  padding-top: clamp(96px, 9vw, 140px);
+  scroll-margin-top: 120px;
+}
+
+.product-section {
+  padding-top: clamp(130px, 10vw, 168px);
+  scroll-margin-top: 120px;
+}
+
+.product-grid {
+  gap: 34px;
+}
+
+.product-card {
+  background: #0b0b09;
+  border: 1px solid rgba(248, 245, 238, 0.1);
+  border-radius: 22px;
+  box-shadow: 0 28px 84px rgba(0, 0, 0, 0.26);
+  overflow: hidden;
+}
+
+.product-card:nth-child(3n + 2) {
+  margin-top: 34px;
+}
+
+.product-card:nth-child(4n + 3) {
+  margin-top: 12px;
+}
+
+.product-card::before,
+.product-card::after {
+  display: none;
+}
+
+.product-media {
+  background: #10110e;
+  border: 0;
+  border-radius: 22px 22px 0 0;
+  box-shadow: none;
+  height: clamp(230px, 21vw, 310px);
+}
+
+.product-media::after {
+  display: none;
+}
+
+.product-media img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.product-dialog .dialog-media img {
+  object-fit: contain;
+}
+
+.product-brand-mark {
+  display: none;
+}
+
+.product-body {
+  background: #0b0b09;
+  gap: 12px;
+  padding: 20px 22px 18px;
+}
+
+.product-kicker {
+  color: #a9a195;
+  font-size: 11px;
+}
+
+.product-kicker span:first-child,
+.product-kicker span:last-child {
+  color: #cfc8bd;
+}
+
+.product-body h3 {
+  color: #fbf8f1;
+  font-size: clamp(21px, 1.85vw, 27px);
+  letter-spacing: 0;
+  line-height: 1.12;
+}
+
+.product-body p {
+  color: #b3ab9f;
+  font-size: 14px;
+  line-height: 1.58;
+  min-height: 0;
+}
+
+.product-summary {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.product-summary strong {
+  background: #fbf8f1;
+  color: #0b0b09;
+}
+
+.product-summary span {
+  color: #b3ab9f;
+}
+
+.product-actions {
+  background: #0b0b09;
+  border-top: 1px solid rgba(248, 245, 238, 0.08);
+  gap: 12px;
+  padding: 0 22px 22px;
+}
+
+.product-actions button {
+  color: #fbf8f1;
+}
+
+.product-actions button:last-child {
+  background: #fbf8f1;
+  color: #0b0b09;
 }
 
 @media (prefers-reduced-motion: reduce) {

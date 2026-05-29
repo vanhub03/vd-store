@@ -43,6 +43,7 @@ const TOKEN_KEY = "vd_store_token";
 const savedToken = readStoredToken();
 const api = new StoreApi(savedToken);
 type Tab = "home" | "products" | "wallet" | "history";
+const initialTab = readInitialTab();
 type DeliveryNotice = {
   title: string;
   deliveryText: string;
@@ -71,7 +72,7 @@ function App() {
   const [loading, setLoading] = useState("boot");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   const products = useMemo(() => (catalog ? flattenCatalog(catalog) : []), [catalog]);
   const filteredProducts = useMemo(() => {
@@ -617,7 +618,6 @@ function ProductCard({
     <article className="product-card" data-brand={brandTone(product.name)}>
       <div className="product-media">
         {imageSrc ? <img src={imageSrc} alt={`${product.name} tại VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{icon}</span>}
-        <span className="product-brand-mark">{icon}</span>
       </div>
       <div className="product-body">
         <div className="product-kicker">
@@ -1034,6 +1034,11 @@ function readStoredToken() {
   return readCookie(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
 }
 
+function readInitialTab(): Tab {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return tab === "products" || tab === "wallet" || tab === "history" ? tab : "home";
+}
+
 function persistSessionToken(token: string) {
   const maxAge = 60 * 60 * 24 * 400;
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
@@ -1068,8 +1073,11 @@ function brandTone(name: string) {
 }
 
 function productArtUrl(product: Product) {
-  if (product.imageUrl?.trim()) return product.imageUrl;
-  return `/product-art/${brandTone(product.name)}.svg`;
+  const brand = brandTone(product.name);
+  const imageUrl = product.imageUrl?.trim();
+  if (imageUrl?.includes("/product-art/")) return `/product-art/${brand}.svg?v=20260529b`;
+  if (imageUrl) return imageUrl;
+  return `/product-art/${brand}.svg?v=20260529b`;
 }
 
 function brandGlyph(name: string) {

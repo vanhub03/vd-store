@@ -5,6 +5,4 @@
   <circle cx="450" cy="252" r="134" fill="#eeeeee"/>
   <circle cx="450" cy="252" r="74" fill="#101010"/>
   <path d="M352 348 548 156M352 156l196 192" stroke="#eeeeee" stroke-width="22" stroke-linecap="round"/>
-  <text x="76" y="438" fill="#f7f7f7" font-family="Arial, sans-serif" font-size="44" font-weight="800">Grok</text>
-  <text x="78" y="468" fill="#a7a7a7" font-family="Arial, sans-serif" font-size="18" letter-spacing="4">SUPER ACCOUNT</text>
 </svg>
