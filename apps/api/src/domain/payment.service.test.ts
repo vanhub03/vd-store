@@ -183,4 +183,47 @@ describe("PaymentService", () => {
     expect(telegram.notifyDirectOrderFulfilled).not.toHaveBeenCalled();
     expect(telegram.notifyPaymentCredited).not.toHaveBeenCalled();
   });
+
+  it("ignores duplicate SePay transaction ids before touching payments or wallet balance", async () => {
+    const prisma = {
+      bankTransaction: {
+        findUnique: vi.fn().mockResolvedValue({ id: "bank_tx_existing", providerTransactionId: "DUP123" }),
+        create: vi.fn(),
+        update: vi.fn()
+      },
+      payment: {
+        findUnique: vi.fn()
+      }
+    };
+    const shop = {
+      creditTopup: vi.fn(),
+      fulfillDirectOrder: vi.fn()
+    };
+    const telegram = {
+      deleteMessage: vi.fn(),
+      notifyTopup: vi.fn(),
+      notifyDirectOrderFulfilled: vi.fn(),
+      notifyPaymentCredited: vi.fn()
+    };
+
+    const service = new PaymentService(prisma as never, shop as never, telegram as never);
+    const result = await service.handleSepayWebhook({
+      id: "DUP123",
+      gateway: "TPBank",
+      accountNumber: "03219071601",
+      content: "NAPDUP123",
+      transferType: "in",
+      transferAmount: 2000
+    });
+
+    expect(result).toEqual({ ok: true, duplicate: true });
+    expect(prisma.bankTransaction.findUnique).toHaveBeenCalledWith({
+      where: { providerTransactionId: "DUP123" }
+    });
+    expect(prisma.bankTransaction.create).not.toHaveBeenCalled();
+    expect(prisma.payment.findUnique).not.toHaveBeenCalled();
+    expect(shop.creditTopup).not.toHaveBeenCalled();
+    expect(shop.fulfillDirectOrder).not.toHaveBeenCalled();
+    expect(telegram.notifyTopup).not.toHaveBeenCalled();
+  });
 });
