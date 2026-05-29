@@ -679,36 +679,79 @@ function fitCaption(caption: string) {
 }
 
 async function launch() {
-  await configureTelegramMenu();
   const mode = process.env.TELEGRAM_BOT_MODE ?? "polling";
   if (mode === "webhook") {
     const publicUrl = process.env.TELEGRAM_WEBHOOK_PUBLIC_URL;
     if (!publicUrl) throw new Error("TELEGRAM_WEBHOOK_PUBLIC_URL is required in webhook mode.");
     const path = process.env.TELEGRAM_WEBHOOK_PATH ?? "/telegram/webhook";
-    await bot.telegram.setWebhook(`${publicUrl}${path}`);
+    await withTimeout(bot.telegram.setWebhook(`${publicUrl}${path}`), 10_000, "setWebhook");
     const app = express();
-    app.get("/health", (_request, response) => {
-      response.json({ ok: true, service: "vd-store-bot", timestamp: new Date().toISOString() });
-    });
-    app.get("/assets/bot-card.png", (_request, response) => {
-      response.type("png").send(BOT_CARD_PNG);
-    });
+    registerHealthRoutes(app);
     app.use(bot.webhookCallback(path));
     const port = Number(process.env.BOT_PORT ?? process.env.PORT ?? 3001);
     app.listen(port, () => console.log(`VD Store bot webhook listening on ${port}${path}`));
+    configureTelegramMenu().catch((error) => console.error("Telegram menu setup failed:", error));
     return;
   }
 
-  await bot.launch();
+  bot.launch().catch((error) => {
+    console.error("VD Store bot polling failed:", error);
+    process.exit(1);
+  });
   console.log("VD Store bot started in polling mode.");
+  startHealthServer();
+  configureTelegramMenu().catch((error) => console.error("Telegram menu setup failed:", error));
 }
 
 async function configureTelegramMenu() {
-  await bot.telegram.setMyCommands(BOT_COMMANDS);
-  await bot.telegram.setChatMenuButton({ menuButton: { type: "commands" } });
+  await withTimeout(bot.telegram.setMyCommands(BOT_COMMANDS), 10_000, "setMyCommands");
+  await withTimeout(bot.telegram.setChatMenuButton({ menuButton: { type: "commands" } }), 10_000, "setChatMenuButton");
 }
 
 launch();
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+function startHealthServer() {
+  const app = express();
+  registerHealthRoutes(app);
+  const port = Number(process.env.BOT_PORT ?? process.env.PORT ?? 3001);
+  app.listen(port, () => console.log(`VD Store bot health listening on ${port}`));
+}
+
+function registerHealthRoutes(app: express.Express) {
+  app.get("/health", (_request, response) => {
+    response.json({ ok: true, service: "vd-store-bot", mode: process.env.TELEGRAM_BOT_MODE ?? "polling", timestamp: new Date().toISOString() });
+  });
+  app.get("/assets/bot-card.png", (_request, response) => {
+    response.type("png").send(BOT_CARD_PNG);
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function stopBot(signal: "SIGINT" | "SIGTERM") {
+  try {
+    bot.stop(signal);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message !== "Bot is not running!") {
+      console.error(`Failed to stop Telegram bot on ${signal}:`, error);
+    }
+  }
+}
+
+process.once("SIGINT", () => stopBot("SIGINT"));
+process.once("SIGTERM", () => stopBot("SIGTERM"));
