@@ -421,43 +421,41 @@ h1 {
   right: auto;
   bottom: auto;
   width: 100%;
-  max-width: 480px;
+  max-width: 580px;
   height: 480px;
   pointer-events: none;
   z-index: 2;
   opacity: 0.85;
   justify-self: end;
+  margin-right: -40px;
 }
 
 .checkout-stage {
   position: relative;
   height: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  animation: stageFloat 8s ease-in-out infinite;
+  border: none;
+  animation: stageFloat 12s ease-in-out infinite;
 }
 
-.checkout-stage::before,
-.checkout-stage::after {
+/* Elliptical orbital path visual indicator */
+.checkout-stage::before {
   content: "";
   position: absolute;
-  left: 8%;
-  top: 25%;
-  height: 1px;
-  width: 74%;
-  background: var(--muted-2);
-  opacity: 0.3;
-}
-
-.checkout-stage::after {
-  left: 15%;
-  top: 55%;
-  width: 70%;
-  opacity: 0.2;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 380px;
+  height: 160px;
+  border: 1px dashed rgba(244, 241, 234, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .stage-card {
   position: absolute;
+  left: 50%;
+  top: 50%;
   display: grid;
   gap: 6px;
   padding: 14px;
@@ -465,7 +463,14 @@ h1 {
   border: 1px solid var(--line);
   border-radius: var(--r-input);
   color: var(--ink);
-  animation: cardHover 7s ease-in-out infinite;
+  transform: translate(-50%, -50%);
+}
+
+.stage-card:hover {
+  animation-play-state: paused !important;
+  border-color: var(--ink-2);
+  box-shadow: 0 15px 40px rgba(244, 241, 234, 0.15) !important;
+  cursor: help;
 }
 
 .stage-card span,
@@ -485,24 +490,21 @@ h1 {
 }
 
 .stage-product {
-  left: 2%;
-  top: 6%;
   width: 170px;
+  animation: orbitPlanetary 24s linear infinite;
+  animation-delay: 0s;
 }
 
 .stage-qr {
-  left: 20%;
-  top: 34%;
   width: 160px;
-  z-index: 2;
-  animation-delay: 300ms;
+  animation: orbitPlanetary 24s linear infinite;
+  animation-delay: -8s;
 }
 
 .stage-ledger {
-  right: 2%;
-  top: 68%;
   width: 190px;
-  animation-delay: 700ms;
+  animation: orbitPlanetary 24s linear infinite;
+  animation-delay: -16s;
 }
 
 .qr-matrix {
@@ -1795,6 +1797,34 @@ footer button:hover {
 @keyframes cardHover {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-8px); }
+}
+
+@keyframes orbitPlanetary {
+  0% {
+    transform: translate(calc(-50% + 190px), calc(-50% + 0px)) scale(1);
+    z-index: 3;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+  25% {
+    transform: translate(calc(-50% + 0px), calc(-50% + 80px)) scale(1.05);
+    z-index: 4;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55);
+  }
+  50% {
+    transform: translate(calc(-50% - 190px), calc(-50% + 0px)) scale(1);
+    z-index: 3;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+  75% {
+    transform: translate(calc(-50% + 0px), calc(-50% - 80px)) scale(0.9);
+    z-index: 1;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+  100% {
+    transform: translate(calc(-50% + 190px), calc(-50% + 0px)) scale(1);
+    z-index: 3;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
 }
 
 @keyframes routeSlide {
