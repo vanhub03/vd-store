@@ -15,7 +15,7 @@ jobs:
           set -euo pipefail
           for url in \
             "https://api.vanhdao.io.vn/health" \
-            "https://vd-store-bot.onrender.com/health"
+            "https://bot.vanhdao.io.vn/health"
           do
             echo "Pinging ${url}"
             curl --fail --silent --show-error --max-time 60 --retry 3 --retry-delay 8 "${url}" >/dev/null
