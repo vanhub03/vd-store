@@ -1,11 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 loadEnv(path.join(root, ".env"));
 
+const requireFromApi = createRequire(path.join(root, "apps/api/package.json"));
+const { PrismaClient } = requireFromApi("@prisma/client");
 const prisma = new PrismaClient();
 const baseUrl = (process.env.STORE_PRODUCT_ART_BASE_URL ?? "https://vanhdao.io.vn/product-art").replace(/\/$/, "");
 
@@ -50,7 +52,7 @@ function inferBrand(name) {
   const lower = name.toLocaleLowerCase("vi-VN");
   if (lower.includes("chatgpt") || lower.includes("openai")) return "openai";
   if (lower.includes("claude")) return "claude";
-  if (lower.includes("gemini")) return "gemini";
+  if (lower.includes("gemini") || lower.includes("gemeni")) return "gemini";
   if (lower.includes("canva")) return "canva";
   if (lower.includes("youtube")) return "youtube";
   if (lower.includes("adobe")) return "adobe";

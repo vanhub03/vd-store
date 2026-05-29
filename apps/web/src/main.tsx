@@ -1057,7 +1057,7 @@ function brandTone(name: string) {
   const lower = name.toLocaleLowerCase("vi-VN");
   if (lower.includes("chatgpt") || lower.includes("openai")) return "openai";
   if (lower.includes("claude")) return "claude";
-  if (lower.includes("gemini")) return "gemini";
+  if (lower.includes("gemini") || lower.includes("gemeni")) return "gemini";
   if (lower.includes("canva")) return "canva";
   if (lower.includes("youtube")) return "youtube";
   if (lower.includes("adobe")) return "adobe";
@@ -1076,7 +1076,7 @@ function brandGlyph(name: string) {
   const lower = name.toLocaleLowerCase("vi-VN");
   if (lower.includes("chatgpt") || lower.includes("openai")) return "🤖";
   if (lower.includes("claude")) return "🟫";
-  if (lower.includes("gemini")) return "✦";
+  if (lower.includes("gemini") || lower.includes("gemeni")) return "✦";
   if (lower.includes("adobe")) return "🅰️";
   if (lower.includes("capcut")) return "🎬";
   if (lower.includes("youtube")) return "▶️";
