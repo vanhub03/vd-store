@@ -486,24 +486,24 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
             <b>10 phút</b>
           </div>
           <div className="stage-card stage-ledger">
-            <span>Ví VD</span>
-            <b>+98.000 d</b>
-            <i>SePay đối soát</i>
+            <span>VD AI Shop</span>
+            <b>Tự động 24/7</b>
+            <i>Giao hàng tức thì</i>
           </div>
         </div>
         <div className="route-map">
           <span>Chọn hàng</span>
-          <span>Tạo QR</span>
-          <span>Đối soát</span>
-          <span>Giao hàng</span>
+          <span>Quét QR</span>
+          <span>Kích hoạt</span>
+          <span>Nhận hàng</span>
         </div>
       </div>
       <div className="hero-content reveal">
         <img className="hero-logo" src="/logo.png" alt="VD AI Shop" />
-        <p className="eyebrow">Digital goods &middot; Ví VietQR &middot; Tự đối soát</p>
+        <p className="eyebrow">Tài khoản AI Premium &middot; Tự động 24/7 &middot; Bảo hành uy tín</p>
         <h1>VD AI Shop</h1>
         <p className="hero-text">
-          Mua tài khoản AI, phần mềm, slot premium và dịch vụ số. Hệ thống tạo QR theo mã riêng, đối soát SePay tự động và chỉ hiển thị hàng sau khi thanh toán thành công.
+          Cung cấp tài khoản ChatGPT Plus, Claude Pro, Gemini Advanced và key bản quyền phần mềm chính hãng hàng đầu Việt Nam. Tự động hóa hoàn toàn, kích hoạt siêu tốc trong 30 giây giúp nâng tầm hiệu suất công việc của bạn.
         </p>
         <div className="hero-actions">
           <button className="primary-button" onClick={onShop}>
@@ -514,14 +514,14 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
           </button>
         </div>
         <div className="hero-proofline" aria-label="Tín hiệu tin cậy">
-          <span>Webhook HMAC</span>
-          <span>Ledger ví</span>
-          <span>Ẩn hàng trước thanh toán</span>
+          <span>Giao hàng tự động 24/7</span>
+          <span>Chính hãng 100%</span>
+          <span>Bảo hành 1-đổi-1</span>
         </div>
         <div className="hero-stats" style={{ "--d": "200ms" } as React.CSSProperties}>
-          <span><ShieldCheck size={16} /> QR có mã riêng</span>
-          <span><TimerReset size={16} /> Hết hạn tự động</span>
-          <span><PackageCheck size={16} /> Giao sau thanh toán</span>
+          <span><ShieldCheck size={16} /> Tiết kiệm đến 70%</span>
+          <span><TimerReset size={16} /> Hỗ trợ kỹ thuật 24/7</span>
+          <span><PackageCheck size={16} /> Thanh toán VietQR an toàn</span>
         </div>
       </div>
     </section>
@@ -532,25 +532,25 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
 
 function TrustShowcase() {
   const cards = [
-    { icon: <BadgeCheck />, title: "Đối soát rõ ràng", text: "Mỗi QR có mã NAP/DH riêng, ghi nhận lịch sử ví và đơn hàng để tra cứu sau này." },
-    { icon: <Zap />, title: "Mua nhanh bằng ví", text: "Nạp một lần, mua nhiều lần, hệ thống tự trừ số dư và trả kết quả sau thanh toán." },
-    { icon: <Headphones />, title: "Hỗ trợ thủ công", text: "Với sản phẩm cần xử lý riêng, thông tin liên hệ admin chỉ mở sau khi đơn đã thanh toán." },
-    { icon: <ShieldCheck />, title: "Bảo mật giao dịch", text: "Webhook SePay kiểm tra mã thanh toán, số tiền và chống xử lý trùng giao dịch." }
+    { icon: <BadgeCheck />, title: "Sức mạnh AI Tối thượng", text: "Truy cập không giới hạn GPT-4o, Claude 3.5 Sonnet, Gemini Advanced. Phản hồi siêu tốc, hỗ trợ lập trình, phân tích dữ liệu chuyên nghiệp." },
+    { icon: <Zap />, title: "Sáng tạo & Giải trí Đỉnh cao", text: "Mở khóa kho tài nguyên khổng lồ của Canva Pro, Adobe Creative Cloud, CapCut Pro hay YouTube Premium không quảng cáo chất lượng cao." },
+    { icon: <Headphones />, title: "Hỗ trợ Kỹ thuật 24/7", text: "Đội ngũ kỹ thuật túc trực sẵn sàng hỗ trợ cài đặt, kích hoạt và giải quyết mọi thắc mắc của khách hàng bất cứ lúc nào." },
+    { icon: <ShieldCheck />, title: "Bảo hành 1-đổi-1 Uy tín", text: "Cam kết tài khoản hoạt động ổn định, chính hãng 100%. Chính sách bảo hành 1-đổi-1 rõ ràng trong suốt thời gian sử dụng dịch vụ." }
   ];
 
   return (
     <section className="shell trust-showcase">
       <div className="section-head compact">
         <div>
-          <p className="eyebrow reveal">Tăng độ tin cậy</p>
-          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Một quy trình mua hàng minh bạch từ QR đến giao hàng</h2>
+          <p className="eyebrow reveal">Giá trị vượt trội</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Giải pháp Premium nâng tầm năng suất công việc và học tập</h2>
         </div>
       </div>
       <div className="trust-strip reveal" style={{ "--d": "120ms" } as React.CSSProperties} aria-label="Cam kết vận hành">
-        <span>QR 10 phút</span>
-        <span>Trừ ví tức thì</span>
-        <span>Lưu lịch sử đơn</span>
-        <span>Admin nhận alert</span>
+        <span>Chính hãng 100%</span>
+        <span>Giao hàng tự động</span>
+        <span>Bảo hành trọn vẹn</span>
+        <span>Hỗ trợ tận tâm</span>
       </div>
       <div className="trust-grid">
         {cards.map((card, index) => (
@@ -569,21 +569,21 @@ function TrustShowcase() {
 
 function HowItWorks({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
   const steps = [
-    ["1", "Chọn sản phẩm", "Xem giá, số lượng còn lại và chọn mua bằng ví hoặc chuyển khoản QR."],
-    ["2", "Thanh toán", "QR được tạo theo đúng số tiền và mã nội dung riêng trong 10 phút."],
-    ["3", "Đối soát", "Khi SePay báo tiền vào, hệ thống tự cộng ví hoặc hoàn tất đơn hàng."],
-    ["4", "Nhận hàng", "Chỉ sau khi đơn thành công, hệ thống mới hiển thị hàng hoặc hướng dẫn liên hệ admin."]
+    ["1", "Lựa chọn dịch vụ", "Khám phá danh mục sản phẩm AI, thiết kế đồ họa hoặc giải trí và chọn gói phù hợp nhất."],
+    ["2", "Quét QR siêu tốc", "QR thanh toán tự động được tạo ngay lập tức với số tiền chính xác, xử lý giao dịch tức thì."],
+    ["3", "Xác thực tự động", "Giao dịch được xác minh tự động chỉ trong 5-10 giây, không cần chờ đợi xác nhận thủ công."],
+    ["4", "Nhận hàng & Sử dụng", "Thông tin tài khoản/key kèm hướng dẫn sử dụng chi tiết hiển thị trực tiếp và gửi qua Telegram."]
   ];
 
   return (
     <section className="shell flow-section">
       <div className="flow-copy reveal">
-        <h2>Không lộ hàng trước thanh toán, không cần xác nhận tay từng đơn</h2>
+        <h2>Hệ thống mua sắm tự động hóa, an toàn và bảo mật tối đa</h2>
         <p>
-          Trang web dùng chung dữ liệu với bot Telegram. Người mua có thể kiểm tra ví, lịch sử đơn, trạng thái giao dịch và quay lại xem thông tin giao hàng đã thanh toán.
+          Chúng tôi mang đến giải pháp sở hữu Premium account dễ dàng nhất. Mọi đơn hàng và số dư ví được lưu trữ minh bạch, hỗ trợ quản lý đồng bộ qua bot Telegram giúp bạn tra cứu lịch sử mua hàng mọi lúc mọi nơi.
         </p>
         <div className="flow-actions">
-          <button className="primary-button" onClick={onShop}>Mua hàng <ArrowRight size={17} /></button>
+          <button className="primary-button" onClick={onShop}>Mua ngay <ArrowRight size={17} /></button>
           <button className="ghost-button" onClick={onWallet}>Nạp ví <Wallet size={17} /></button>
         </div>
       </div>
@@ -644,10 +644,10 @@ function ProductsTab({
     <section className="shell product-section">
       <div className="section-head">
         <div>
-          <p className="eyebrow reveal">Curated digital goods</p>
-          <h2 className="reveal" style={{ "--d": "60ms" } as React.CSSProperties}>Digital <em>Assemblages.</em></h2>
+          <p className="eyebrow reveal">Sản phẩm Premium</p>
+          <h2 className="reveal" style={{ "--d": "60ms" } as React.CSSProperties}>Mở khóa Trí tuệ Nhân tạo & Sáng tạo</h2>
           <p className="product-section-copy reveal" style={{ "--d": "120ms" } as React.CSSProperties}>
-            Những gói AI, sáng tạo nội dung và premium account được tuyển chọn để mua nhanh, thanh toán rõ ràng và nhận hàng sau khi đơn hoàn tất.
+            Danh sách tài khoản premium ChatGPT, Claude, Gemini, Canva, Adobe chính hãng được tuyển chọn để tăng tốc hiệu năng làm việc, tiết kiệm tối đa chi phí.
           </p>
         </div>
         <div className="search-box">
