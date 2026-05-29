@@ -297,38 +297,42 @@ img {
 .hero {
   position: relative;
   min-height: calc(100dvh - 67px);
-  padding: clamp(60px, 10vw, 120px) clamp(20px, 5vw, 80px) clamp(40px, 6vw, 80px);
+  padding: clamp(60px, 8vw, 120px) clamp(20px, 5vw, 80px) clamp(40px, 6vw, 80px);
   overflow: hidden;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 40px;
   align-items: center;
 }
 
 .hero-backdrop {
   position: absolute;
   inset: 0;
-  opacity: 0.18;
+  background-image: 
+    linear-gradient(to right, rgba(244, 241, 234, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(244, 241, 234, 0.02) 1px, transparent 1px);
+  background-size: 56px 56px;
+  opacity: 0.8;
   overflow: hidden;
+  z-index: 1;
 }
 
-.hero-backdrop img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scale(1.03);
-  animation: heroPan 24s ease-in-out infinite alternate;
-}
-
-.hero::after {
+.hero-backdrop::after {
   content: "";
   position: absolute;
-  inset: 0;
-  background: rgba(6, 6, 6, 0.72);
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(circle, rgba(244, 241, 234, 0.04) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .hero-content {
   position: relative;
   z-index: 2;
-  max-width: 780px;
+  max-width: 680px;
 }
 
 .hero-logo {
@@ -394,9 +398,7 @@ h1 {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  position: absolute;
-  bottom: clamp(24px, 4vw, 48px);
-  right: clamp(20px, 5vw, 80px);
+  margin-top: 12px;
   z-index: 2;
 }
 
@@ -404,26 +406,27 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 10px 14px;
-  background: rgba(6, 6, 6, 0.8);
+  padding: 7px 12px;
+  background: rgba(244, 241, 234, 0.03);
   border: 1px solid var(--line);
   border-radius: var(--r-pill);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  backdrop-filter: blur(12px);
 }
 
 /* Hero motion block (checkout stages) */
 .hero-motion {
-  position: absolute;
-  right: max(20px, 5vw);
-  bottom: 100px;
-  width: min(40vw, 500px);
-  height: min(44vw, 480px);
+  position: relative;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  max-width: 480px;
+  height: 480px;
   pointer-events: none;
   z-index: 2;
-  opacity: 0.7;
+  opacity: 0.85;
+  justify-self: end;
 }
 
 .checkout-stage {
@@ -1879,18 +1882,42 @@ footer button:hover {
     margin-top: 0;
   }
 
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 48px;
+    padding: 80px 24px 60px;
+  }
+
+  .hero-content {
+    max-width: 100%;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .hero-logo {
+    margin-bottom: 20px;
+  }
+
+  .hero-text {
+    max-width: 600px;
+  }
+
+  .hero-actions {
+    justify-content: center;
+  }
+
+  .hero-proofline,
   .hero-stats {
-    position: relative;
-    bottom: auto;
-    right: auto;
-    margin-top: 20px;
+    justify-content: center;
   }
 
   .hero-motion {
-    opacity: 0.4;
-    right: -80px;
-    top: 100px;
-    width: 360px;
+    justify-self: center;
+    max-width: 420px;
+    height: 420px;
+    opacity: 0.95;
   }
 }
 

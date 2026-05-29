@@ -468,9 +468,7 @@ function HomeTab({ onShop, onWallet }: { onShop: () => void; onWallet: () => voi
 function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
   return (
     <section className="hero">
-      <div className="hero-backdrop">
-        <img src="/banner.png" alt="" />
-      </div>
+      <div className="hero-backdrop" />
       <div className="hero-motion" aria-hidden="true">
         <div className="checkout-stage">
           <div className="stage-card stage-product">
@@ -520,11 +518,11 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
           <span>Ledger ví</span>
           <span>Ẩn hàng trước thanh toán</span>
         </div>
-      </div>
-      <div className="hero-stats reveal" style={{ "--d": "200ms" } as React.CSSProperties}>
-        <span><ShieldCheck size={16} /> QR có mã riêng</span>
-        <span><TimerReset size={16} /> Hết hạn tự động</span>
-        <span><PackageCheck size={16} /> Giao sau thanh toán</span>
+        <div className="hero-stats" style={{ "--d": "200ms" } as React.CSSProperties}>
+          <span><ShieldCheck size={16} /> QR có mã riêng</span>
+          <span><TimerReset size={16} /> Hết hạn tự động</span>
+          <span><PackageCheck size={16} /> Giao sau thanh toán</span>
+        </div>
       </div>
     </section>
   );
