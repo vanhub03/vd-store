@@ -694,7 +694,7 @@ async function launch() {
       response.type("png").send(BOT_CARD_PNG);
     });
     app.use(bot.webhookCallback(path));
-    const port = Number(process.env.PORT ?? process.env.BOT_PORT ?? 3001);
+    const port = Number(process.env.BOT_PORT ?? process.env.PORT ?? 3001);
     app.listen(port, () => console.log(`VD Store bot webhook listening on ${port}${path}`));
     return;
   }
