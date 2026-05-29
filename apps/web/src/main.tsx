@@ -1,15 +1,13 @@
-import React, { FormEvent, useEffect, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
   BadgeCheck,
-  Boxes,
   Headphones,
   History,
   Home,
   KeyRound,
   Loader2,
-  Lock,
   LogOut,
   MessageCircle,
   PackageCheck,
@@ -42,7 +40,7 @@ import "./styles.css";
 const TOKEN_KEY = "vd_store_token";
 const savedToken = readStoredToken();
 const api = new StoreApi(savedToken);
-type Tab = "home" | "products" | "wallet" | "history";
+type Tab = "home" | "products" | "history";
 const initialTab = readInitialTab();
 type DeliveryNotice = {
   title: string;
@@ -58,6 +56,45 @@ type DeliveryNotice = {
   };
 };
 
+/* ─── Scroll Reveal Observer ──────────────────────────────── */
+
+function useReveal() {
+  const observed = useRef(new Set<Element>());
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("visible");
+            observer.unobserve(entry.target);
+          }
+        }
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+    );
+
+    function observe() {
+      const elements = document.querySelectorAll(".reveal:not(.visible)");
+      elements.forEach((el) => {
+        if (!observed.current.has(el)) {
+          observed.current.add(el);
+          observer.observe(el);
+        }
+      });
+    }
+
+    observe();
+    const timer = window.setInterval(observe, 400);
+    return () => {
+      window.clearInterval(timer);
+      observer.disconnect();
+    };
+  }, []);
+}
+
+/* ─── App ─────────────────────────────────────────────────── */
+
 function App() {
   const [token, setToken] = useState(savedToken);
   const [customer, setCustomer] = useState<Session["customer"] | null>(null);
@@ -69,10 +106,13 @@ function App() {
   const [qrStatus, setQrStatus] = useState<PaymentStatusResult | null>(null);
   const [delivery, setDelivery] = useState<DeliveryNotice | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
   const [loading, setLoading] = useState("boot");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+
+  useReveal();
 
   const products = useMemo(() => (catalog ? flattenCatalog(catalog) : []), [catalog]);
   const filteredProducts = useMemo(() => {
@@ -274,9 +314,9 @@ function App() {
 
   return (
     <main>
-      <Header customer={customer} balance={balance} activeTab={activeTab} onTab={setActiveTab} onLogin={() => setAuthOpen(true)} onLogout={logout} />
+      <Header customer={customer} balance={balance} activeTab={activeTab} onTab={setActiveTab} onLogin={() => setAuthOpen(true)} onLogout={logout} onWalletOpen={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} />
 
-      {activeTab === "home" ? <HomeTab onShop={() => setActiveTab("products")} onWallet={() => setActiveTab("wallet")} /> : null}
+      {activeTab === "home" ? <HomeTab onShop={() => setActiveTab("products")} onWallet={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} /> : null}
       {activeTab === "products" ? (
         <ProductsTab
           products={filteredProducts}
@@ -287,11 +327,6 @@ function App() {
           onView={setSelectedProduct}
         />
       ) : null}
-      {activeTab === "wallet" ? (
-        <section className="shell tab-shell">
-          <WalletPanel balance={balance} disabled={!token} loading={loading} onTopup={createTopup} onLogin={() => setAuthOpen(true)} />
-        </section>
-      ) : null}
       {activeTab === "history" ? (
         <section className="shell tab-shell">
           <HistoryPanel history={history} onRefresh={() => token && loadPrivateData()} loading={loading === "profile"} />
@@ -301,6 +336,9 @@ function App() {
       <Footer onTab={setActiveTab} />
 
       {authOpen ? <AuthDialog onClose={() => setAuthOpen(false)} onSession={saveSession} /> : null}
+      {walletOpen ? (
+        <WalletDialog balance={balance} loading={loading} onTopup={createTopup} onClose={() => setWalletOpen(false)} />
+      ) : null}
       {selectedProduct ? (
         <ProductDialog
           product={selectedProduct}
@@ -326,13 +364,16 @@ function App() {
   );
 }
 
+/* ─── Header ──────────────────────────────────────────────── */
+
 function Header({
   customer,
   balance,
   activeTab,
   onTab,
   onLogin,
-  onLogout
+  onLogout,
+  onWalletOpen
 }: {
   customer: Session["customer"] | null;
   balance: number;
@@ -340,12 +381,12 @@ function Header({
   onTab: (tab: Tab) => void;
   onLogin: () => void;
   onLogout: () => void;
+  onWalletOpen: () => void;
 }) {
   const navItems: Array<{ tab: Tab; label: string; icon: React.ReactNode }> = [
-    { tab: "home", label: "Home", icon: <Home size={17} /> },
-    { tab: "products", label: "Sản phẩm", icon: <ShoppingBag size={17} /> },
-    { tab: "wallet", label: "Ví", icon: <Wallet size={17} /> },
-    { tab: "history", label: "Lịch sử", icon: <History size={17} /> }
+    { tab: "home", label: "Home", icon: <Home size={16} /> },
+    { tab: "products", label: "Sản phẩm", icon: <ShoppingBag size={16} /> },
+    { tab: "history", label: "Lịch sử", icon: <History size={16} /> }
   ];
 
   return (
@@ -365,25 +406,27 @@ function Header({
       <div className="top-actions">
         {customer ? (
           <>
-            <span className="balance-pill">
-              <Wallet size={16} /> {formatVnd(balance)}
-            </span>
             <span className="customer-pill">
-              <UserRound size={16} /> {customer.displayName ?? customer.email}
+              <UserRound size={15} /> {customer.displayName ?? customer.email}
+              <button className="balance-pill" onClick={onWalletOpen} title="Nạp ví">
+                <Wallet size={14} />{formatVnd(balance)}
+              </button>
             </span>
             <button className="icon-button" onClick={onLogout} aria-label="Đăng xuất">
-              <LogOut size={18} />
+              <LogOut size={17} />
             </button>
           </>
         ) : (
           <button className="primary-button" onClick={onLogin}>
-            <KeyRound size={18} /> Đăng nhập
+            <KeyRound size={17} /> Đăng nhập
           </button>
         )}
       </div>
     </header>
   );
 }
+
+/* ─── Home Tab ────────────────────────────────────────────── */
 
 function HomeTab({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
   return (
@@ -396,6 +439,8 @@ function HomeTab({ onShop, onWallet }: { onShop: () => void; onWallet: () => voi
   );
 }
 
+/* ─── Hero ────────────────────────────────────────────────── */
+
 function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
   return (
     <section className="hero">
@@ -406,7 +451,7 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
         <div className="checkout-stage">
           <div className="stage-card stage-product">
             <span>ChatGPT Plus</span>
-            <b>250.000 đ</b>
+            <b>250.000 d</b>
             <i>5 còn lại</i>
           </div>
           <div className="stage-card stage-qr">
@@ -420,8 +465,8 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
           </div>
           <div className="stage-card stage-ledger">
             <span>Ví VD</span>
-            <b>+98.000 đ</b>
-            <i>SePay matched</i>
+            <b>+98.000 d</b>
+            <i>SePay đối soát</i>
           </div>
         </div>
         <div className="route-map">
@@ -433,17 +478,17 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
       </div>
       <div className="hero-content reveal">
         <img className="hero-logo" src="/logo.png" alt="VD AI Shop" />
-        <p className="eyebrow">Digital goods, ví VietQR, tự đối soát</p>
+        <p className="eyebrow">Digital goods &middot; Ví VietQR &middot; Tự đối soát</p>
         <h1>VD AI Shop</h1>
         <p className="hero-text">
           Mua tài khoản AI, phần mềm, slot premium và dịch vụ số. Hệ thống tạo QR theo mã riêng, đối soát SePay tự động và chỉ hiển thị hàng sau khi thanh toán thành công.
         </p>
         <div className="hero-actions">
           <button className="primary-button" onClick={onShop}>
-            <ShoppingBag size={19} /> Xem sản phẩm
+            <ShoppingBag size={18} /> Xem sản phẩm
           </button>
           <button className="ghost-button" onClick={onWallet}>
-            <QrCode size={19} /> Nạp ví
+            <QrCode size={18} /> Nạp ví
           </button>
         </div>
         <div className="hero-proofline" aria-label="Tín hiệu tin cậy">
@@ -452,14 +497,16 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
           <span>Ẩn hàng trước thanh toán</span>
         </div>
       </div>
-      <div className="hero-stats reveal">
-        <span><ShieldCheck size={18} /> QR có mã riêng</span>
-        <span><TimerReset size={18} /> Hết hạn tự động</span>
-        <span><PackageCheck size={18} /> Giao sau thanh toán</span>
+      <div className="hero-stats reveal" style={{ "--d": "200ms" } as React.CSSProperties}>
+        <span><ShieldCheck size={16} /> QR có mã riêng</span>
+        <span><TimerReset size={16} /> Hết hạn tự động</span>
+        <span><PackageCheck size={16} /> Giao sau thanh toán</span>
       </div>
     </section>
   );
 }
+
+/* ─── Trust Showcase ──────────────────────────────────────── */
 
 function TrustShowcase() {
   const cards = [
@@ -473,11 +520,11 @@ function TrustShowcase() {
     <section className="shell trust-showcase">
       <div className="section-head compact">
         <div>
-          <p className="eyebrow">Tăng độ tin cậy</p>
-          <h2>Một quy trình mua hàng minh bạch từ QR đến giao hàng</h2>
+          <p className="eyebrow reveal">Tăng độ tin cậy</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Một quy trình mua hàng minh bạch từ QR đến giao hàng</h2>
         </div>
       </div>
-      <div className="trust-strip" aria-label="Cam kết vận hành">
+      <div className="trust-strip reveal" style={{ "--d": "120ms" } as React.CSSProperties} aria-label="Cam kết vận hành">
         <span>QR 10 phút</span>
         <span>Trừ ví tức thì</span>
         <span>Lưu lịch sử đơn</span>
@@ -485,7 +532,7 @@ function TrustShowcase() {
       </div>
       <div className="trust-grid">
         {cards.map((card, index) => (
-          <article className="trust-card reveal" style={{ "--d": `${index * 90}ms` } as React.CSSProperties} key={card.title}>
+          <article className="trust-card reveal" style={{ "--d": `${160 + index * 80}ms` } as React.CSSProperties} key={card.title}>
             {card.icon}
             <h3>{card.title}</h3>
             <p>{card.text}</p>
@@ -495,6 +542,8 @@ function TrustShowcase() {
     </section>
   );
 }
+
+/* ─── How It Works ────────────────────────────────────────── */
 
 function HowItWorks({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
   const steps = [
@@ -507,19 +556,18 @@ function HowItWorks({ onShop, onWallet }: { onShop: () => void; onWallet: () => 
   return (
     <section className="shell flow-section">
       <div className="flow-copy reveal">
-        <p className="eyebrow">Luồng xử lý</p>
         <h2>Không lộ hàng trước thanh toán, không cần xác nhận tay từng đơn</h2>
         <p>
           Trang web dùng chung dữ liệu với bot Telegram. Người mua có thể kiểm tra ví, lịch sử đơn, trạng thái giao dịch và quay lại xem thông tin giao hàng đã thanh toán.
         </p>
         <div className="flow-actions">
-          <button className="primary-button" onClick={onShop}>Mua hàng <ArrowRight size={18} /></button>
-          <button className="ghost-button" onClick={onWallet}>Nạp ví <Wallet size={18} /></button>
+          <button className="primary-button" onClick={onShop}>Mua hàng <ArrowRight size={17} /></button>
+          <button className="ghost-button" onClick={onWallet}>Nạp ví <Wallet size={17} /></button>
         </div>
       </div>
       <div className="timeline">
         {steps.map(([number, title, text], index) => (
-          <article className="timeline-item reveal" style={{ "--d": `${index * 120}ms` } as React.CSSProperties} key={title}>
+          <article className="timeline-item reveal" style={{ "--d": `${index * 100}ms` } as React.CSSProperties} key={title}>
             <span>{number}</span>
             <div>
               <h3>{title}</h3>
@@ -532,6 +580,8 @@ function HowItWorks({ onShop, onWallet }: { onShop: () => void; onWallet: () => 
   );
 }
 
+/* ─── Brand Showcase ──────────────────────────────────────── */
+
 function BrandShowcase() {
   const brands = ["ChatGPT", "Claude", "Gemini", "Adobe", "CapCut", "YouTube", "Canva", "Cursor", "Grok", "Netflix"];
   return (
@@ -542,16 +592,16 @@ function BrandShowcase() {
           <h2>Các gói AI, sáng tạo nội dung và premium account</h2>
         </div>
         <div className="brand-cloud" aria-label="Các thương hiệu phổ biến">
-          {brands.map((brand, index) => (
-            <span key={brand} style={{ "--d": `${index * 70}ms` } as React.CSSProperties}>
-              {brandGlyph(brand)} {brand}
-            </span>
+          {brands.map((brand) => (
+            <span key={brand}>{brand}</span>
           ))}
         </div>
       </div>
     </section>
   );
 }
+
+/* ─── Products Tab ────────────────────────────────────────── */
 
 function ProductsTab({
   products,
@@ -572,14 +622,14 @@ function ProductsTab({
     <section className="shell product-section">
       <div className="section-head">
         <div>
-          <p className="eyebrow">Curated digital goods</p>
-          <h2>Digital <em>Assemblages.</em></h2>
-          <p className="product-section-copy">
+          <p className="eyebrow reveal">Curated digital goods</p>
+          <h2 className="reveal" style={{ "--d": "60ms" } as React.CSSProperties}>Digital <em>Assemblages.</em></h2>
+          <p className="product-section-copy reveal" style={{ "--d": "120ms" } as React.CSSProperties}>
             Những gói AI, sáng tạo nội dung và premium account được tuyển chọn để mua nhanh, thanh toán rõ ràng và nhận hàng sau khi đơn hoàn tất.
           </p>
         </div>
         <div className="search-box">
-          <Search size={18} />
+          <Search size={17} />
           <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Tìm ChatGPT, Claude, YouTube..." />
         </div>
       </div>
@@ -600,6 +650,8 @@ function ProductsTab({
   );
 }
 
+/* ─── Product Card ────────────────────────────────────────── */
+
 function ProductCard({
   product,
   loading,
@@ -611,13 +663,12 @@ function ProductCard({
 }) {
   const stock = availableQuantity(product);
   const disabled = stock <= 0;
-  const icon = product.buttonIcon ?? brandGlyph(product.name);
   const imageSrc = productArtUrl(product);
   const stockLabel = product.deliveryType === "SHARED_CONTENT" ? "Không giới hạn" : `${stock} còn lại`;
   return (
-    <article className="product-card" data-brand={brandTone(product.name)}>
+    <article className="product-card reveal">
       <div className="product-media">
-        {imageSrc ? <img src={imageSrc} alt={`${product.name} tại VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{icon}</span>}
+        {imageSrc ? <img src={imageSrc} alt={`${product.name} tại VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{brandGlyph(product.name)}</span>}
       </div>
       <div className="product-body">
         <div className="product-kicker">
@@ -632,9 +683,9 @@ function ProductCard({
         </div>
       </div>
       <div className="product-actions">
-        <button onClick={onView}><Search size={16} /> Chi tiết</button>
+        <button onClick={onView}><Search size={15} /> Chi tiết</button>
         <button onClick={onView} disabled={loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
-          {loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={16} /> : <ShoppingBag size={16} />}
+          {loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={15} /> : <ShoppingBag size={15} />}
           Mua hàng
         </button>
       </div>
@@ -642,18 +693,18 @@ function ProductCard({
   );
 }
 
-function WalletPanel({
+/* ─── Wallet Dialog ───────────────────────────────────────── */
+
+function WalletDialog({
   balance,
-  disabled,
   loading,
   onTopup,
-  onLogin
+  onClose
 }: {
   balance: number;
-  disabled: boolean;
   loading: string;
   onTopup: (amount: number) => void;
-  onLogin: () => void;
+  onClose: () => void;
 }) {
   const [customAmount, setCustomAmount] = useState("");
   const [amountError, setAmountError] = useState("");
@@ -671,59 +722,51 @@ function WalletPanel({
   }
 
   return (
-    <section className="panel wallet-panel" id="wallet">
-      <div className="panel-title">
-        <Wallet />
-        <div>
-          <h2>Ví VD</h2>
-          <p>Số dư dùng để mua nhanh mà không cần quét QR từng đơn.</p>
+    <div className="overlay">
+      <div className="dialog">
+        <button className="close" onClick={onClose}>&times;</button>
+        <h2>Ví VD</h2>
+        <p className="muted">Số dư dùng để mua nhanh mà không cần quét QR từng đơn.</p>
+        <div className="wallet-number">{formatVnd(balance)}</div>
+        <div className="amount-grid">
+          {amounts.map((amount) => (
+            <button key={amount} onClick={() => onTopup(amount)} disabled={loading === "topup"}>
+              {loading === "topup" ? <Loader2 className="spin" size={15} /> : null}
+              {formatVnd(amount)}
+            </button>
+          ))}
         </div>
-      </div>
-      <div className="wallet-number">{formatVnd(balance)}</div>
-      {disabled ? (
-        <button className="primary-button" onClick={onLogin}>
-          <Lock size={18} /> Đăng nhập để nạp ví
-        </button>
-      ) : (
-        <>
-          <div className="amount-grid">
-            {amounts.map((amount) => (
-              <button key={amount} onClick={() => onTopup(amount)} disabled={loading === "topup"}>
-                {loading === "topup" ? <Loader2 className="spin" size={16} /> : null}
-                {formatVnd(amount)}
-              </button>
-            ))}
+        <form className="custom-topup" onSubmit={submitCustomTopup}>
+          <label htmlFor="custom-amount">Nạp số tiền tùy ý</label>
+          <div>
+            <input
+              id="custom-amount"
+              inputMode="numeric"
+              min={1000}
+              placeholder="Ví dụ: 150000"
+              value={customAmount}
+              onChange={(event) => {
+                setCustomAmount(event.target.value);
+                setAmountError("");
+              }}
+            />
+            <button className="primary-button" disabled={loading === "topup"}>
+              {loading === "topup" ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />}
+              Tạo QR
+            </button>
           </div>
-          <form className="custom-topup" onSubmit={submitCustomTopup}>
-            <label htmlFor="custom-amount">Nạp số tiền tùy ý</label>
-            <div>
-              <input
-                id="custom-amount"
-                inputMode="numeric"
-                min={1000}
-                placeholder="Ví dụ: 150000"
-                value={customAmount}
-                onChange={(event) => {
-                  setCustomAmount(event.target.value);
-                  setAmountError("");
-                }}
-              />
-              <button className="primary-button" disabled={loading === "topup"}>
-                {loading === "topup" ? <Loader2 className="spin" size={18} /> : <QrCode size={18} />}
-                Tạo QR
-              </button>
-            </div>
-            {amountError ? <p className="field-error">{amountError}</p> : <p className="muted">Nhập số tiền muốn nạp, hệ thống sẽ tạo QR VietQR theo đúng số tiền đó.</p>}
-          </form>
-        </>
-      )}
-    </section>
+          {amountError ? <p className="field-error">{amountError}</p> : <p className="muted">Nhập số tiền muốn nạp, hệ thống sẽ tạo QR VietQR theo đúng số tiền đó.</p>}
+        </form>
+      </div>
+    </div>
   );
 }
 
+/* ─── History Panel ───────────────────────────────────────── */
+
 function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory | null; onRefresh: () => void; loading: boolean }) {
   return (
-    <section className="panel history-panel" id="history">
+    <section className="panel history-panel reveal" id="history">
       <div className="panel-title">
         <History />
         <div>
@@ -731,7 +774,7 @@ function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory |
           <p>Đơn hàng và biến động ví gần nhất.</p>
         </div>
         <button className="icon-button" onClick={onRefresh} disabled={loading}>
-          <RefreshCw className={loading ? "spin" : ""} size={18} />
+          <RefreshCw className={loading ? "spin" : ""} size={17} />
         </button>
       </div>
       <div className="history-list">
@@ -760,6 +803,8 @@ function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory |
   );
 }
 
+/* ─── Auth Dialog ─────────────────────────────────────────── */
+
 function AuthDialog({ onClose, onSession }: { onClose: () => void; onSession: (session: Session) => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
@@ -787,7 +832,7 @@ function AuthDialog({ onClose, onSession }: { onClose: () => void; onSession: (s
   return (
     <div className="overlay auth-overlay">
       <div className="dialog auth-dialog">
-        <button className="close" onClick={onClose}>×</button>
+        <button className="close" onClick={onClose}>&times;</button>
         <h2>{mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}</h2>
         <form onSubmit={submit}>
           {mode === "register" ? <input name="name" placeholder="Tên hiển thị" /> : null}
@@ -795,17 +840,19 @@ function AuthDialog({ onClose, onSession }: { onClose: () => void; onSession: (s
           <input name="password" type="password" minLength={6} placeholder="Mật khẩu" required />
           {error ? <div className="alert">{error}</div> : null}
           <button className="primary-button" disabled={loading}>
-            {loading ? <Loader2 className="spin" size={18} /> : <KeyRound size={18} />}
+            {loading ? <Loader2 className="spin" size={17} /> : <KeyRound size={17} />}
             {mode === "login" ? "Đăng nhập" : "Đăng ký"}
           </button>
         </form>
-        <button className="link-button" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+        <button className="link-button" onClick={() => setMode(mode === "login" ? "register" : "login")} style={{ marginTop: 14 }}>
           {mode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}
         </button>
       </div>
     </div>
   );
 }
+
+/* ─── Product Dialog ──────────────────────────────────────── */
 
 function ProductDialog({
   product,
@@ -824,16 +871,15 @@ function ProductDialog({
   const maxQuantity = product.deliveryType === "SHARED_CONTENT" ? 999 : stock;
   const [quantity, setQuantity] = useState(1);
   const invalidQuantity = quantity < 1 || quantity > maxQuantity;
-  const icon = product.buttonIcon ?? brandGlyph(product.name);
   const imageSrc = productArtUrl(product);
   const deliveryLabel = postPaymentLabel(product.deliveryType);
 
   return (
     <div className="overlay">
       <div className="dialog product-dialog">
-        <button className="close" onClick={onClose}>×</button>
+        <button className="close" onClick={onClose}>&times;</button>
         <div className="dialog-media">
-          {imageSrc ? <img src={imageSrc} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{icon}</span>}
+          {imageSrc ? <img src={imageSrc} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{brandGlyph(product.name)}</span>}
         </div>
         <div className="dialog-heading">
           <span>{product.category?.name ?? "Sản phẩm số"}</span>
@@ -860,7 +906,7 @@ function ProductDialog({
             <span>Tối đa {maxQuantity}</span>
           </div>
           <div className="quantity-stepper">
-            <button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>−</button>
+            <button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>&#8722;</button>
             <input
               id="order-quantity"
               inputMode="numeric"
@@ -878,16 +924,18 @@ function ProductDialog({
         </div>
         <div className="dialog-actions">
           <button className="primary-button" onClick={() => onWallet(quantity)} disabled={loading === `wallet:${product.id}` || invalidQuantity}>
-            {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={18} /> : <Wallet size={18} />} Mua bằng ví
+            {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={17} /> : <Wallet size={17} />} Mua bằng ví
           </button>
           <button className="ghost-button" onClick={() => onBank(quantity)} disabled={loading === `bank:${product.id}` || invalidQuantity}>
-            {loading === `bank:${product.id}` ? <Loader2 className="spin" size={18} /> : <QrCode size={18} />} Chuyển khoản QR
+            {loading === `bank:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} Chuyển khoản QR
           </button>
         </div>
       </div>
     </div>
   );
 }
+
+/* ─── QR Dialog ───────────────────────────────────────────── */
 
 function QrDialog({
   payment,
@@ -905,7 +953,7 @@ function QrDialog({
   return (
     <div className="overlay">
       <div className="dialog qr-dialog">
-        <button className="close" onClick={onClose}>×</button>
+        <button className="close" onClick={onClose}>&times;</button>
         <h2>Quét QR thanh toán</h2>
         <img className="qr-image" src={payment.qrImageUrl} alt={`QR ${payment.code}`} />
         <div className="detail-grid">
@@ -915,13 +963,15 @@ function QrDialog({
           <span>Trạng thái</span><b>{statusLabel(status?.status ?? "PENDING")}</b>
         </div>
         <p className="muted">Sau khi SePay báo tiền vào, hệ thống tự cộng ví hoặc hoàn tất đơn hàng. Thông tin nhận hàng chỉ hiển thị khi đơn đã thanh toán thành công.</p>
-        <button className="ghost-button" onClick={onRefresh} disabled={loading}>
-          <RefreshCw className={loading ? "spin" : ""} size={18} /> Kiểm tra trạng thái
+        <button className="ghost-button" onClick={onRefresh} disabled={loading} style={{ width: "100%", marginTop: 12 }}>
+          <RefreshCw className={loading ? "spin" : ""} size={17} /> Kiểm tra trạng thái
         </button>
       </div>
     </div>
   );
 }
+
+/* ─── Delivery Dialog ─────────────────────────────────────── */
 
 function DeliveryDialog({ delivery, onClose }: { delivery: DeliveryNotice; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
@@ -942,7 +992,7 @@ function DeliveryDialog({ delivery, onClose }: { delivery: DeliveryNotice; onClo
   return (
     <div className="overlay">
       <div className="dialog">
-        <button className="close" onClick={onClose}>×</button>
+        <button className="close" onClick={onClose}>&times;</button>
         <h2>{delivery.title}</h2>
         {delivery.balanceAfter !== undefined ? <p>Số dư hiện tại: <b>{formatVnd(delivery.balanceAfter)}</b></p> : null}
         {isManualOrder ? (
@@ -965,32 +1015,38 @@ function DeliveryDialog({ delivery, onClose }: { delivery: DeliveryNotice; onClo
   );
 }
 
+/* ─── Floating CTAs ───────────────────────────────────────── */
+
 function FloatingCtas() {
   return (
     <div className="floating-ctas" aria-label="Liên hệ nhanh">
       <a href="https://zalo.me/0377952999" target="_blank" rel="noreferrer">
-        <MessageCircle size={18} /> Zalo
+        <MessageCircle size={16} /> Zalo
       </a>
       <a href="https://www.facebook.com/vanh.dao.735/" target="_blank" rel="noreferrer">
         <span className="brand-letter">f</span> Facebook
       </a>
       <a href="https://t.me/vanhdao99" target="_blank" rel="noreferrer">
-        <Send size={18} /> Telegram
+        <Send size={16} /> Telegram
       </a>
     </div>
   );
 }
 
+/* ─── Footer ──────────────────────────────────────────────── */
+
 function Footer({ onTab }: { onTab: (tab: Tab) => void }) {
   return (
     <footer>
       <span>VD AI Shop</span>
-      <span>Thông minh - tiện lợi - uy tín</span>
+      <span>Thông minh &middot; tiện lợi &middot; uy tín</span>
       <button onClick={() => onTab("products")}>Xem sản phẩm</button>
       <a href="https://t.me/vanhdao99">Telegram @vanhdao99</a>
     </footer>
   );
 }
+
+/* ─── Utility Functions (unchanged logic) ─────────────────── */
 
 function postPaymentLabel(type: Product["deliveryType"]) {
   if (type === "STOCK_ITEM") return "Nhận sau thanh toán";
@@ -1036,7 +1092,7 @@ function readStoredToken() {
 
 function readInitialTab(): Tab {
   const tab = new URLSearchParams(window.location.search).get("tab");
-  return tab === "products" || tab === "wallet" || tab === "history" ? tab : "home";
+  return tab === "products" || tab === "history" ? tab : "home";
 }
 
 function persistSessionToken(token: string) {
@@ -1082,17 +1138,17 @@ function productArtUrl(product: Product) {
 
 function brandGlyph(name: string) {
   const lower = name.toLocaleLowerCase("vi-VN");
-  if (lower.includes("chatgpt") || lower.includes("openai")) return "🤖";
-  if (lower.includes("claude")) return "🟫";
-  if (lower.includes("gemini") || lower.includes("gemeni")) return "✦";
-  if (lower.includes("adobe")) return "🅰️";
-  if (lower.includes("capcut")) return "🎬";
-  if (lower.includes("youtube")) return "▶️";
-  if (lower.includes("canva")) return "🟣";
-  if (lower.includes("cursor")) return "❌";
-  if (lower.includes("grok")) return "◩";
-  if (lower.includes("netflix")) return "🎞️";
-  return "🛍️";
+  if (lower.includes("chatgpt") || lower.includes("openai")) return "\u{1F916}";
+  if (lower.includes("claude")) return "\u{1F7EB}";
+  if (lower.includes("gemini") || lower.includes("gemeni")) return "\u2726";
+  if (lower.includes("adobe")) return "\u{1F170}\uFE0F";
+  if (lower.includes("capcut")) return "\u{1F3AC}";
+  if (lower.includes("youtube")) return "\u25B6\uFE0F";
+  if (lower.includes("canva")) return "\u{1F7E3}";
+  if (lower.includes("cursor")) return "\u274C";
+  if (lower.includes("grok")) return "\u25E9";
+  if (lower.includes("netflix")) return "\u{1F39E}\uFE0F";
+  return "\u{1F6CD}\uFE0F";
 }
 
 createRoot(document.getElementById("root")!).render(

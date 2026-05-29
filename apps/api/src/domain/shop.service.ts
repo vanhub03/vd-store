@@ -550,10 +550,12 @@ export class ShopService {
   async createProduct(input: ProductInput, adminId: string) {
     const priceData = normalizeProductPrices(input, true);
     assertNonNegativeStock(input.manualStock);
+    const imageUrl = input.imageUrl ?? detectBrandImageUrl(input.name);
     const product = await this.prisma.product.create({
       data: {
         ...input,
         ...priceData,
+        imageUrl,
         slug: input.slug ? slugify(input.slug) : slugify(input.name),
         buttonIcon: normalizeProductIcon(input.buttonIcon, input.name),
         manualInstructions: input.manualInstructions?.trim() || defaultManualInstructions()
@@ -1271,4 +1273,23 @@ function dateParts(date: Date) {
     month: Number(parts.find((part) => part.type === "month")?.value),
     day: Number(parts.find((part) => part.type === "day")?.value)
   };
+}
+
+/**
+ * Detect brand from product name and return the corresponding product-art URL.
+ * Same logic as the frontend `brandTone` function to keep images consistent.
+ */
+function detectBrandImageUrl(name: string): string {
+  const lower = name.toLowerCase();
+  let brand = "default";
+  if (lower.includes("chatgpt") || lower.includes("openai")) brand = "openai";
+  else if (lower.includes("claude")) brand = "claude";
+  else if (lower.includes("gemini") || lower.includes("gemeni")) brand = "gemini";
+  else if (lower.includes("canva")) brand = "canva";
+  else if (lower.includes("youtube")) brand = "youtube";
+  else if (lower.includes("adobe")) brand = "adobe";
+  else if (lower.includes("capcut")) brand = "capcut";
+  else if (lower.includes("grok")) brand = "grok";
+  else if (lower.includes("cursor")) brand = "cursor";
+  return `/product-art/${brand}.svg`;
 }
