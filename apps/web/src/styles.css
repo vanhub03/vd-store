@@ -442,7 +442,7 @@ h1 {
   content: "";
   position: absolute;
   left: 8%;
-  top: 42%;
+  top: 25%;
   height: 1px;
   width: 74%;
   background: var(--muted-2);
@@ -450,9 +450,9 @@ h1 {
 }
 
 .checkout-stage::after {
-  left: 24%;
-  top: 63%;
-  width: 58%;
+  left: 15%;
+  top: 55%;
+  width: 70%;
   opacity: 0.2;
 }
 
@@ -485,23 +485,23 @@ h1 {
 }
 
 .stage-product {
-  left: 3%;
-  top: 10%;
-  width: 190px;
+  left: 2%;
+  top: 6%;
+  width: 170px;
 }
 
 .stage-qr {
-  left: 34%;
-  top: 30%;
-  width: 170px;
+  left: 20%;
+  top: 34%;
+  width: 160px;
   z-index: 2;
   animation-delay: 300ms;
 }
 
 .stage-ledger {
-  right: 1%;
-  top: 58%;
-  width: 200px;
+  right: 2%;
+  top: 68%;
+  width: 190px;
   animation-delay: 700ms;
 }
 

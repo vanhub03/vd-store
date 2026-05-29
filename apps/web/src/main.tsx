@@ -469,6 +469,32 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
   return (
     <section className="hero">
       <div className="hero-backdrop" />
+      <div className="hero-content reveal">
+        <img className="hero-logo" src="/logo.png" alt="VD AI Shop" />
+        <p className="eyebrow">Tài khoản AI Premium &middot; Tự động 24/7 &middot; Bảo hành uy tín</p>
+        <h1>VD AI Shop</h1>
+        <p className="hero-text">
+          Cung cấp tài khoản ChatGPT Plus, Claude Pro, Gemini Advanced và key bản quyền phần mềm chính hãng hàng đầu Việt Nam. Tự động hóa hoàn toàn, kích hoạt siêu tốc trong 30 giây giúp nâng tầm hiệu suất công việc của bạn.
+        </p>
+        <div className="hero-actions">
+          <button className="primary-button" onClick={onShop}>
+            <ShoppingBag size={18} /> Xem sản phẩm
+          </button>
+          <button className="ghost-button" onClick={onWallet}>
+            <QrCode size={18} /> Nạp ví
+          </button>
+        </div>
+        <div className="hero-proofline" aria-label="Tín hiệu tin cậy">
+          <span>Giao hàng tự động 24/7</span>
+          <span>Chính hãng 100%</span>
+          <span>Bảo hành 1-đổi-1</span>
+        </div>
+        <div className="hero-stats" style={{ "--d": "200ms" } as React.CSSProperties}>
+          <span><ShieldCheck size={16} /> Tiết kiệm đến 70%</span>
+          <span><TimerReset size={16} /> Hỗ trợ kỹ thuật 24/7</span>
+          <span><PackageCheck size={16} /> Thanh toán VietQR an toàn</span>
+        </div>
+      </div>
       <div className="hero-motion" aria-hidden="true">
         <div className="checkout-stage">
           <div className="stage-card stage-product">
@@ -496,32 +522,6 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
           <span>Quét QR</span>
           <span>Kích hoạt</span>
           <span>Nhận hàng</span>
-        </div>
-      </div>
-      <div className="hero-content reveal">
-        <img className="hero-logo" src="/logo.png" alt="VD AI Shop" />
-        <p className="eyebrow">Tài khoản AI Premium &middot; Tự động 24/7 &middot; Bảo hành uy tín</p>
-        <h1>VD AI Shop</h1>
-        <p className="hero-text">
-          Cung cấp tài khoản ChatGPT Plus, Claude Pro, Gemini Advanced và key bản quyền phần mềm chính hãng hàng đầu Việt Nam. Tự động hóa hoàn toàn, kích hoạt siêu tốc trong 30 giây giúp nâng tầm hiệu suất công việc của bạn.
-        </p>
-        <div className="hero-actions">
-          <button className="primary-button" onClick={onShop}>
-            <ShoppingBag size={18} /> Xem sản phẩm
-          </button>
-          <button className="ghost-button" onClick={onWallet}>
-            <QrCode size={18} /> Nạp ví
-          </button>
-        </div>
-        <div className="hero-proofline" aria-label="Tín hiệu tin cậy">
-          <span>Giao hàng tự động 24/7</span>
-          <span>Chính hãng 100%</span>
-          <span>Bảo hành 1-đổi-1</span>
-        </div>
-        <div className="hero-stats" style={{ "--d": "200ms" } as React.CSSProperties}>
-          <span><ShieldCheck size={16} /> Tiết kiệm đến 70%</span>
-          <span><TimerReset size={16} /> Hỗ trợ kỹ thuật 24/7</span>
-          <span><PackageCheck size={16} /> Thanh toán VietQR an toàn</span>
         </div>
       </div>
     </section>
