@@ -1,0 +1,112 @@
+name: Deploy VPS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vps-main
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy API, bot, and admin to VPS
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure SSH
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vd_store_vps
+          chmod 600 ~/.ssh/vd_store_vps
+          ssh-keyscan -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Package repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='apps/*/node_modules' \
+            --exclude='apps/*/dist' \
+            --exclude='.env' \
+            -czf /tmp/vd-store-deploy.tar.gz .
+
+      - name: Upload package
+        shell: bash
+        run: |
+          set -euo pipefail
+          scp -P "${{ secrets.VPS_PORT || '22' }}" -i ~/.ssh/vd_store_vps \
+            /tmp/vd-store-deploy.tar.gz \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/vd-store-deploy-${GITHUB_SHA}.tar.gz"
+
+      - name: Deploy on VPS
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh -p "${{ secrets.VPS_PORT || '22' }}" -i ~/.ssh/vd_store_vps \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "GITHUB_SHA=${GITHUB_SHA} bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          APP_DIR=/opt/vd-store
+          NEXT_DIR=/opt/vd-store-next
+          BACKUP_DIR=/opt/vd-store-prev-$(date +%Y%m%d%H%M%S)
+          PACKAGE=/tmp/vd-store-deploy-${GITHUB_SHA}.tar.gz
+
+          rm -rf "$NEXT_DIR"
+          mkdir -p "$NEXT_DIR"
+          tar -xzf "$PACKAGE" -C "$NEXT_DIR"
+          rm -f "$PACKAGE"
+
+          if [ -f "$APP_DIR/.env" ]; then
+            cp "$APP_DIR/.env" "$NEXT_DIR/.env"
+            cp "$APP_DIR/.env" "$NEXT_DIR/apps/api/.env"
+            cp "$APP_DIR/.env" "$NEXT_DIR/apps/bot/.env"
+            chmod 600 "$NEXT_DIR/.env" "$NEXT_DIR/apps/api/.env" "$NEXT_DIR/apps/bot/.env"
+          fi
+
+          cd "$NEXT_DIR"
+          corepack enable
+          corepack prepare pnpm@11.3.0 --activate
+          pnpm install --frozen-lockfile
+          pnpm prisma:generate
+          pnpm --filter @vd-store/api exec prisma migrate deploy
+          pnpm --filter @vd-store/api prisma:seed
+          pnpm --filter @vd-store/api build
+          pnpm --filter @vd-store/bot build
+          VITE_API_BASE_URL=https://api.vanhdao.io.vn pnpm --filter @vd-store/admin build
+
+          chmod 755 "$NEXT_DIR"
+          chmod -R a+rX "$NEXT_DIR/apps/admin/dist"
+
+          BOT_WAS_ACTIVE=0
+          if systemctl is-active --quiet vd-store-bot; then
+            BOT_WAS_ACTIVE=1
+            systemctl stop vd-store-bot
+          fi
+          systemctl stop vd-store-api || true
+
+          if [ -d "$APP_DIR" ]; then
+            mv "$APP_DIR" "$BACKUP_DIR"
+          fi
+          mv "$NEXT_DIR" "$APP_DIR"
+
+          systemctl start vd-store-api
+          if [ "$BOT_WAS_ACTIVE" = "1" ]; then
+            systemctl start vd-store-bot
+          fi
+
+          nginx -t
+          systemctl reload nginx
+          find /opt -maxdepth 1 -type d -name 'vd-store-prev-*' | sort | head -n -3 | xargs -r rm -rf
+          REMOTE
