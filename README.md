@@ -37,3 +37,11 @@ For SePay and Telegram webhooks during local development, expose the API/bot por
 
 - Render + Vercel: see `docs/deploy-render.md` and `docs/deploy-web-vercel.md`.
 - VPS production without cold start: see `docs/deploy-vps.md`.
+
+After a production deploy, run:
+
+```bash
+pnpm smoke:prod
+```
+
+This checks the storefront, admin app, API health, public catalog, auth guard, and storefront CSS constraints.

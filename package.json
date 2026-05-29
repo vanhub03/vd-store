@@ -12,6 +12,7 @@
     "dev:web": "pnpm --filter @vd-store/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "smoke:prod": "node scripts/smoke-production.mjs",
     "prisma:generate": "pnpm --filter @vd-store/api prisma:generate",
     "prisma:migrate": "pnpm --filter @vd-store/api prisma:migrate",
     "prisma:seed": "pnpm --filter @vd-store/api prisma:seed"
