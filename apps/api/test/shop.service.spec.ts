@@ -146,6 +146,105 @@ describe("ShopService", () => {
     });
     expect(notifyManualOrderIfNeeded).toHaveBeenCalledWith("order_stock_1");
   });
+
+  it("fulfills direct bank orders when SePay confirms payment before expiry", async () => {
+    const user = { id: "user_direct_1", telegramId: "web:customer_direct_1" };
+    const product = {
+      id: "product_direct_manual_1",
+      name: "Direct manual service",
+      price: 20000,
+      showInWeb: true,
+      showInBot: true,
+      status: ProductStatus.ACTIVE,
+      deliveryType: ProductDeliveryType.MANUAL,
+      manualStock: 4,
+      manualInstructions: "Gui ma don cho admin de nhan hang."
+    };
+    const tx = buildDirectOrderTx({
+      paymentId: "payment_direct_1",
+      orderId: "order_direct_1",
+      user,
+      product,
+      quantity: 2,
+      amount: 40000,
+      expiresAt: new Date(Date.now() + 60_000)
+    });
+    const prisma = {
+      $transaction: vi.fn(async (callback) => callback(tx))
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const result = await service.fulfillDirectOrder("payment_direct_1");
+
+    expect(result.outcome).toBe("fulfilled");
+    expect("deliveryText" in result ? result.deliveryText : "").toBe("Gui ma don cho admin de nhan hang.");
+    expect(tx.product.updateMany).toHaveBeenCalledWith({
+      where: { id: "product_direct_manual_1", manualStock: { gte: 2 } },
+      data: { manualStock: { decrement: 2 } }
+    });
+    expect(tx.payment.update).toHaveBeenCalledWith({
+      where: { id: "payment_direct_1" },
+      data: { status: PaymentStatus.SUCCEEDED }
+    });
+    expect(tx.order.update).toHaveBeenCalledWith({
+      where: { id: "order_direct_1" },
+      data: expect.objectContaining({
+        status: OrderStatus.FULFILLED,
+        deliveryText: "Gui ma don cho admin de nhan hang."
+      })
+    });
+    expect(tx.walletLedgerEntry.create).not.toHaveBeenCalled();
+  });
+
+  it("credits expired direct bank payments to wallet instead of fulfilling the order", async () => {
+    const user = { id: "user_direct_2", telegramId: "web:customer_direct_2" };
+    const product = {
+      id: "product_direct_stock_1",
+      name: "Expired stock service",
+      price: 30000,
+      showInWeb: true,
+      showInBot: true,
+      status: ProductStatus.ACTIVE,
+      deliveryType: ProductDeliveryType.STOCK_ITEM
+    };
+    const tx = buildDirectOrderTx({
+      paymentId: "payment_direct_expired_1",
+      orderId: "order_direct_expired_1",
+      user,
+      product,
+      quantity: 1,
+      amount: 30000,
+      expiresAt: new Date(Date.now() - 60_000)
+    });
+    const prisma = {
+      $transaction: vi.fn(async (callback) => callback(tx))
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const result = await service.fulfillDirectOrder("payment_direct_expired_1");
+
+    expect(result.outcome).toBe("credited_late_payment");
+    expect(tx.walletLedgerEntry.findFirst).toHaveBeenCalledWith({
+      where: { referencePaymentId: "payment_direct_expired_1" }
+    });
+    expect(tx.walletLedgerEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: "user_direct_2",
+        amount: 30000,
+        type: WalletEntryType.DIRECT_PAYMENT_CREDIT,
+        referencePaymentId: "payment_direct_expired_1"
+      })
+    });
+    expect(tx.payment.update).toHaveBeenCalledWith({
+      where: { id: "payment_direct_expired_1" },
+      data: { status: PaymentStatus.CREDITED_TO_WALLET }
+    });
+    expect(tx.order.update).toHaveBeenCalledWith({
+      where: { id: "order_direct_expired_1" },
+      data: { status: OrderStatus.CREDITED_TO_WALLET }
+    });
+    expect(tx.inventoryItem.findMany).not.toHaveBeenCalled();
+  });
 });
 
 function buildPurchaseTx(input: {
@@ -182,6 +281,60 @@ function buildPurchaseTx(input: {
       count: vi.fn().mockResolvedValue(inventoryItems.length),
       findMany: vi.fn().mockResolvedValue(inventoryItems),
       updateMany: vi.fn().mockResolvedValue({ count: inventoryItems.length })
+    }
+  };
+}
+
+function buildDirectOrderTx(input: {
+  paymentId: string;
+  orderId: string;
+  user: { id: string; telegramId: string };
+  product: Record<string, unknown>;
+  quantity: number;
+  amount: number;
+  expiresAt: Date;
+}) {
+  const order = {
+    id: input.orderId,
+    code: "DHWEB123",
+    userId: input.user.id,
+    productId: input.product.id,
+    quantity: input.quantity,
+    totalAmount: input.amount,
+    expiresAt: input.expiresAt,
+    product: input.product,
+    user: input.user
+  };
+  const payment = {
+    id: input.paymentId,
+    code: "DHWEB123",
+    kind: PaymentKind.DIRECT_ORDER,
+    status: PaymentStatus.PENDING,
+    amount: input.amount,
+    userId: input.user.id,
+    expiresAt: input.expiresAt,
+    order,
+    user: input.user
+  };
+  return {
+    payment: {
+      findUnique: vi.fn().mockResolvedValue(payment),
+      update: vi.fn().mockImplementation(({ data }) => Promise.resolve({ ...payment, ...data }))
+    },
+    product: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 })
+    },
+    order: {
+      update: vi.fn().mockImplementation(({ data }) => Promise.resolve({ ...order, ...data }))
+    },
+    inventoryItem: {
+      count: vi.fn().mockResolvedValue(2),
+      findMany: vi.fn().mockResolvedValue([{ id: "inv_direct_1", content: "direct-account" }]),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 })
+    },
+    walletLedgerEntry: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "ledger_direct_1", ...data }))
     }
   };
 }
