@@ -120,4 +120,67 @@ describe("PaymentService", () => {
     expect(shop.creditTopup).toHaveBeenCalledWith("payment_web_1");
     expect(telegram.notifyTopup).not.toHaveBeenCalled();
   });
+
+  it("notifies admin flow for fulfilled web direct orders without messaging web-only customers", async () => {
+    process.env.SEPAY_ACCOUNT_NUMBER = "03219071601";
+
+    const payment = {
+      id: "payment_direct_web_1",
+      code: "DHWEB123",
+      kind: PaymentKind.DIRECT_ORDER,
+      status: PaymentStatus.PENDING,
+      amount: 15000,
+      expectedAmount: 15000,
+      telegramChatId: null,
+      telegramMessageId: null,
+      user: { telegramId: "web:customer-1" },
+      order: { id: "order_direct_web_1" }
+    };
+    const latestPaymentMessage = {
+      telegramChatId: null,
+      telegramMessageId: null
+    };
+    const fulfilledOrder = { id: "order_direct_web_1" };
+    const prisma = {
+      bankTransaction: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: "bank_tx_direct_web_1" }),
+        update: vi.fn().mockResolvedValue({})
+      },
+      payment: {
+        findUnique: vi.fn().mockResolvedValueOnce(payment).mockResolvedValueOnce(latestPaymentMessage)
+      }
+    };
+    const shop = {
+      fulfillDirectOrder: vi.fn().mockResolvedValue({
+        outcome: "fulfilled",
+        order: fulfilledOrder,
+        deliveryText: "Lien he Zalo 0377952999 de nhan hang.",
+        user: payment.user
+      }),
+      notifyManualOrderIfNeeded: vi.fn().mockResolvedValue(undefined)
+    };
+    const telegram = {
+      deleteMessage: vi.fn().mockResolvedValue(undefined),
+      notifyDirectOrderFulfilled: vi.fn().mockResolvedValue(undefined),
+      notifyPaymentCredited: vi.fn().mockResolvedValue(undefined)
+    };
+
+    const service = new PaymentService(prisma as never, shop as never, telegram as never);
+    const result = await service.handleSepayWebhook({
+      id: "WEB_DIRECT_123",
+      gateway: "TPBank",
+      accountNumber: "03219071601",
+      content: "DHWEB123",
+      transferType: "in",
+      transferAmount: 15000
+    });
+
+    expect(result).toEqual({ ok: true, status: "fulfilled" });
+    expect(shop.fulfillDirectOrder).toHaveBeenCalledWith("payment_direct_web_1");
+    expect(shop.notifyManualOrderIfNeeded).toHaveBeenCalledWith("order_direct_web_1");
+    expect(telegram.deleteMessage).toHaveBeenCalledWith(null, null);
+    expect(telegram.notifyDirectOrderFulfilled).not.toHaveBeenCalled();
+    expect(telegram.notifyPaymentCredited).not.toHaveBeenCalled();
+  });
 });
