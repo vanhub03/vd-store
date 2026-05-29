@@ -15,21 +15,41 @@ jobs:
     name: Deploy API, bot, and admin to VPS
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
 
     steps:
+      - name: Check VPS secrets
+        id: vps-secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$VPS_HOST" ] || [ -z "$VPS_USER" ] || [ -z "$VPS_SSH_KEY" ]; then
+            echo "::notice::VPS secrets are not configured yet, skipping VPS deployment."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
+        if: steps.vps-secrets.outputs.ready == 'true'
         uses: actions/checkout@v5
 
       - name: Configure SSH
+        if: steps.vps-secrets.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vd_store_vps
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/vd_store_vps
           chmod 600 ~/.ssh/vd_store_vps
-          ssh-keyscan -p "${{ secrets.VPS_PORT || '22' }}" "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
 
       - name: Package repository
+        if: steps.vps-secrets.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -42,19 +62,21 @@ jobs:
             -czf /tmp/vd-store-deploy.tar.gz .
 
       - name: Upload package
+        if: steps.vps-secrets.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          scp -P "${{ secrets.VPS_PORT || '22' }}" -i ~/.ssh/vd_store_vps \
+          scp -P "$VPS_PORT" -i ~/.ssh/vd_store_vps \
             /tmp/vd-store-deploy.tar.gz \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/vd-store-deploy-${GITHUB_SHA}.tar.gz"
+            "$VPS_USER@$VPS_HOST:/tmp/vd-store-deploy-${GITHUB_SHA}.tar.gz"
 
       - name: Deploy on VPS
+        if: steps.vps-secrets.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          ssh -p "${{ secrets.VPS_PORT || '22' }}" -i ~/.ssh/vd_store_vps \
-            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+          ssh -p "$VPS_PORT" -i ~/.ssh/vd_store_vps \
+            "$VPS_USER@$VPS_HOST" \
             "GITHUB_SHA=${GITHUB_SHA} bash -s" <<'REMOTE'
           set -euo pipefail
 
