@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-label="YouTube premium artwork">
+  <rect width="900" height="520" fill="#080605"/>
+  <rect x="42" y="38" width="816" height="444" rx="38" fill="#120c0b" stroke="#402420"/>
+  <path d="M130 354c66-118 152-166 258-144 134 28 232-22 294-150" fill="none" stroke="#ffb4a8" stroke-width="2" opacity=".28"/>
+  <rect x="280" y="144" width="340" height="214" rx="54" fill="#f3f0eb"/>
+  <path d="M420 198v106l92-53-92-53Z" fill="#120c0b"/>
+  <text x="76" y="438" fill="#fff8f5" font-family="Arial, sans-serif" font-size="44" font-weight="800">YouTube Premium</text>
+  <text x="78" y="468" fill="#c5a39d" font-family="Arial, sans-serif" font-size="18" letter-spacing="4">FAMILY SLOT</text>
+</svg>

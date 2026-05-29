@@ -571,8 +571,11 @@ function ProductsTab({
     <section className="shell product-section">
       <div className="section-head">
         <div>
-          <p className="eyebrow">Kho sản phẩm</p>
-          <h2>Chọn sản phẩm và thanh toán ngay trên web</h2>
+          <p className="eyebrow">Curated digital goods</p>
+          <h2>Digital <em>Assemblages.</em></h2>
+          <p className="product-section-copy">
+            Những gói AI, sáng tạo nội dung và premium account được tuyển chọn để mua nhanh, thanh toán rõ ràng và nhận hàng sau khi đơn hoàn tất.
+          </p>
         </div>
         <div className="search-box">
           <Search size={18} />
@@ -608,11 +611,12 @@ function ProductCard({
   const stock = availableQuantity(product);
   const disabled = stock <= 0;
   const icon = product.buttonIcon ?? brandGlyph(product.name);
+  const imageSrc = productArtUrl(product);
   const stockLabel = product.deliveryType === "SHARED_CONTENT" ? "Không giới hạn" : `${stock} còn lại`;
   return (
     <article className="product-card" data-brand={brandTone(product.name)}>
       <div className="product-media">
-        {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} tại VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{icon}</span>}
+        {imageSrc ? <img src={imageSrc} alt={`${product.name} tại VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{icon}</span>}
         <span className="product-brand-mark">{icon}</span>
       </div>
       <div className="product-body">
@@ -821,6 +825,7 @@ function ProductDialog({
   const [quantity, setQuantity] = useState(1);
   const invalidQuantity = quantity < 1 || quantity > maxQuantity;
   const icon = product.buttonIcon ?? brandGlyph(product.name);
+  const imageSrc = productArtUrl(product);
   const deliveryLabel = postPaymentLabel(product.deliveryType);
 
   return (
@@ -828,7 +833,7 @@ function ProductDialog({
       <div className="dialog product-dialog">
         <button className="close" onClick={onClose}>×</button>
         <div className="dialog-media">
-          {product.imageUrl ? <img src={product.imageUrl} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{icon}</span>}
+          {imageSrc ? <img src={imageSrc} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{icon}</span>}
         </div>
         <div className="dialog-heading">
           <span>{product.category?.name ?? "Sản phẩm số"}</span>
@@ -1056,7 +1061,15 @@ function brandTone(name: string) {
   if (lower.includes("canva")) return "canva";
   if (lower.includes("youtube")) return "youtube";
   if (lower.includes("adobe")) return "adobe";
+  if (lower.includes("capcut")) return "capcut";
+  if (lower.includes("grok")) return "grok";
+  if (lower.includes("cursor")) return "cursor";
   return "default";
+}
+
+function productArtUrl(product: Product) {
+  if (product.imageUrl?.trim()) return product.imageUrl;
+  return `/product-art/${brandTone(product.name)}.svg`;
 }
 
 function brandGlyph(name: string) {

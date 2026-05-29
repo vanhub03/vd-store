@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" role="img" aria-label="Adobe account artwork">
+  <rect width="900" height="520" fill="#080707"/>
+  <rect x="42" y="38" width="816" height="444" rx="38" fill="#130d0f" stroke="#44272d"/>
+  <path d="M158 128h168m248 270h170M202 174h92m334 182h74" stroke="#ffc4cf" stroke-width="2" opacity=".22"/>
+  <path d="M450 112 286 392h92l72-132 72 132h92L450 112Z" fill="#f1eee9"/>
+  <path d="M450 204 410 286h80l-40-82Z" fill="#130d0f"/>
+  <text x="76" y="438" fill="#fff7f8" font-family="Arial, sans-serif" font-size="44" font-weight="800">Adobe Creative</text>
+  <text x="78" y="468" fill="#c7a2a8" font-family="Arial, sans-serif" font-size="18" letter-spacing="4">DESIGN SUITE</text>
+</svg>

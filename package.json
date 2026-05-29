@@ -13,6 +13,7 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "smoke:prod": "node scripts/smoke-production.mjs",
+    "product-art:apply": "node scripts/apply-product-art.mjs",
     "prisma:generate": "pnpm --filter @vd-store/api prisma:generate",
     "prisma:migrate": "pnpm --filter @vd-store/api prisma:migrate",
     "prisma:seed": "pnpm --filter @vd-store/api prisma:seed"
