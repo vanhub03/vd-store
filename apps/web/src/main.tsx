@@ -402,25 +402,32 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
         <img src="/banner.png" alt="" />
       </div>
       <div className="hero-motion" aria-hidden="true">
-        <div className="orbit orbit-one">
-          <span />
-          <span />
-          <span />
+        <div className="checkout-stage">
+          <div className="stage-card stage-product">
+            <span>ChatGPT Plus</span>
+            <b>250.000 đ</b>
+            <i>5 còn lại</i>
+          </div>
+          <div className="stage-card stage-qr">
+            <span>DH_AUTO</span>
+            <div className="qr-matrix">
+              {Array.from({ length: 36 }).map((_, index) => (
+                <i key={index} />
+              ))}
+            </div>
+            <b>10 phút</b>
+          </div>
+          <div className="stage-card stage-ledger">
+            <span>Ví VD</span>
+            <b>+98.000 đ</b>
+            <i>SePay matched</i>
+          </div>
         </div>
-        <div className="orbit orbit-two">
-          <span />
-          <span />
-        </div>
-        <div className="signal-board">
-          <i />
-          <i />
-          <i />
-          <i />
-        </div>
-        <div className="ledger-rail">
-          <span>QR</span>
-          <span>SePay</span>
-          <span>Order</span>
+        <div className="route-map">
+          <span>Chọn hàng</span>
+          <span>Tạo QR</span>
+          <span>Đối soát</span>
+          <span>Giao hàng</span>
         </div>
       </div>
       <div className="hero-content reveal">
@@ -437,6 +444,11 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
           <button className="ghost-button" onClick={onWallet}>
             <QrCode size={19} /> Nạp ví
           </button>
+        </div>
+        <div className="hero-proofline" aria-label="Tín hiệu tin cậy">
+          <span>Webhook HMAC</span>
+          <span>Ledger ví</span>
+          <span>Ẩn hàng trước thanh toán</span>
         </div>
       </div>
       <div className="hero-stats reveal">
@@ -463,6 +475,12 @@ function TrustShowcase() {
           <p className="eyebrow">Tăng độ tin cậy</p>
           <h2>Một quy trình mua hàng minh bạch từ QR đến giao hàng</h2>
         </div>
+      </div>
+      <div className="trust-strip" aria-label="Cam kết vận hành">
+        <span>QR 10 phút</span>
+        <span>Trừ ví tức thì</span>
+        <span>Lưu lịch sử đơn</span>
+        <span>Admin nhận alert</span>
       </div>
       <div className="trust-grid">
         {cards.map((card, index) => (
