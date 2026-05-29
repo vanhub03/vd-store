@@ -107,6 +107,27 @@ const checks = [
     }
   },
   {
+    name: "sepay webhook rejects unsigned requests",
+    run: async () => {
+      const response = await fetchWithTimeout(`${config.apiUrl}/webhooks/sepay`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: "SMOKE_UNSIGNED",
+          gateway: "TPBank",
+          accountNumber: "03219071601",
+          content: "NAPSMOKE",
+          transferType: "in",
+          transferAmount: 1000
+        })
+      });
+      if (response.status !== 401) {
+        throw new Error(`Expected 401 for unsigned SePay webhook, got ${response.status}.`);
+      }
+      return "401 unsigned";
+    }
+  },
+  {
     name: "storefront css does not use gradient tokens",
     run: async () => {
       const html = await fetchText(config.webUrl);
