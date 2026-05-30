@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import crypto from "node:crypto";
 import { PaymentKind, PaymentStatus, Prisma } from "@prisma/client";
 import { Request } from "express";
 import { PrismaService } from "../prisma.service";
@@ -36,6 +37,24 @@ export class PaymentService {
       secret: process.env.SEPAY_WEBHOOK_SECRET
     });
     if (!ok) throw new UnauthorizedException("Invalid SePay signature.");
+  }
+
+  verifyBinancePayRequest(request: RawRequest) {
+    const mode = (process.env.BINANCE_PAY_WEBHOOK_AUTH_MODE ?? "hmac").toLowerCase();
+    if (mode === "none") return;
+    const secret = process.env.BINANCE_PAY_SECRET_KEY;
+    const signature = firstHeader(request.headers["binancepay-signature"]) ?? firstHeader(request.headers["BinancePay-Signature" as never]);
+    const timestamp = firstHeader(request.headers["binancepay-timestamp"]) ?? firstHeader(request.headers["BinancePay-Timestamp" as never]);
+    const nonce = firstHeader(request.headers["binancepay-nonce"]) ?? firstHeader(request.headers["BinancePay-Nonce" as never]);
+    if (!secret || !signature || !timestamp || !nonce) {
+      throw new UnauthorizedException("Invalid Binance Pay signature.");
+    }
+    const rawBody = request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {}));
+    const payload = `${timestamp}\n${nonce}\n${rawBody.toString("utf8")}\n`;
+    const expected = crypto.createHmac("sha512", secret).update(payload).digest("hex").toUpperCase();
+    if (!safeEqual(expected, signature.replace(/^sha512=/i, "").toUpperCase())) {
+      throw new UnauthorizedException("Invalid Binance Pay signature.");
+    }
   }
 
   async handleSepayWebhook(payload: Record<string, unknown>) {
@@ -212,6 +231,12 @@ export class PaymentService {
 function firstHeader(value: string | string[] | undefined) {
   if (Array.isArray(value)) return value[0];
   return value;
+}
+
+function safeEqual(expected: string, actual: string) {
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(actual);
+  return expectedBuffer.length === actualBuffer.length && crypto.timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
 function canNotifyTelegramUser(telegramId?: string | null): telegramId is string {
