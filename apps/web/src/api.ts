@@ -42,6 +42,8 @@ export type PaymentResult = {
     deeplink?: string | null;
     cryptoCurrency?: string | null;
     cryptoAmount?: string | number | null;
+    address?: string | null;
+    network?: string | null;
     expiresAt: string;
   };
   code: string;
@@ -51,6 +53,8 @@ export type PaymentResult = {
   deeplink?: string | null;
   cryptoCurrency?: string | null;
   cryptoAmount?: string | number | null;
+  address?: string | null;
+  network?: string | null;
   expiresAt: string;
 };
 
@@ -74,6 +78,12 @@ export type PaymentStatusResult = {
   amount: number;
   cryptoCurrency?: string | null;
   cryptoAmount?: string | number | null;
+  address?: string | null;
+  network?: string | null;
+  qrImageUrl?: string | null;
+  qrPayload?: string | null;
+  checkoutUrl?: string | null;
+  deeplink?: string | null;
   expiresAt?: string | null;
   balance: number;
   order?: {

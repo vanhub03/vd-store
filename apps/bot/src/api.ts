@@ -77,6 +77,8 @@ export type PaymentResponse = {
   deeplink?: string | null;
   cryptoCurrency?: string | null;
   cryptoAmount?: string | number | null;
+  address?: string | null;
+  network?: string | null;
   expiresAt: string;
 };
 

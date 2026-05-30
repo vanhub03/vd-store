@@ -101,6 +101,12 @@ export class StoreService {
       amount: payment.amount,
       cryptoCurrency: payment.cryptoCurrency,
       cryptoAmount: payment.cryptoAmount,
+      checkoutUrl: payment.checkoutUrl,
+      deeplink: payment.deeplink,
+      qrImageUrl: payment.qrImageUrl,
+      qrPayload: payment.qrPayload,
+      address: cryptoAddress(payment.providerPayload) ?? payment.qrPayload,
+      network: cryptoNetwork(payment.providerPayload),
       expiresAt: payment.expiresAt,
       balance: await this.shop.getWalletBalance(customerId),
       order: payment.order
@@ -153,7 +159,7 @@ export class StoreService {
   }
 
   createUsdtOrder(telegramId: string, productId: string, quantity: number) {
-    return this.shop.createBinancePayOrder(telegramId, productId, quantity, "web");
+    return this.shop.createCryptomusOrder(telegramId, productId, quantity, "web");
   }
 
   private session(customer: { id: string; email: string | null; displayName: string | null; telegramId: string }) {
@@ -185,4 +191,24 @@ export class StoreService {
 
 function normalizeEmail(email: string) {
   return email.toLowerCase().trim();
+}
+
+function cryptoPayload(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const payload = value as Record<string, unknown>;
+  const result = payload.result;
+  if (result && typeof result === "object" && !Array.isArray(result)) return result as Record<string, unknown>;
+  return payload;
+}
+
+function cryptoAddress(value: unknown) {
+  const payload = cryptoPayload(value);
+  const address = payload?.address;
+  return typeof address === "string" && address.trim() ? address.trim() : null;
+}
+
+function cryptoNetwork(value: unknown) {
+  const payload = cryptoPayload(value);
+  const network = payload?.network;
+  return typeof network === "string" && network.trim() ? network.trim() : null;
 }

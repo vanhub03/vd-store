@@ -222,7 +222,7 @@ export class ShopService {
     return { order, payment: order.payments[0], code, amount: totalAmount, expiresAt, qrImageUrl };
   }
 
-  async createBinancePayOrder(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
+  async createCryptomusOrder(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException("So luong khong hop le.");
     }
@@ -248,7 +248,7 @@ export class ShopService {
         unitPrice: product.price,
         totalAmount,
         status: OrderStatus.PENDING_PAYMENT,
-        paymentMethod: PaymentMethod.BINANCE_PAY,
+        paymentMethod: PaymentMethod.CRYPTOMUS,
         expiresAt,
         payments: {
           create: {
@@ -260,7 +260,7 @@ export class ShopService {
             userId: user.id,
             expiresAt,
             qrPayload: code,
-            provider: "binance_pay",
+            provider: "cryptomus",
             cryptoCurrency: "USDT",
             cryptoAmount: new Prisma.Decimal(cryptoAmount)
           }
@@ -270,7 +270,7 @@ export class ShopService {
     });
 
     const payment = order.payments[0];
-    const binance = await this.createBinancePayCheckout({
+    const cryptomus = await this.createCryptomusInvoice({
       code,
       productName: product.nameEn?.trim() || product.name,
       amount: cryptoAmount,
@@ -280,11 +280,12 @@ export class ShopService {
     const updatedPayment = await this.prisma.payment.update({
       where: { id: payment.id },
       data: {
-        providerPaymentId: binance.providerPaymentId,
-        checkoutUrl: binance.checkoutUrl,
-        deeplink: binance.deeplink,
-        qrImageUrl: binance.qrImageUrl,
-        providerPayload: binance.rawPayload as Prisma.InputJsonValue
+        providerPaymentId: cryptomus.providerPaymentId,
+        checkoutUrl: cryptomus.checkoutUrl,
+        deeplink: cryptomus.deeplink,
+        qrImageUrl: cryptomus.qrImageUrl,
+        qrPayload: cryptomus.address ?? cryptomus.checkoutUrl ?? code,
+        providerPayload: cryptomus.rawPayload as Prisma.InputJsonValue
       }
     });
 
@@ -298,7 +299,9 @@ export class ShopService {
       expiresAt,
       qrImageUrl: updatedPayment.qrImageUrl,
       checkoutUrl: updatedPayment.checkoutUrl,
-      deeplink: updatedPayment.deeplink
+      deeplink: updatedPayment.deeplink,
+      network: cryptomus.network,
+      address: cryptomus.address
     };
   }
 
@@ -1021,60 +1024,60 @@ export class ShopService {
     return `${baseUrl}/${encodeURIComponent(bankCode)}-${encodeURIComponent(accountNumber)}-${encodeURIComponent(template)}.png?${params.toString()}`;
   }
 
-  private async createBinancePayCheckout(input: { code: string; productName: string; amount: string; expiresAt: Date }) {
-    const apiKey = process.env.BINANCE_PAY_API_KEY?.trim();
-    const secretKey = process.env.BINANCE_PAY_SECRET_KEY?.trim();
-    if (!apiKey || !secretKey) {
-      throw new BadRequestException("Chua cau hinh BINANCE_PAY_API_KEY va BINANCE_PAY_SECRET_KEY.");
+  private async createCryptomusInvoice(input: { code: string; productName: string; amount: string; expiresAt: Date }) {
+    const merchantId = process.env.CRYPTOMUS_MERCHANT_ID?.trim();
+    const paymentApiKey = process.env.CRYPTOMUS_PAYMENT_API_KEY?.trim();
+    if (!merchantId || !paymentApiKey) {
+      throw new BadRequestException("Chua cau hinh CRYPTOMUS_MERCHANT_ID va CRYPTOMUS_PAYMENT_API_KEY.");
     }
 
-    const baseUrl = (process.env.BINANCE_PAY_BASE_URL ?? "https://bpay.binanceapi.com").replace(/\/+$/, "");
+    const baseUrl = (process.env.CRYPTOMUS_API_BASE_URL ?? "https://api.cryptomus.com").replace(/\/+$/, "");
+    const network = (process.env.CRYPTOMUS_NETWORK ?? "tron").trim().toLowerCase();
     const body = {
-      env: { terminalType: "WEB" },
-      merchantTradeNo: input.code,
-      orderAmount: input.amount,
+      amount: input.amount,
       currency: "USDT",
-      goods: {
-        goodsType: "02",
-        goodsCategory: "D000",
-        referenceGoodsId: input.code,
-        goodsName: input.productName.slice(0, 256)
-      },
-      orderExpireTime: input.expiresAt.getTime(),
-      returnUrl: process.env.BINANCE_PAY_RETURN_URL ?? process.env.WEB_PUBLIC_URL ?? "https://vanhdao.io.vn",
-      cancelUrl: process.env.BINANCE_PAY_CANCEL_URL ?? process.env.WEB_PUBLIC_URL ?? "https://vanhdao.io.vn",
-      webhookUrl: process.env.BINANCE_PAY_WEBHOOK_URL ?? `${process.env.API_BASE_URL ?? ""}/webhooks/binance-pay`
+      order_id: input.code,
+      network,
+      lifetime: Math.max(300, Math.floor((input.expiresAt.getTime() - Date.now()) / 1000)),
+      url_return: process.env.CRYPTOMUS_RETURN_URL ?? process.env.WEB_PUBLIC_URL ?? "https://vanhdao.io.vn",
+      url_success: process.env.CRYPTOMUS_SUCCESS_URL ?? process.env.WEB_PUBLIC_URL ?? "https://vanhdao.io.vn",
+      url_callback: process.env.CRYPTOMUS_WEBHOOK_URL ?? `${process.env.API_BASE_URL ?? ""}/webhooks/cryptomus`,
+      additional_data: input.productName.slice(0, 255)
     };
     const bodyText = JSON.stringify(body);
-    const timestamp = Date.now().toString();
-    const nonce = crypto.randomBytes(16).toString("hex");
-    const payload = `${timestamp}\n${nonce}\n${bodyText}\n`;
-    const signature = crypto.createHmac("sha512", secretKey).update(payload).digest("hex").toUpperCase();
-    const response = await fetch(`${baseUrl}/binancepay/openapi/v2/order`, {
+    const signature = cryptomusSign(bodyText, paymentApiKey);
+    const response = await fetch(`${baseUrl}/v1/payment`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "BinancePay-Timestamp": timestamp,
-        "BinancePay-Nonce": nonce,
-        "BinancePay-Certificate-SN": apiKey,
-        "BinancePay-Signature": signature
+        merchant: merchantId,
+        sign: signature
       },
       body: bodyText
     });
     const result = (await response.json()) as {
-      status?: string;
-      code?: string;
-      errorMessage?: string;
-      data?: { prepayId?: string; checkoutUrl?: string; deeplink?: string; qrcodeLink?: string; qrContent?: string };
+      state?: number;
+      message?: string;
+      errors?: unknown;
+      result?: {
+        uuid?: string;
+        url?: string;
+        address?: string | null;
+        network?: string | null;
+        expired_at?: number;
+      };
     };
-    if (!response.ok || result.status !== "SUCCESS" || !result.data) {
-      throw new BadRequestException(`Binance Pay create order failed: ${result.errorMessage ?? result.code ?? response.status}`);
+    if (!response.ok || result.state !== 0 || !result.result) {
+      throw new BadRequestException(`Cryptomus create invoice failed: ${result.message ?? JSON.stringify(result.errors ?? response.status)}`);
     }
+    const qrContent = result.result.address || result.result.url;
     return {
-      providerPaymentId: result.data.prepayId,
-      checkoutUrl: result.data.checkoutUrl,
-      deeplink: result.data.deeplink,
-      qrImageUrl: result.data.qrcodeLink ?? result.data.qrContent,
+      providerPaymentId: result.result.uuid,
+      checkoutUrl: result.result.url,
+      deeplink: result.result.url,
+      qrImageUrl: qrContent ? buildQrCodeUrl(qrContent) : undefined,
+      address: result.result.address ?? null,
+      network: result.result.network ?? network,
       rawPayload: result
     };
   }
@@ -1258,6 +1261,20 @@ function decimalNumber(value: unknown) {
 
 function roundUsdt(value: number) {
   return value.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function cryptomusSign(bodyText: string, paymentApiKey: string) {
+  return crypto.createHash("md5").update(Buffer.from(bodyText).toString("base64") + paymentApiKey).digest("hex");
+}
+
+function buildQrCodeUrl(content: string) {
+  const baseUrl = process.env.QR_IMAGE_BASE_URL ?? "https://api.qrserver.com/v1/create-qr-code/";
+  const params = new URLSearchParams({
+    size: "420x420",
+    margin: "16",
+    data: content
+  });
+  return `${baseUrl.replace(/\?$/, "")}?${params.toString()}`;
 }
 
 function productVisibilityWhere(channel: SalesChannel): Prisma.ProductWhereInput {

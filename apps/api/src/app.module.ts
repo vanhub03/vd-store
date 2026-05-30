@@ -7,7 +7,7 @@ import { AdminController } from "./admin/admin.controller";
 import { BotInternalController } from "./bot-internal/bot-internal.controller";
 import { HealthController } from "./health.controller";
 import { SepayController } from "./payments/sepay.controller";
-import { BinancePayController } from "./payments/binance-pay.controller";
+import { CryptomusController } from "./payments/cryptomus.controller";
 import { StoreController } from "./store/store.controller";
 import { StoreService } from "./store/store.service";
 import { PrismaService } from "./prisma.service";
@@ -25,7 +25,7 @@ import { BroadcastService } from "./domain/broadcast.service";
     }),
     ScheduleModule.forRoot()
   ],
-  controllers: [HealthController, AuthController, AdminController, BotInternalController, SepayController, BinancePayController, StoreController],
+  controllers: [HealthController, AuthController, AdminController, BotInternalController, SepayController, CryptomusController, StoreController],
   providers: [
     PrismaService,
     AuthService,

@@ -993,7 +993,7 @@ function ProductDialog({
             {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={17} /> : <Wallet size={17} />} Mua bằng ví
           </button>
           <button className="ghost-button" onClick={() => onUsdt(quantity)} disabled={loading === `usdt:${product.id}` || invalidQuantity || !product.usdtPrice}>
-            {loading === `usdt:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} USDT Binance
+            {loading === `usdt:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} USDT Cryptomus
           </button>
           <button className="ghost-button" onClick={() => onBank(quantity)} disabled={loading === `bank:${product.id}` || invalidQuantity}>
             {loading === `bank:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} Chuyển khoản QR
@@ -1029,16 +1029,26 @@ function QrDialog({
         {payment.qrImageUrl ? <img className="qr-image" src={payment.qrImageUrl} alt={`QR ${payment.code}`} /> : null}
         {payment.checkoutUrl ? (
           <a className="primary-button" href={payment.checkoutUrl} target="_blank" rel="noreferrer" style={{ width: "100%", justifyContent: "center" }}>
-            Open Binance Pay
+            Open Cryptomus invoice
           </a>
         ) : null}
         <div className="detail-grid">
           <span>Mã</span><b>{payment.code}</b>
           <span>Số tiền</span><b>{payment.cryptoCurrency === "USDT" ? formatUsdt(payment.cryptoAmount) : formatVnd(payment.amount)}</b>
+          {payment.network ? (
+            <>
+              <span>Network</span><b>{payment.network.toUpperCase()}</b>
+            </>
+          ) : null}
+          {payment.address ? (
+            <>
+              <span>Địa chỉ ví</span><b className="break-all">{payment.address}</b>
+            </>
+          ) : null}
           <span>Hạn</span><b>{new Date(payment.expiresAt).toLocaleTimeString("vi-VN")}</b>
           <span>Trạng thái</span><b>{statusLabel(status?.status ?? "PENDING")}</b>
         </div>
-        <p className="muted">Sau khi SePay báo tiền vào, hệ thống tự cộng ví hoặc hoàn tất đơn hàng. Thông tin nhận hàng chỉ hiển thị khi đơn đã thanh toán thành công.</p>
+        <p className="muted">VND được đối soát qua SePay. USDT được đối soát qua Cryptomus webhook. Thông tin nhận hàng chỉ hiển thị khi đơn đã thanh toán thành công.</p>
         <button className="ghost-button" onClick={onRefresh} disabled={loading} style={{ width: "100%", marginTop: 12 }}>
           <RefreshCw className={loading ? "spin" : ""} size={17} /> Kiểm tra trạng thái
         </button>

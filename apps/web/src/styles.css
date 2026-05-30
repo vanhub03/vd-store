@@ -1581,6 +1581,11 @@ h1 {
   font-size: 14px;
 }
 
+.break-all {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 
 /* ─── DELIVERY DIALOG ────────────────────────────────────── */
 

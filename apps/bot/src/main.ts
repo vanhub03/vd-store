@@ -434,12 +434,14 @@ async function createUsdtOrder(ctx: Context, productId: string, quantity = 1) {
   });
   const amount = formatUsdt(result.cryptoAmount);
   const caption = [
-    "USDT Binance Pay",
+    "USDT Cryptomus",
     `Amount: <b>${amount} USDT</b>`,
+    result.network ? `Network: <b>${escapeHtml(result.network.toUpperCase())}</b>` : null,
+    result.address ? `Wallet: <code>${escapeHtml(result.address)}</code>` : null,
     `Order: <code>${escapeHtml(result.code)}</code>`,
     result.checkoutUrl ? `Checkout: ${escapeHtml(result.checkoutUrl)}` : null,
     `Expires: ${new Date(result.expiresAt).toLocaleString("vi-VN")}`,
-    "System will auto process after Binance Pay confirms."
+    "System will auto process after Cryptomus confirms."
   ]
     .filter(Boolean)
     .join("\n");
@@ -728,7 +730,7 @@ function quantityKeyboard(product: ProductDetail, quantity: number, preferredMet
               Markup.button.callback("Mua bang vi", `pay_wallet:${product.id}:${quantity}`),
               Markup.button.callback("Chuyen khoan QR", `pay_bank:${product.id}:${quantity}`)
             ],
-            [Markup.button.callback("USDT Binance Pay", `pay_usdt:${product.id}:${quantity}`)]
+            [Markup.button.callback("USDT Cryptomus", `pay_usdt:${product.id}:${quantity}`)]
           ];
 
   return Markup.inlineKeyboard([

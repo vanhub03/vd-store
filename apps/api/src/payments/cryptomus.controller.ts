@@ -3,13 +3,13 @@ import { Request } from "express";
 import { PaymentService } from "../domain/payment.service";
 
 @Controller()
-export class BinancePayController {
+export class CryptomusController {
   constructor(private readonly payments: PaymentService) {}
 
-  @Post("webhooks/binance-pay")
+  @Post("webhooks/cryptomus")
   async handleWebhook(@Req() request: Request & { rawBody?: Buffer }, @Body() body: Record<string, unknown>) {
-    this.payments.verifyBinancePayRequest(request);
-    const result = await this.payments.handleBinancePayWebhook(body);
+    this.payments.verifyCryptomusRequest(request, body);
+    const result = await this.payments.handleCryptomusWebhook(body);
     return { success: true, ...result };
   }
 }

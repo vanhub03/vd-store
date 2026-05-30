@@ -39,21 +39,20 @@ export class PaymentService {
     if (!ok) throw new UnauthorizedException("Invalid SePay signature.");
   }
 
-  verifyBinancePayRequest(request: RawRequest) {
-    const mode = (process.env.BINANCE_PAY_WEBHOOK_AUTH_MODE ?? "hmac").toLowerCase();
+  verifyCryptomusRequest(_request: RawRequest, body: Record<string, unknown>) {
+    const mode = (process.env.CRYPTOMUS_WEBHOOK_AUTH_MODE ?? "sign").toLowerCase();
     if (mode === "none") return;
-    const secret = process.env.BINANCE_PAY_SECRET_KEY;
-    const signature = firstHeader(request.headers["binancepay-signature"]) ?? firstHeader(request.headers["BinancePay-Signature" as never]);
-    const timestamp = firstHeader(request.headers["binancepay-timestamp"]) ?? firstHeader(request.headers["BinancePay-Timestamp" as never]);
-    const nonce = firstHeader(request.headers["binancepay-nonce"]) ?? firstHeader(request.headers["BinancePay-Nonce" as never]);
-    if (!secret || !signature || !timestamp || !nonce) {
-      throw new UnauthorizedException("Invalid Binance Pay signature.");
+    const secret = process.env.CRYPTOMUS_PAYMENT_API_KEY?.trim();
+    const signature = stringValue(body.sign);
+    if (!secret || !signature) {
+      throw new UnauthorizedException("Invalid Cryptomus signature.");
     }
-    const rawBody = request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {}));
-    const payload = `${timestamp}\n${nonce}\n${rawBody.toString("utf8")}\n`;
-    const expected = crypto.createHmac("sha512", secret).update(payload).digest("hex").toUpperCase();
-    if (!safeEqual(expected, signature.replace(/^sha512=/i, "").toUpperCase())) {
-      throw new UnauthorizedException("Invalid Binance Pay signature.");
+    const payload = { ...body };
+    delete payload.sign;
+    const bodyText = JSON.stringify(payload).replace(/\//g, "\\/");
+    const expected = crypto.createHash("md5").update(Buffer.from(bodyText).toString("base64") + secret).digest("hex");
+    if (!safeEqual(expected, signature)) {
+      throw new UnauthorizedException("Invalid Cryptomus signature.");
     }
   }
 
@@ -163,9 +162,19 @@ export class PaymentService {
     return { ok: true, ignored: "unsupported_payment_kind" };
   }
 
-  async handleBinancePayWebhook(payload: Record<string, unknown>) {
-    const normalized = normalizeBinancePayPayload(payload);
-    if (!normalized.paymentCode) throw new BadRequestException("Missing Binance Pay merchantTradeNo.");
+  async handleCryptomusWebhook(payload: Record<string, unknown>) {
+    const normalized = normalizeCryptomusPayload(payload);
+    if (!normalized.paymentCode) throw new BadRequestException("Missing Cryptomus order_id.");
+    if (normalized.isFailed) {
+      const failedPayment = await this.prisma.payment.findUnique({ where: { code: normalized.paymentCode } });
+      if (failedPayment?.status === PaymentStatus.PENDING) {
+        await this.prisma.payment.update({
+          where: { id: failedPayment.id },
+          data: { status: PaymentStatus.FAILED, providerPayload: stripWebhookSign(payload) as Prisma.InputJsonValue }
+        });
+      }
+      return { ok: true, status: "failed" };
+    }
     if (!normalized.isSuccess) return { ok: true, ignored: normalized.status ?? "not_success" };
 
     const payment = await this.prisma.payment.findUnique({
@@ -174,18 +183,18 @@ export class PaymentService {
     });
     if (!payment) return { ok: true, ignored: "unknown_reference_code" };
     if (payment.providerPaymentId && normalized.providerPaymentId && payment.providerPaymentId !== normalized.providerPaymentId) {
-      await this.shop.markPaymentManualReview(payment.id, "Binance Pay provider id mismatch");
+      await this.shop.markPaymentManualReview(payment.id, "Cryptomus provider id mismatch");
       return { ok: true, status: "manual_review" };
     }
     if (normalized.providerPaymentId) {
       const duplicate = await this.prisma.payment.findFirst({
-        where: { provider: "binance_pay", providerPaymentId: normalized.providerPaymentId, id: { not: payment.id }, status: { not: PaymentStatus.PENDING } }
+        where: { provider: "cryptomus", providerPaymentId: normalized.providerPaymentId, id: { not: payment.id }, status: { not: PaymentStatus.PENDING } }
       });
       if (duplicate) return { ok: true, duplicate: true };
     }
 
     const expectedCrypto = payment.cryptoAmount ? Number(String(payment.cryptoAmount)) : null;
-    if (!expectedCrypto || normalized.cryptoAmount === null || Math.abs(expectedCrypto - normalized.cryptoAmount) > 0.00000001) {
+    if (!expectedCrypto || normalized.cryptoAmount === null || normalized.cryptoAmount + 0.00000001 < expectedCrypto) {
       await this.shop.markPaymentManualReview(payment.id, `Expected ${expectedCrypto ?? "unknown"} USDT, received ${normalized.cryptoAmount ?? "unknown"}`);
       return { ok: true, status: "manual_review" };
     }
@@ -195,7 +204,7 @@ export class PaymentService {
         where: { id: payment.id },
         data: {
           providerPaymentId: normalized.providerPaymentId ?? payment.providerPaymentId,
-          providerPayload: payload as Prisma.InputJsonValue
+          providerPayload: stripWebhookSign(payload) as Prisma.InputJsonValue
         }
       });
       const result = await this.shop.fulfillDirectOrder(payment.id);
@@ -271,39 +280,26 @@ function normalizeSepayPayload(payload: Record<string, unknown>) {
   };
 }
 
-function normalizeBinancePayPayload(payload: Record<string, unknown>) {
-  const data = parseJsonObject(payload.data) ?? payload;
-  const status = stringValue(payload.bizStatus) ?? stringValue(data.bizStatus) ?? stringValue(data.status) ?? stringValue(data.tradeStatus);
-  const paymentCode =
-    stringValue(data.merchantTradeNo) ??
-    stringValue(data.merchant_trade_no) ??
-    stringValue(data.outTradeNo) ??
-    stringValue(payload.merchantTradeNo);
-  const providerPaymentId =
-    stringValue(data.transactionId) ??
-    stringValue(data.transaction_id) ??
-    stringValue(data.prepayId) ??
-    stringValue(payload.bizId) ??
-    stringValue(payload.id);
-  const cryptoAmount = decimalValue(data.totalFee ?? data.orderAmount ?? data.amount ?? payload.totalFee);
+function normalizeCryptomusPayload(payload: Record<string, unknown>) {
+  const status = stringValue(payload.status) ?? stringValue(payload.payment_status);
+  const paymentCode = stringValue(payload.order_id);
+  const providerPaymentId = stringValue(payload.uuid);
+  const cryptoAmount = decimalValue(payload.payment_amount ?? payload.payer_amount ?? payload.amount);
+  const normalizedStatus = (status ?? "").toLowerCase();
   return {
     paymentCode,
     providerPaymentId,
     status,
     cryptoAmount: cryptoAmount > 0 ? cryptoAmount : null,
-    isSuccess: ["PAY_SUCCESS", "SUCCESS", "PAID"].includes((status ?? "").toUpperCase())
+    isSuccess: ["paid", "paid_over"].includes(normalizedStatus),
+    isFailed: ["fail", "cancel", "system_fail", "refund_process", "refund_fail", "refund_paid"].includes(normalizedStatus)
   };
 }
 
-function parseJsonObject(value: unknown) {
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) return value as Record<string, unknown>;
-  if (typeof value !== "string") return null;
-  try {
-    const parsed = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
+function stripWebhookSign(payload: Record<string, unknown>) {
+  const copy = { ...payload };
+  delete copy.sign;
+  return copy;
 }
 
 function stringValue(value: unknown) {

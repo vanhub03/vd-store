@@ -88,6 +88,7 @@ enum PaymentMethod {
   WALLET
   BANK_TRANSFER
   BINANCE_PAY
+  CRYPTOMUS
 }
 
 model TelegramUser {

@@ -101,7 +101,7 @@ export class BotInternalController {
 
   @Post("orders/usdt")
   createUsdtOrder(@Body() body: OrderDto) {
-    return this.shop.createBinancePayOrder(body.telegramId, body.productId, body.quantity ?? 1, "bot");
+    return this.shop.createCryptomusOrder(body.telegramId, body.productId, body.quantity ?? 1, "bot");
   }
 
   @Post("payments/:id/telegram-message")
