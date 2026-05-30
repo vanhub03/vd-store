@@ -9,8 +9,10 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  Mail,
   MessageCircle,
   PackageCheck,
+  Phone,
   QrCode,
   RefreshCw,
   Search,
@@ -383,7 +385,19 @@ function App() {
     <main>
       <Header customer={customer} balance={balance} activeTab={activeTab} language={language} onLanguage={changeLanguage} onTab={setActiveTab} onLogin={() => setAuthOpen(true)} onLogout={logout} onWalletOpen={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} />
 
-      {activeTab === "home" ? <HomeTab onShop={() => setActiveTab("products")} onWallet={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} /> : null}
+      {activeTab === "home" ? (
+        <HomeTab
+          products={products.slice(0, 6)}
+          loading={loading}
+          language={language}
+          onProduct={(product) => void openProduct(product)}
+          onShop={() => setActiveTab("products")}
+          onWallet={() => {
+            if (token) setWalletOpen(true);
+            else setAuthOpen(true);
+          }}
+        />
+      ) : null}
       {activeTab === "products" ? (
         <ProductsTab
           products={filteredProducts}
@@ -505,13 +519,30 @@ function Header({
 
 /* ─── Home Tab ────────────────────────────────────────────── */
 
-function HomeTab({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
+function HomeTab({
+  products,
+  loading,
+  language,
+  onProduct,
+  onShop,
+  onWallet
+}: {
+  products: Product[];
+  loading: string;
+  language: Language;
+  onProduct: (product: Product) => void;
+  onShop: () => void;
+  onWallet: () => void;
+}) {
   return (
     <>
       <Hero onShop={onShop} onWallet={onWallet} />
+      <FeaturedProducts products={products} loading={loading} language={language} onProduct={onProduct} onShop={onShop} />
       <TrustShowcase />
       <HowItWorks onShop={onShop} onWallet={onWallet} />
       <BrandShowcase />
+      <MerchantInfo />
+      <PolicySections />
     </>
   );
 }
@@ -618,6 +649,52 @@ function TrustShowcase() {
   );
 }
 
+function FeaturedProducts({
+  products,
+  loading,
+  language,
+  onProduct,
+  onShop
+}: {
+  products: Product[];
+  loading: string;
+  language: Language;
+  onProduct: (product: Product) => void;
+  onShop: () => void;
+}) {
+  return (
+    <section className="shell featured-products" id="featured-products">
+      <div className="section-head compact">
+        <div>
+          <p className="eyebrow reveal">Sản phẩm đang bán</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Tài khoản AI, phần mềm và dịch vụ số có giá niêm yết rõ ràng</h2>
+          <p className="product-section-copy reveal" style={{ "--d": "140ms" } as React.CSSProperties}>
+            Mỗi sản phẩm có giá, tồn kho, phương thức nhận hàng và lịch sử đơn hàng minh bạch. Thông tin giao hàng chỉ mở sau khi thanh toán thành công.
+          </p>
+        </div>
+        <button className="ghost-button reveal" onClick={onShop} style={{ "--d": "180ms" } as React.CSSProperties}>
+          Xem tất cả <ArrowRight size={17} />
+        </button>
+      </div>
+      <div className="product-grid compact-grid">
+        {products.length ? (
+          products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              loading={loading}
+              language={language}
+              onView={() => onProduct(product)}
+            />
+          ))
+        ) : (
+          <div className="empty-state">Danh sách sản phẩm đang được tải. Có thể xem đầy đủ tại tab Sản phẩm.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /* ─── How It Works ────────────────────────────────────────── */
 
 function HowItWorks({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
@@ -677,6 +754,82 @@ function BrandShowcase() {
 }
 
 /* ─── Products Tab ────────────────────────────────────────── */
+
+function MerchantInfo() {
+  const contacts = [
+    { label: "Email hỗ trợ", value: "vietanh.dao99@gmail.com", href: "mailto:vietanh.dao99@gmail.com", icon: <Mail size={18} /> },
+    { label: "Zalo", value: "0377952999", href: "https://zalo.me/0377952999", icon: <Phone size={18} /> },
+    { label: "Telegram", value: "@vanhdao99", href: "https://t.me/vanhdao99", icon: <Send size={18} /> }
+  ];
+  return (
+    <section className="shell merchant-section" id="contact">
+      <div className="merchant-panel reveal">
+        <div>
+          <p className="eyebrow">Thông tin cửa hàng</p>
+          <h2>VD AI Shop cung cấp dịch vụ số có hỗ trợ trực tiếp</h2>
+          <p>
+            VD AI Shop là cửa hàng trực tuyến bán tài khoản AI, tài khoản premium, key phần mềm và dịch vụ số. Khách hàng có thể mua trên website hoặc Telegram bot, thanh toán bằng VietQR, ví nội bộ hoặc USDT khi cổng thanh toán được kích hoạt.
+          </p>
+          <p>
+            Thời gian hỗ trợ: 08:00 đến 23:00 hằng ngày theo giờ Việt Nam. Các đơn cần xử lý thủ công sẽ được hướng dẫn liên hệ admin sau khi thanh toán thành công.
+          </p>
+        </div>
+        <div className="contact-cards" aria-label="Thông tin liên hệ VD AI Shop">
+          {contacts.map((contact) => (
+            <a href={contact.href} target={contact.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" key={contact.label}>
+              {contact.icon}
+              <span>{contact.label}</span>
+              <b>{contact.value}</b>
+            </a>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PolicySections() {
+  const policies = [
+    {
+      id: "delivery-policy",
+      title: "Chính sách giao hàng",
+      text: "Sản phẩm dạng mã, tài khoản hoặc nội dung số sẽ được giao tự động sau khi hệ thống xác nhận thanh toán. Sản phẩm cần xử lý riêng sẽ hiển thị mã đơn và hướng dẫn liên hệ admin."
+    },
+    {
+      id: "refund-policy",
+      title: "Chính sách hoàn tiền",
+      text: "Nếu đơn hết hàng, thanh toán sai nội dung, thanh toán quá hạn hoặc không thể giao đúng sản phẩm, hệ thống sẽ cộng tiền về ví hoặc admin xử lý hoàn tiền theo từng trường hợp."
+    },
+    {
+      id: "terms",
+      title: "Điều khoản sử dụng",
+      text: "Khách hàng cần kiểm tra kỹ tên sản phẩm, số lượng và giá trước khi thanh toán. Sản phẩm số đã giao thành công không đổi trả nếu thông tin hoạt động đúng mô tả."
+    },
+    {
+      id: "privacy",
+      title: "Bảo mật thông tin",
+      text: "Website chỉ lưu thông tin cần thiết để tạo tài khoản, xử lý thanh toán, giao hàng và hỗ trợ đơn hàng. Thông tin thanh toán được dùng để đối soát giao dịch và không bán cho bên thứ ba."
+    }
+  ];
+  return (
+    <section className="shell policy-section" id="policies">
+      <div className="section-head compact">
+        <div>
+          <p className="eyebrow reveal">Minh bạch giao dịch</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Chính sách mua hàng, giao hàng và hoàn tiền</h2>
+        </div>
+      </div>
+      <div className="policy-grid">
+        {policies.map((policy, index) => (
+          <article id={policy.id} className="policy-card reveal" style={{ "--d": `${120 + index * 70}ms` } as React.CSSProperties} key={policy.id}>
+            <h3>{policy.title}</h3>
+            <p>{policy.text}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function ProductsTab({
   products,
@@ -1151,10 +1304,23 @@ function FloatingCtas() {
 function Footer({ onTab }: { onTab: (tab: Tab) => void }) {
   return (
     <footer>
-      <span>VD AI Shop</span>
-      <span>Thông minh &middot; tiện lợi &middot; uy tín</span>
-      <button onClick={() => onTab("products")}>Xem sản phẩm</button>
-      <a href="https://t.me/vanhdao99">Telegram @vanhdao99</a>
+      <div>
+        <span>VD AI Shop</span>
+        <small>Tài khoản AI, premium account, key phần mềm và dịch vụ số.</small>
+      </div>
+      <nav aria-label="Liên kết thông tin cửa hàng">
+        <button onClick={() => onTab("products")}>Sản phẩm</button>
+        <a href="#contact">Liên hệ</a>
+        <a href="#delivery-policy">Giao hàng</a>
+        <a href="#refund-policy">Hoàn tiền</a>
+        <a href="#terms">Điều khoản</a>
+        <a href="#privacy">Bảo mật</a>
+      </nav>
+      <div className="footer-contact">
+        <a href="mailto:vietanh.dao99@gmail.com">vietanh.dao99@gmail.com</a>
+        <a href="https://zalo.me/0377952999" target="_blank" rel="noreferrer">Zalo 0377952999</a>
+        <a href="https://t.me/vanhdao99" target="_blank" rel="noreferrer">Telegram @vanhdao99</a>
+      </div>
     </footer>
   );
 }
