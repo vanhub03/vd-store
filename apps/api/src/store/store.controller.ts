@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { IsEmail, IsInt, IsOptional, IsString, Min, MinLength } from "class-validator";
 import { CustomerAuthGuard, CustomerRequest } from "../common/customer-auth.guard";
 import { StoreService } from "./store.service";
@@ -62,11 +62,13 @@ export class StoreController {
   }
 
   @Get("catalog")
+  @Header("Cache-Control", "no-store")
   catalog() {
     return this.store.catalog();
   }
 
   @Get("products/:id")
+  @Header("Cache-Control", "no-store")
   product(@Param("id") id: string) {
     return this.store.product(id);
   }

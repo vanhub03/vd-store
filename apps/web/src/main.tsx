@@ -359,6 +359,14 @@ function App() {
     return false;
   }
 
+  async function openProduct(product: Product) {
+    await runAction(`product:${product.id}`, async () => {
+      const freshProduct = await api.get<Product>(`/store/products/${product.id}`);
+      setSelectedProduct({ ...product, ...freshProduct, category: freshProduct.category ?? product.category });
+      await loadPublicData();
+    });
+  }
+
   async function runAction(name: string, action: () => Promise<void>) {
     try {
       setLoading(name);
@@ -383,7 +391,7 @@ function App() {
           loading={loading}
           error={error}
           onQuery={setQuery}
-          onView={setSelectedProduct}
+          onView={(product) => void openProduct(product)}
           language={language}
         />
       ) : null}
@@ -735,6 +743,7 @@ function ProductCard({
 }) {
   const stock = availableQuantity(product);
   const disabled = stock <= 0;
+  const opening = loading === `product:${product.id}`;
   const imageSrc = productArtUrl(product);
   const stockLabel = product.deliveryType === "SHARED_CONTENT" ? "Không giới hạn" : `${stock} còn lại`;
   return (
@@ -755,9 +764,9 @@ function ProductCard({
         </div>
       </div>
       <div className="product-actions">
-        <button onClick={onView}><Search size={15} /> Chi tiết</button>
-        <button onClick={onView} disabled={loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
-          {loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={15} /> : <ShoppingBag size={15} />}
+        <button onClick={onView} disabled={opening}>{opening ? <Loader2 className="spin" size={15} /> : <Search size={15} />} Chi tiết</button>
+        <button onClick={onView} disabled={opening || loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
+          {opening || loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={15} /> : <ShoppingBag size={15} />}
           Mua hàng
         </button>
       </div>

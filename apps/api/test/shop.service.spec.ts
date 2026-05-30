@@ -86,6 +86,55 @@ describe("ShopService", () => {
     expect(catalog.uncategorized[0].price).toBe(18000);
   });
 
+  it("updates Vietnamese and English product names", async () => {
+    const previousProduct = {
+      id: "product_name_1",
+      name: "Old Vietnamese name",
+      nameEn: "Old English name",
+      price: 10000,
+      showInBot: true,
+      showInWeb: true,
+      status: ProductStatus.ACTIVE,
+      deliveryType: ProductDeliveryType.MANUAL,
+      manualStock: 3
+    };
+    const updatedProduct = {
+      ...previousProduct,
+      name: "Ten tieng Viet moi",
+      nameEn: "New English name"
+    };
+    const prisma = {
+      product: {
+        findUnique: vi.fn().mockResolvedValue(previousProduct),
+        update: vi.fn().mockResolvedValue(updatedProduct)
+      },
+      auditLog: {
+        create: vi.fn().mockResolvedValue({})
+      }
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const result = await service.updateProduct(
+      "product_name_1",
+      {
+        name: "Ten tieng Viet moi",
+        nameEn: "New English name",
+        deliveryType: ProductDeliveryType.MANUAL
+      },
+      "admin_1"
+    );
+
+    expect(result.name).toBe("Ten tieng Viet moi");
+    expect(result.nameEn).toBe("New English name");
+    expect(prisma.product.update).toHaveBeenCalledWith({
+      where: { id: "product_name_1" },
+      data: expect.objectContaining({
+        name: "Ten tieng Viet moi",
+        nameEn: "New English name"
+      })
+    });
+  });
+
   it("fulfills manual web wallet purchases by debiting wallet, reducing manual stock, and returning instructions", async () => {
     const user = { id: "user_1", telegramId: "web:customer_1" };
     const product = {
