@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
-import { PaymentKind, Prisma } from "@prisma/client";
+import { PaymentKind, PaymentStatus, Prisma } from "@prisma/client";
 import { Request } from "express";
 import { PrismaService } from "../prisma.service";
 import { extractPaymentCode } from "./payment-codes";
@@ -144,6 +144,62 @@ export class PaymentService {
     return { ok: true, ignored: "unsupported_payment_kind" };
   }
 
+  async handleBinancePayWebhook(payload: Record<string, unknown>) {
+    const normalized = normalizeBinancePayPayload(payload);
+    if (!normalized.paymentCode) throw new BadRequestException("Missing Binance Pay merchantTradeNo.");
+    if (!normalized.isSuccess) return { ok: true, ignored: normalized.status ?? "not_success" };
+
+    const payment = await this.prisma.payment.findUnique({
+      where: { code: normalized.paymentCode },
+      include: { user: true, order: true }
+    });
+    if (!payment) return { ok: true, ignored: "unknown_reference_code" };
+    if (payment.providerPaymentId && normalized.providerPaymentId && payment.providerPaymentId !== normalized.providerPaymentId) {
+      await this.shop.markPaymentManualReview(payment.id, "Binance Pay provider id mismatch");
+      return { ok: true, status: "manual_review" };
+    }
+    if (normalized.providerPaymentId) {
+      const duplicate = await this.prisma.payment.findFirst({
+        where: { provider: "binance_pay", providerPaymentId: normalized.providerPaymentId, id: { not: payment.id }, status: { not: PaymentStatus.PENDING } }
+      });
+      if (duplicate) return { ok: true, duplicate: true };
+    }
+
+    const expectedCrypto = payment.cryptoAmount ? Number(String(payment.cryptoAmount)) : null;
+    if (!expectedCrypto || normalized.cryptoAmount === null || Math.abs(expectedCrypto - normalized.cryptoAmount) > 0.00000001) {
+      await this.shop.markPaymentManualReview(payment.id, `Expected ${expectedCrypto ?? "unknown"} USDT, received ${normalized.cryptoAmount ?? "unknown"}`);
+      return { ok: true, status: "manual_review" };
+    }
+
+    if (payment.kind === PaymentKind.DIRECT_ORDER) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerPaymentId: normalized.providerPaymentId ?? payment.providerPaymentId,
+          providerPayload: payload as Prisma.InputJsonValue
+        }
+      });
+      const result = await this.shop.fulfillDirectOrder(payment.id);
+      await this.deletePendingPaymentMessage(payment.id, payment);
+      if (result.outcome === "fulfilled" && "deliveryText" in result) {
+        await this.shop.notifyManualOrderIfNeeded(result.order.id);
+      }
+      const telegramId = result.user?.telegramId;
+      if (canNotifyTelegramUser(telegramId)) {
+        if (result.outcome === "fulfilled" && "deliveryText" in result) {
+          await this.telegram.notifyDirectOrderFulfilled(telegramId, payment.code, result.deliveryText);
+        } else if (result.outcome === "credited_late_payment") {
+          await this.telegram.notifyPaymentCredited(telegramId, payment.code, payment.amount, "USDT payment arrived after expiry.");
+        } else if (result.outcome === "credited_out_of_stock") {
+          await this.telegram.notifyPaymentCredited(telegramId, payment.code, payment.amount, "Product is out of stock.");
+        }
+      }
+      return { ok: true, status: result.outcome };
+    }
+
+    return { ok: true, ignored: "unsupported_payment_kind" };
+  }
+
   private async deletePendingPaymentMessage(paymentId: string, fallback?: { telegramChatId?: string | null; telegramMessageId?: number | null }) {
     const latest = await this.prisma.payment.findUnique({
       where: { id: paymentId },
@@ -190,6 +246,41 @@ function normalizeSepayPayload(payload: Record<string, unknown>) {
   };
 }
 
+function normalizeBinancePayPayload(payload: Record<string, unknown>) {
+  const data = parseJsonObject(payload.data) ?? payload;
+  const status = stringValue(payload.bizStatus) ?? stringValue(data.bizStatus) ?? stringValue(data.status) ?? stringValue(data.tradeStatus);
+  const paymentCode =
+    stringValue(data.merchantTradeNo) ??
+    stringValue(data.merchant_trade_no) ??
+    stringValue(data.outTradeNo) ??
+    stringValue(payload.merchantTradeNo);
+  const providerPaymentId =
+    stringValue(data.transactionId) ??
+    stringValue(data.transaction_id) ??
+    stringValue(data.prepayId) ??
+    stringValue(payload.bizId) ??
+    stringValue(payload.id);
+  const cryptoAmount = decimalValue(data.totalFee ?? data.orderAmount ?? data.amount ?? payload.totalFee);
+  return {
+    paymentCode,
+    providerPaymentId,
+    status,
+    cryptoAmount: cryptoAmount > 0 ? cryptoAmount : null,
+    isSuccess: ["PAY_SUCCESS", "SUCCESS", "PAID"].includes((status ?? "").toUpperCase())
+  };
+}
+
+function parseJsonObject(value: unknown) {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 function stringValue(value: unknown) {
   if (value === null || value === undefined) return undefined;
   const result = String(value).trim();
@@ -200,6 +291,15 @@ function numberValue(value: unknown) {
   if (typeof value === "number") return Math.trunc(value);
   if (typeof value === "string") {
     const parsed = Number(value.replace(/[^\d-]/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function decimalValue(value: unknown) {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^\d.-]/g, ""));
     if (Number.isFinite(parsed)) return parsed;
   }
   return 0;

@@ -106,4 +106,10 @@ export class StoreController {
   buyWithBank(@Req() request: CustomerRequest, @Body() body: OrderDto) {
     return this.store.createBankOrder(request.customer!.telegramId, body.productId, body.quantity ?? 1);
   }
+
+  @Post("orders/usdt")
+  @UseGuards(CustomerAuthGuard)
+  buyWithUsdt(@Req() request: CustomerRequest, @Body() body: OrderDto) {
+    return this.store.createUsdtOrder(request.customer!.telegramId, body.productId, body.quantity ?? 1);
+  }
 }

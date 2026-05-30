@@ -26,6 +26,7 @@ import {
   availableQuantity,
   Catalog,
   flattenCatalog,
+  formatUsdt,
   formatVnd,
   History as StoreHistory,
   PaymentResult,
@@ -38,9 +39,11 @@ import {
 import "./styles.css";
 
 const TOKEN_KEY = "vd_store_token";
+const LANGUAGE_KEY = "vd_store_language";
 const savedToken = readStoredToken();
 const api = new StoreApi(savedToken);
 type Tab = "home" | "products" | "history";
+type Language = "vi" | "en";
 const initialTab = readInitialTab();
 type DeliveryNotice = {
   title: string;
@@ -135,6 +138,7 @@ function App() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
 
   useReveal();
 
@@ -142,8 +146,13 @@ function App() {
   const filteredProducts = useMemo(() => {
     const normalized = query.toLocaleLowerCase("vi-VN").trim();
     if (!normalized) return products;
-    return products.filter((product) => `${product.name} ${product.description ?? ""}`.toLocaleLowerCase("vi-VN").includes(normalized));
-  }, [products, query]);
+    return products.filter((product) => `${localizedName(product, language)} ${localizedDescription(product, language) ?? ""}`.toLocaleLowerCase("vi-VN").includes(normalized));
+  }, [products, query, language]);
+
+  function changeLanguage(next: Language) {
+    setLanguage(next);
+    localStorage.setItem(LANGUAGE_KEY, next);
+  }
 
   useEffect(() => {
     api.setToken(token);
@@ -247,6 +256,16 @@ function App() {
     });
   }
 
+  async function buyWithUsdt(product: Product, quantity = 1) {
+    if (!requireLogin()) return;
+    await runAction(`usdt:${product.id}`, async () => {
+      setQr(await api.post<PaymentResult>("/store/orders/usdt", { productId: product.id, quantity }));
+      setQrStatus(null);
+      setDelivery(null);
+      setSelectedProduct(null);
+    });
+  }
+
   async function checkPaymentStatus(showLoading = true) {
     if (!qr || !token) return;
     try {
@@ -338,7 +357,7 @@ function App() {
 
   return (
     <main>
-      <Header customer={customer} balance={balance} activeTab={activeTab} onTab={setActiveTab} onLogin={() => setAuthOpen(true)} onLogout={logout} onWalletOpen={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} />
+      <Header customer={customer} balance={balance} activeTab={activeTab} language={language} onLanguage={changeLanguage} onTab={setActiveTab} onLogin={() => setAuthOpen(true)} onLogout={logout} onWalletOpen={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} />
 
       {activeTab === "home" ? <HomeTab onShop={() => setActiveTab("products")} onWallet={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} /> : null}
       {activeTab === "products" ? (
@@ -349,6 +368,7 @@ function App() {
           error={error}
           onQuery={setQuery}
           onView={setSelectedProduct}
+          language={language}
         />
       ) : null}
       {activeTab === "history" ? (
@@ -370,6 +390,8 @@ function App() {
           onClose={() => setSelectedProduct(null)}
           onWallet={(quantity) => buyWithWallet(selectedProduct, quantity)}
           onBank={(quantity) => buyWithBank(selectedProduct, quantity)}
+          onUsdt={(quantity) => buyWithUsdt(selectedProduct, quantity)}
+          language={language}
         />
       ) : null}
       <FloatingCtas />
@@ -394,6 +416,8 @@ function Header({
   customer,
   balance,
   activeTab,
+  language,
+  onLanguage,
   onTab,
   onLogin,
   onLogout,
@@ -402,6 +426,8 @@ function Header({
   customer: Session["customer"] | null;
   balance: number;
   activeTab: Tab;
+  language: Language;
+  onLanguage: (language: Language) => void;
   onTab: (tab: Tab) => void;
   onLogin: () => void;
   onLogout: () => void;
@@ -428,6 +454,9 @@ function Header({
         ))}
       </nav>
       <div className="top-actions">
+        <button className="ghost-button lang-switch" onClick={() => onLanguage(language === "vi" ? "en" : "vi")}>
+          {language === "vi" ? "EN" : "VI"}
+        </button>
         {customer ? (
           <>
             <span className="customer-pill">
@@ -631,7 +660,8 @@ function ProductsTab({
   loading,
   error,
   onQuery,
-  onView
+  onView,
+  language
 }: {
   products: Product[];
   query: string;
@@ -639,6 +669,7 @@ function ProductsTab({
   error: string;
   onQuery: (value: string) => void;
   onView: (product: Product) => void;
+  language: Language;
 }) {
   return (
     <section className="shell product-section">
@@ -664,6 +695,7 @@ function ProductsTab({
             product={product}
             loading={loading}
             onView={() => onView(product)}
+            language={language}
           />
         ))}
       </div>
@@ -677,11 +709,13 @@ function ProductsTab({
 function ProductCard({
   product,
   loading,
-  onView
+  onView,
+  language
 }: {
   product: Product;
   loading: string;
   onView: () => void;
+  language: Language;
 }) {
   const stock = availableQuantity(product);
   const disabled = stock <= 0;
@@ -697,10 +731,10 @@ function ProductCard({
           <span>{product.category?.name ?? "Sản phẩm số"}</span>
           <span className={disabled ? "stock-empty" : ""}>{stockLabel}</span>
         </div>
-        <h3>{product.name}</h3>
-        <p>{product.description || "Thông tin nhận hàng sẽ hiển thị sau khi thanh toán thành công."}</p>
+        <h3>{localizedName(product, language)}</h3>
+        <p>{localizedDescription(product, language) || "Delivery information appears after successful payment."}</p>
         <div className="product-summary">
-          <strong>{formatVnd(product.price)}</strong>
+          <strong>{formatProductPrice(product, language)}</strong>
           <span>{postPaymentLabel(product.deliveryType)}</span>
         </div>
       </div>
@@ -885,13 +919,17 @@ function ProductDialog({
   loading,
   onClose,
   onWallet,
-  onBank
+  onBank,
+  onUsdt,
+  language
 }: {
   product: Product;
   loading: string;
   onClose: () => void;
   onWallet: (quantity: number) => void;
   onBank: (quantity: number) => void;
+  onUsdt: (quantity: number) => void;
+  language: Language;
 }) {
   const stock = availableQuantity(product);
   const maxQuantity = product.deliveryType === "SHARED_CONTENT" ? 999 : stock;
@@ -911,13 +949,13 @@ function ProductDialog({
         </div>
         <div className="dialog-heading">
           <span>{product.category?.name ?? "Sản phẩm số"}</span>
-          <h2>{product.name}</h2>
-          <p>{product.description || "Thông tin giao hàng sẽ mở sau khi thanh toán thành công."}</p>
+          <h2>{localizedName(product, language)}</h2>
+          <p>{localizedDescription(product, language) || "Delivery information appears after successful payment."}</p>
         </div>
         <div className="detail-grid">
           <div>
             <span>Giá</span>
-            <b>{formatVnd(product.price)}</b>
+            <b>{formatProductPrice(product, language)}</b>
           </div>
           <div>
             <span>Kho</span>
@@ -947,12 +985,15 @@ function ProductDialog({
           </div>
           <div className="quantity-total">
             <span>Tổng thanh toán</span>
-            <b>{formatVnd(product.price * quantity)}</b>
+            <b>{formatProductTotal(product, quantity, language)}</b>
           </div>
         </div>
         <div className="dialog-actions">
           <button className="primary-button" onClick={() => onWallet(quantity)} disabled={loading === `wallet:${product.id}` || invalidQuantity}>
             {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={17} /> : <Wallet size={17} />} Mua bằng ví
+          </button>
+          <button className="ghost-button" onClick={() => onUsdt(quantity)} disabled={loading === `usdt:${product.id}` || invalidQuantity || !product.usdtPrice}>
+            {loading === `usdt:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} USDT Binance
           </button>
           <button className="ghost-button" onClick={() => onBank(quantity)} disabled={loading === `bank:${product.id}` || invalidQuantity}>
             {loading === `bank:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} Chuyển khoản QR
@@ -985,10 +1026,15 @@ function QrDialog({
       <div className="dialog qr-dialog">
         <button className="close" onClick={onClose}>&times;</button>
         <h2>Quét QR thanh toán</h2>
-        <img className="qr-image" src={payment.qrImageUrl} alt={`QR ${payment.code}`} />
+        {payment.qrImageUrl ? <img className="qr-image" src={payment.qrImageUrl} alt={`QR ${payment.code}`} /> : null}
+        {payment.checkoutUrl ? (
+          <a className="primary-button" href={payment.checkoutUrl} target="_blank" rel="noreferrer" style={{ width: "100%", justifyContent: "center" }}>
+            Open Binance Pay
+          </a>
+        ) : null}
         <div className="detail-grid">
           <span>Mã</span><b>{payment.code}</b>
-          <span>Số tiền</span><b>{formatVnd(payment.amount)}</b>
+          <span>Số tiền</span><b>{payment.cryptoCurrency === "USDT" ? formatUsdt(payment.cryptoAmount) : formatVnd(payment.amount)}</b>
           <span>Hạn</span><b>{new Date(payment.expiresAt).toLocaleTimeString("vi-VN")}</b>
           <span>Trạng thái</span><b>{statusLabel(status?.status ?? "PENDING")}</b>
         </div>
@@ -1125,6 +1171,26 @@ function readStoredToken() {
 function readInitialTab(): Tab {
   const tab = new URLSearchParams(window.location.search).get("tab");
   return tab === "products" || tab === "history" ? tab : "home";
+}
+
+function readStoredLanguage(): Language {
+  return localStorage.getItem(LANGUAGE_KEY) === "en" ? "en" : "vi";
+}
+
+function localizedName(product: Product, language: Language) {
+  return language === "en" ? product.nameEn?.trim() || product.name : product.name;
+}
+
+function localizedDescription(product: Product, language: Language) {
+  return language === "en" ? product.descriptionEn?.trim() || product.description : product.description;
+}
+
+function formatProductPrice(product: Product, language: Language) {
+  return language === "en" && product.usdtPrice ? formatUsdt(product.usdtPrice) : formatVnd(product.price);
+}
+
+function formatProductTotal(product: Product, quantity: number, language: Language) {
+  return language === "en" && product.usdtPrice ? formatUsdt(Number(product.usdtPrice) * quantity) : formatVnd(product.price * quantity);
 }
 
 function persistSessionToken(token: string) {

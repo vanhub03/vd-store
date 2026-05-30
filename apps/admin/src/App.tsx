@@ -27,12 +27,15 @@ type Product = {
   id: string;
   categoryId?: string | null;
   name: string;
+  nameEn?: string | null;
   description?: string;
+  descriptionEn?: string | null;
   imageUrl?: string | null;
   buttonIcon?: string | null;
   price: number;
   botPrice: number;
   webPrice: number;
+  usdtPrice?: number | string | null;
   showInBot: boolean;
   showInWeb: boolean;
   manualStock?: number;
@@ -70,8 +73,10 @@ type Payment = {
 type Broadcast = { id: string; title: string; message: string; status: string; sentCount: number; failedCount: number; createdAt: string };
 type ProductForm = {
   name: string;
+  nameEn: string;
   botPrice: number;
   webPrice: number;
+  usdtPrice: string;
   showInBot: boolean;
   showInWeb: boolean;
   categoryId: string;
@@ -79,6 +84,7 @@ type ProductForm = {
   status: string;
   manualStock: number;
   description: string;
+  descriptionEn: string;
   imageUrl: string;
   buttonIcon: string;
   sharedContent: string;
@@ -357,8 +363,10 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
     setEditingProductId(product.id);
     setForm({
       name: product.name,
+      nameEn: product.nameEn ?? "",
       botPrice: product.botPrice || product.price,
       webPrice: product.webPrice || product.price,
+      usdtPrice: product.usdtPrice ? String(product.usdtPrice) : "",
       showInBot: product.showInBot,
       showInWeb: product.showInWeb,
       categoryId: product.categoryId ?? product.category?.id ?? "",
@@ -366,6 +374,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       status: product.status,
       manualStock: product.manualStock ?? 0,
       description: product.description ?? "",
+      descriptionEn: product.descriptionEn ?? "",
       imageUrl: product.imageUrl ?? "",
       buttonIcon: product.buttonIcon ?? defaultProductIcon,
       sharedContent: product.sharedContent ?? "",
@@ -438,6 +447,10 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             />
           </label>
           <label>
+            Ten tieng Anh
+            <input value={form.nameEn} onChange={(event) => setForm({ ...form, nameEn: event.target.value })} placeholder="English product name" />
+          </label>
+          <label>
             Logo URL
             <input
               type="url"
@@ -473,6 +486,10 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
           <label>
             Giá ở web VND
             <input type="number" value={form.webPrice} onChange={(event) => setForm({ ...form, webPrice: Number(event.target.value) })} min={1} />
+          </label>
+          <label>
+            Gia USDT
+            <input type="number" value={form.usdtPrice} onChange={(event) => setForm({ ...form, usdtPrice: event.target.value })} min={0} step="0.00000001" placeholder="0.00" />
           </label>
           <div className="checkboxGroup wide">
             <label className="checkboxLabel">
@@ -526,6 +543,10 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} />
           </label>
           <label className="wide">
+            Mo ta tieng Anh
+            <textarea value={form.descriptionEn} onChange={(event) => setForm({ ...form, descriptionEn: event.target.value })} rows={3} />
+          </label>
+          <label className="wide">
             Nội dung giao chung
             <textarea value={form.sharedContent} onChange={(event) => setForm({ ...form, sharedContent: event.target.value })} rows={3} />
           </label>
@@ -569,11 +590,12 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       </section>
 
       <DataTable
-        columns={["Tên", "Giá bot", "Giá web", "Hiển thị", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
+        columns={["Tên", "Giá bot", "Giá web", "USDT", "Hiển thị", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
         rows={products.map((product) => [
           <ProductNameCell product={product} />,
           formatVnd(product.botPrice || product.price),
           formatVnd(product.webPrice || product.price),
+          product.usdtPrice ? `${product.usdtPrice} USDT` : "-",
           channelVisibilityLabel(product),
           product.deliveryType,
           productQuantityLabel(product),
@@ -618,8 +640,10 @@ function ProductNameCell({ product }: { product: Product }) {
 function emptyProductForm(): ProductForm {
   return {
     name: "",
+    nameEn: "",
     botPrice: 10000,
     webPrice: 10000,
+    usdtPrice: "",
     showInBot: true,
     showInWeb: true,
     categoryId: "",
@@ -627,6 +651,7 @@ function emptyProductForm(): ProductForm {
     status: "ACTIVE",
     manualStock: 0,
     description: "",
+    descriptionEn: "",
     imageUrl: "",
     buttonIcon: defaultProductIcon,
     sharedContent: "",
@@ -642,6 +667,8 @@ function serializeProductForm(form: ProductForm) {
     botPrice: Number(form.botPrice),
     webPrice: Number(form.webPrice),
     price: Number(form.webPrice),
+    nameEn: form.nameEn || null,
+    usdtPrice: form.usdtPrice === "" ? null : Number(form.usdtPrice),
     showInBot: Boolean(form.showInBot),
     showInWeb: Boolean(form.showInWeb),
     manualStock: Number(form.manualStock) || 0,
@@ -650,6 +677,7 @@ function serializeProductForm(form: ProductForm) {
     sharedContent: form.sharedContent || null,
     sharedFilePath: form.sharedFilePath || null,
     description: form.description || null,
+    descriptionEn: form.descriptionEn || null,
     manualInstructions: form.manualInstructions || null
   };
 }

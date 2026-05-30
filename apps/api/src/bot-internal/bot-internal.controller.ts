@@ -99,6 +99,11 @@ export class BotInternalController {
     return this.shop.createBankOrder(body.telegramId, body.productId, body.quantity ?? 1, "bot");
   }
 
+  @Post("orders/usdt")
+  createUsdtOrder(@Body() body: OrderDto) {
+    return this.shop.createBinancePayOrder(body.telegramId, body.productId, body.quantity ?? 1, "bot");
+  }
+
   @Post("payments/:id/telegram-message")
   recordPaymentMessage(@Param("id") id: string, @Body() body: PaymentMessageDto) {
     return this.shop.recordPaymentTelegramMessage(id, body.telegramChatId, body.telegramMessageId);

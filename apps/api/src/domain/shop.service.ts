@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import crypto from "node:crypto";
 import {
   InventoryStatus,
   ManualOrderStatus,
@@ -28,13 +29,16 @@ export type BotUserInput = {
 export type ProductInput = {
   categoryId?: string | null;
   name: string;
+  nameEn?: string | null;
   slug?: string;
   description?: string | null;
+  descriptionEn?: string | null;
   imageUrl?: string | null;
   buttonIcon?: string | null;
   price?: number;
   botPrice?: number;
   webPrice?: number;
+  usdtPrice?: number | string | null;
   showInBot?: boolean;
   showInWeb?: boolean;
   status?: ProductStatus;
@@ -216,6 +220,86 @@ export class ShopService {
     });
 
     return { order, payment: order.payments[0], code, amount: totalAmount, expiresAt, qrImageUrl };
+  }
+
+  async createBinancePayOrder(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException("So luong khong hop le.");
+    }
+
+    const user = await this.requireTelegramUser(telegramId);
+    const product = await this.getActiveProduct(productId, channel);
+    await this.ensurePurchasable(product, quantity);
+    const unitCryptoAmount = decimalNumber(product.usdtPrice);
+    if (!unitCryptoAmount || unitCryptoAmount <= 0) {
+      throw new BadRequestException("San pham chua cau hinh gia USDT.");
+    }
+
+    const code = await this.createUniqueCode("USDT");
+    const totalAmount = product.price * quantity;
+    const cryptoAmount = roundUsdt(unitCryptoAmount * quantity);
+    const expiresAt = minutesFromNow(10);
+    const order = await this.prisma.order.create({
+      data: {
+        code,
+        userId: user.id,
+        productId: product.id,
+        quantity,
+        unitPrice: product.price,
+        totalAmount,
+        status: OrderStatus.PENDING_PAYMENT,
+        paymentMethod: PaymentMethod.BINANCE_PAY,
+        expiresAt,
+        payments: {
+          create: {
+            code,
+            kind: PaymentKind.DIRECT_ORDER,
+            status: PaymentStatus.PENDING,
+            amount: totalAmount,
+            expectedAmount: totalAmount,
+            userId: user.id,
+            expiresAt,
+            qrPayload: code,
+            provider: "binance_pay",
+            cryptoCurrency: "USDT",
+            cryptoAmount: new Prisma.Decimal(cryptoAmount)
+          }
+        }
+      },
+      include: { payments: true, product: true }
+    });
+
+    const payment = order.payments[0];
+    const binance = await this.createBinancePayCheckout({
+      code,
+      productName: product.nameEn?.trim() || product.name,
+      amount: cryptoAmount,
+      expiresAt
+    });
+
+    const updatedPayment = await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        providerPaymentId: binance.providerPaymentId,
+        checkoutUrl: binance.checkoutUrl,
+        deeplink: binance.deeplink,
+        qrImageUrl: binance.qrImageUrl,
+        providerPayload: binance.rawPayload as Prisma.InputJsonValue
+      }
+    });
+
+    return {
+      order,
+      payment: updatedPayment,
+      code,
+      amount: totalAmount,
+      cryptoCurrency: "USDT",
+      cryptoAmount,
+      expiresAt,
+      qrImageUrl: updatedPayment.qrImageUrl,
+      checkoutUrl: updatedPayment.checkoutUrl,
+      deeplink: updatedPayment.deeplink
+    };
   }
 
   async purchaseWithWallet(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
@@ -937,6 +1021,64 @@ export class ShopService {
     return `${baseUrl}/${encodeURIComponent(bankCode)}-${encodeURIComponent(accountNumber)}-${encodeURIComponent(template)}.png?${params.toString()}`;
   }
 
+  private async createBinancePayCheckout(input: { code: string; productName: string; amount: string; expiresAt: Date }) {
+    const apiKey = process.env.BINANCE_PAY_API_KEY?.trim();
+    const secretKey = process.env.BINANCE_PAY_SECRET_KEY?.trim();
+    if (!apiKey || !secretKey) {
+      throw new BadRequestException("Chua cau hinh BINANCE_PAY_API_KEY va BINANCE_PAY_SECRET_KEY.");
+    }
+
+    const baseUrl = (process.env.BINANCE_PAY_BASE_URL ?? "https://bpay.binanceapi.com").replace(/\/+$/, "");
+    const body = {
+      env: { terminalType: "WEB" },
+      merchantTradeNo: input.code,
+      orderAmount: input.amount,
+      currency: "USDT",
+      goods: {
+        goodsType: "02",
+        goodsCategory: "D000",
+        referenceGoodsId: input.code,
+        goodsName: input.productName.slice(0, 256)
+      },
+      orderExpireTime: input.expiresAt.getTime(),
+      returnUrl: process.env.BINANCE_PAY_RETURN_URL ?? process.env.WEB_PUBLIC_URL ?? "https://vanhdao.io.vn",
+      cancelUrl: process.env.BINANCE_PAY_CANCEL_URL ?? process.env.WEB_PUBLIC_URL ?? "https://vanhdao.io.vn",
+      webhookUrl: process.env.BINANCE_PAY_WEBHOOK_URL ?? `${process.env.API_BASE_URL ?? ""}/webhooks/binance-pay`
+    };
+    const bodyText = JSON.stringify(body);
+    const timestamp = Date.now().toString();
+    const nonce = crypto.randomBytes(16).toString("hex");
+    const payload = `${timestamp}\n${nonce}\n${bodyText}\n`;
+    const signature = crypto.createHmac("sha512", secretKey).update(payload).digest("hex").toUpperCase();
+    const response = await fetch(`${baseUrl}/binancepay/openapi/v2/order`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "BinancePay-Timestamp": timestamp,
+        "BinancePay-Nonce": nonce,
+        "BinancePay-Certificate-SN": apiKey,
+        "BinancePay-Signature": signature
+      },
+      body: bodyText
+    });
+    const result = (await response.json()) as {
+      status?: string;
+      code?: string;
+      errorMessage?: string;
+      data?: { prepayId?: string; checkoutUrl?: string; deeplink?: string; qrcodeLink?: string; qrContent?: string };
+    };
+    if (!response.ok || result.status !== "SUCCESS" || !result.data) {
+      throw new BadRequestException(`Binance Pay create order failed: ${result.errorMessage ?? result.code ?? response.status}`);
+    }
+    return {
+      providerPaymentId: result.data.prepayId,
+      checkoutUrl: result.data.checkoutUrl,
+      deeplink: result.data.deeplink,
+      qrImageUrl: result.data.qrcodeLink ?? result.data.qrContent,
+      rawPayload: result
+    };
+  }
+
   private async audit(adminId: string, action: string, entityType: string, entityId: string, meta?: unknown) {
     await this.prisma.auditLog.create({
       data: {
@@ -1067,7 +1209,7 @@ function normalizeProductPrices(input: Partial<ProductInput>, required: boolean)
 
   const botPrice = input.botPrice ?? input.price;
   const webPrice = input.webPrice ?? input.price;
-  const data: { price?: number; botPrice?: number; webPrice?: number } = {};
+  const data: { price?: number; botPrice?: number; webPrice?: number; usdtPrice?: Prisma.Decimal | null } = {};
 
   if (botPrice !== undefined) {
     assertPositiveVnd(botPrice);
@@ -1092,7 +1234,30 @@ function normalizeProductPrices(input: Partial<ProductInput>, required: boolean)
     data.price = finalWebPrice;
   }
 
+  if (input.usdtPrice !== undefined) {
+    data.usdtPrice = normalizeUsdtPrice(input.usdtPrice);
+  }
+
   return data;
+}
+
+function normalizeUsdtPrice(value: number | string | null) {
+  if (value === null || value === "") return null;
+  const amount = typeof value === "number" ? value : Number(String(value).trim());
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new BadRequestException("Gia USDT khong hop le.");
+  }
+  return new Prisma.Decimal(roundUsdt(amount));
+}
+
+function decimalNumber(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundUsdt(value: number) {
+  return value.toFixed(8).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 function productVisibilityWhere(channel: SalesChannel): Prisma.ProductWhereInput {

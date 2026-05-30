@@ -60,13 +60,16 @@ const HELP_TEXT = [
 
 type ScreenKeyboard = ReturnType<typeof Markup.inlineKeyboard>;
 type ScreenMedia = string | Buffer;
-type PaymentMethod = "wallet" | "bank";
+type BotLanguage = "vi" | "en";
+type PaymentMethod = "wallet" | "bank" | "usdt";
+const userLanguages = new Map<number, BotLanguage>();
 
 function mainKeyboard() {
   return Markup.inlineKeyboard([
     [Markup.button.callback("Sản phẩm", "catalog"), Markup.button.callback("Số dư", "wallet")],
     [Markup.button.callback("Nạp tiền", "topup"), Markup.button.callback("Lịch sử", "history")],
-    [Markup.button.callback("Hỗ trợ", "support"), Markup.button.callback("Hướng dẫn", "help")]
+    [Markup.button.callback("Hỗ trợ", "support"), Markup.button.callback("Hướng dẫn", "help")],
+    [Markup.button.callback("Tiếng Việt", "lang:vi"), Markup.button.callback("English", "lang:en")]
   ]);
 }
 
@@ -164,6 +167,11 @@ bot.action(/^pay_bank:([^:]+):(\d+)$/, async (ctx) => {
   await createBankOrderQr(ctx, ctx.match[1], Number(ctx.match[2]));
 });
 
+bot.action(/^pay_usdt:([^:]+):(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await createUsdtOrder(ctx, ctx.match[1], Number(ctx.match[2]));
+});
+
 bot.action("history", async (ctx) => {
   await ctx.answerCbQuery();
   await showHistory(ctx);
@@ -182,6 +190,13 @@ bot.action("help", async (ctx) => {
 bot.action("home", async (ctx) => {
   await ctx.answerCbQuery();
   await showHome(ctx);
+});
+
+bot.action(/^lang:(vi|en)$/, async (ctx) => {
+  const language = ctx.match[1] as BotLanguage;
+  if (ctx.from?.id) userLanguages.set(ctx.from.id, language);
+  await ctx.answerCbQuery(language === "en" ? "English enabled" : "Đã chọn tiếng Việt");
+  await showHome(ctx, language === "en" ? "Main menu\n\nPrices are shown in USDT when available." : undefined);
 });
 
 bot.on("text", async (ctx) => {
@@ -212,10 +227,10 @@ async function showCatalog(ctx: Context) {
   const catalog = await api.get<CatalogResponse>("/bot/catalog");
   const products = flattenProducts(catalog);
   const buttons = products.slice(0, CATALOG_BUTTON_LIMIT).map((product, index) => [
-    Markup.button.callback(productButtonLabel(product, index), `prod:${product.id}`)
+    Markup.button.callback(productButtonLabel(product, index, currentLanguage(ctx)), `prod:${product.id}`)
   ]);
   buttons.push([Markup.button.callback("Quay lại", "home")]);
-  await renderScreen(ctx, buildCatalogText(products), Markup.inlineKeyboard(buttons));
+  await renderScreen(ctx, buildCatalogText(products, currentLanguage(ctx)), Markup.inlineKeyboard(buttons));
 }
 
 async function showWallet(ctx: Context) {
@@ -273,9 +288,10 @@ async function showProduct(ctx: Context, productId: string) {
 }
 
 async function showProductDetail(ctx: Context, product: ProductDetail) {
-  const description = product.description ? `\n${escapeHtml(product.description)}` : "";
+  const lang = currentLanguage(ctx);
+  const description = localizedDescription(product, lang) ? `\n${escapeHtml(localizedDescription(product, lang)!)}` : "";
   const categoryLine = product.category?.name ? `Danh mục: <b>${escapeHtml(product.category.name)}</b>\n` : "";
-  const caption = `${categoryLine}<b>${escapeHtml(productIcon(product))} ${escapeHtml(product.name)}</b>${description}\nGiá: <b>${formatVnd(product.price)}</b>\n${productStockLabel(
+  const caption = `${categoryLine}<b>${escapeHtml(productIcon(product))} ${escapeHtml(localizedName(product, lang))}</b>${description}\nGiá: <b>${localizedPrice(product, lang)}</b>\n${productStockLabel(
     product
   )}\n\nChat nhanh: /mua ${escapeHtml(product.name)} vi hoặc /mua ${escapeHtml(product.name)} ck`;
   const keyboard = Markup.inlineKeyboard([
@@ -312,13 +328,13 @@ async function showQuantitySelection(ctx: Context, productId: string, quantity: 
   await renderScreen(
     ctx,
     [
-      `<b>${escapeHtml(productIcon(product))} ${escapeHtml(product.name)}</b>`,
-      product.description ? escapeHtml(product.description) : "",
-      `Gia: <b>${formatVnd(product.price)}</b>`,
+      `<b>${escapeHtml(productIcon(product))} ${escapeHtml(localizedName(product, currentLanguage(ctx)))}</b>`,
+      localizedDescription(product, currentLanguage(ctx)) ? escapeHtml(localizedDescription(product, currentLanguage(ctx))!) : "",
+      `Gia: <b>${localizedPrice(product, currentLanguage(ctx))}</b>`,
       stockLine,
       "",
       `So luong dang chon: <b>${safeQuantity}</b>`,
-      `Tong thanh toan: <b>${formatVnd(product.price * safeQuantity)}</b>${methodHint}`
+      `Tong thanh toan: <b>${localizedTotal(product, safeQuantity, currentLanguage(ctx))}</b>${methodHint}`
     ]
       .filter(Boolean)
       .join("\n"),
@@ -407,6 +423,31 @@ async function createBankOrderQr(ctx: Context, productId: string, quantity = 1) 
     quantity
   });
   await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption("Mua hàng", result.code, result.amount, result.expiresAt));
+}
+
+async function createUsdtOrder(ctx: Context, productId: string, quantity = 1) {
+  await upsertUser(ctx);
+  const result = await api.post<PaymentResponse>("/bot/orders/usdt", {
+    telegramId: String(ctx.from!.id),
+    productId,
+    quantity
+  });
+  const amount = formatUsdt(result.cryptoAmount);
+  const caption = [
+    "USDT Binance Pay",
+    `Amount: <b>${amount} USDT</b>`,
+    `Order: <code>${escapeHtml(result.code)}</code>`,
+    result.checkoutUrl ? `Checkout: ${escapeHtml(result.checkoutUrl)}` : null,
+    `Expires: ${new Date(result.expiresAt).toLocaleString("vi-VN")}`,
+    "System will auto process after Binance Pay confirms."
+  ]
+    .filter(Boolean)
+    .join("\n");
+  if (result.qrImageUrl) {
+    await sendQr(ctx, result.payment.id, result.qrImageUrl, caption);
+    return;
+  }
+  await renderScreen(ctx, caption, mainKeyboard());
 }
 
 async function renderScreen(ctx: Context, caption: string, keyboard?: ScreenKeyboard, media?: ScreenMedia) {
@@ -595,13 +636,14 @@ function buildQrCaption(title: string, code: string, amount: number, expiresAt: 
   ).toLocaleString("vi-VN")}\nHệ thống sẽ tự xử lý khi nhận tiền.`;
 }
 
-function buildCatalogText(products: ProductSummary[]) {
+function buildCatalogText(products: ProductSummary[], language: BotLanguage) {
   if (!products.length) return "Hiện chưa có sản phẩm đang bán.";
 
   const productLines = products.slice(0, CATALOG_TEXT_LIMIT).map((product, index) => {
     const category = product.category?.name ? ` - ${escapeHtml(singleLine(product.category.name))}` : "";
-    return `${index + 1}. ${escapeHtml(productStateIcon(product))} ${escapeHtml(singleLine(product.name))} - ${formatVnd(
-      product.price
+    return `${index + 1}. ${escapeHtml(productStateIcon(product))} ${escapeHtml(singleLine(localizedName(product, language)))} - ${localizedPrice(
+      product,
+      language
     )} - 📦 ${productQuantityText(product)}${category}`;
   });
   const moreLine = products.length > CATALOG_TEXT_LIMIT ? `\n\nCòn ${products.length - CATALOG_TEXT_LIMIT} sản phẩm khác. Bấm nút bên dưới để xem tiếp.` : "";
@@ -621,8 +663,8 @@ function productQuantityText(product: ProductSummary | ProductDetail) {
   return quantity === null ? "không giới hạn" : String(quantity);
 }
 
-function productButtonLabel(product: ProductSummary, index: number) {
-  return `${index + 1}. ${productStateIcon(product)} ${product.name} - ${formatVnd(product.price)} | 📦 ${productQuantityText(product)}`;
+function productButtonLabel(product: ProductSummary, index: number, language: BotLanguage) {
+  return `${index + 1}. ${productStateIcon(product)} ${localizedName(product, language)} - ${localizedPrice(product, language)} | 📦 ${productQuantityText(product)}`;
 }
 
 function productStateIcon(product: ProductSummary | ProductDetail) {
@@ -633,6 +675,35 @@ function productStateIcon(product: ProductSummary | ProductDetail) {
 
 function productIcon(product: ProductSummary | ProductDetail) {
   return product.buttonIcon?.trim() || "🛍️";
+}
+
+function currentLanguage(ctx: Context): BotLanguage {
+  return ctx.from?.id ? userLanguages.get(ctx.from.id) ?? "vi" : "vi";
+}
+
+function localizedName(product: ProductSummary | ProductDetail, language: BotLanguage) {
+  return language === "en" ? product.nameEn?.trim() || product.name : product.name;
+}
+
+function localizedDescription(product: ProductSummary | ProductDetail, language: BotLanguage) {
+  return language === "en" ? product.descriptionEn?.trim() || product.description : product.description;
+}
+
+function localizedPrice(product: ProductSummary | ProductDetail, language: BotLanguage) {
+  return language === "en" && product.usdtPrice ? `${formatUsdt(product.usdtPrice)} USDT` : formatVnd(product.price);
+}
+
+function localizedTotal(product: ProductSummary | ProductDetail, quantity: number, language: BotLanguage) {
+  if (language === "en" && product.usdtPrice) {
+    return `${formatUsdt(Number(product.usdtPrice) * quantity)} USDT`;
+  }
+  return formatVnd(product.price * quantity);
+}
+
+function formatUsdt(value: string | number | null | undefined) {
+  const amount = Number(value ?? 0);
+  if (!Number.isFinite(amount)) return "0";
+  return amount.toLocaleString("en-US", { maximumFractionDigits: 8 });
 }
 
 function quantityKeyboard(product: ProductDetail, quantity: number, preferredMethod?: PaymentMethod) {
@@ -656,7 +727,8 @@ function quantityKeyboard(product: ProductDetail, quantity: number, preferredMet
             [
               Markup.button.callback("Mua bang vi", `pay_wallet:${product.id}:${quantity}`),
               Markup.button.callback("Chuyen khoan QR", `pay_bank:${product.id}:${quantity}`)
-            ]
+            ],
+            [Markup.button.callback("USDT Binance Pay", `pay_usdt:${product.id}:${quantity}`)]
           ];
 
   return Markup.inlineKeyboard([

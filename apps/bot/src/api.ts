@@ -44,10 +44,13 @@ export type CatalogResponse = {
 export type ProductSummary = {
   id: string;
   name: string;
+  nameEn?: string | null;
   description?: string;
+  descriptionEn?: string | null;
   imageUrl?: string | null;
   buttonIcon?: string | null;
   price: number;
+  usdtPrice?: string | number | null;
   deliveryType: string;
   manualStock?: number;
   category?: { id: string; name: string } | null;
@@ -70,6 +73,10 @@ export type PaymentResponse = {
   code: string;
   amount: number;
   qrImageUrl: string;
+  checkoutUrl?: string | null;
+  deeplink?: string | null;
+  cryptoCurrency?: string | null;
+  cryptoAmount?: string | number | null;
   expiresAt: string;
 };
 

@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { ManualOrderStatus, ProductDeliveryType, ProductStatus } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
 import { ShopService, slugify } from "../domain/shop.service";
@@ -9,6 +9,10 @@ import { PrismaService } from "../prisma.service";
 class CategoryDto {
   @IsString()
   name!: string;
+
+  @IsOptional()
+  @IsString()
+  nameEn?: string | null;
 
   @IsOptional()
   @IsString()
@@ -37,6 +41,10 @@ class ProductDto {
 
   @IsOptional()
   @IsString()
+  descriptionEn?: string | null;
+
+  @IsOptional()
+  @IsString()
   imageUrl?: string | null;
 
   @IsOptional()
@@ -57,6 +65,11 @@ class ProductDto {
   @IsInt()
   @Min(1)
   webPrice!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  usdtPrice?: number;
 
   @IsOptional()
   @IsBoolean()

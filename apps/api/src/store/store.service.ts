@@ -99,6 +99,8 @@ export class StoreService {
       kind: payment.kind,
       status: effectiveStatus,
       amount: payment.amount,
+      cryptoCurrency: payment.cryptoCurrency,
+      cryptoAmount: payment.cryptoAmount,
       expiresAt: payment.expiresAt,
       balance: await this.shop.getWalletBalance(customerId),
       order: payment.order
@@ -148,6 +150,10 @@ export class StoreService {
 
   createBankOrder(telegramId: string, productId: string, quantity: number) {
     return this.shop.createBankOrder(telegramId, productId, quantity, "web");
+  }
+
+  createUsdtOrder(telegramId: string, productId: string, quantity: number) {
+    return this.shop.createBinancePayOrder(telegramId, productId, quantity, "web");
   }
 
   private session(customer: { id: string; email: string | null; displayName: string | null; telegramId: string }) {

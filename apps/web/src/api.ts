@@ -14,10 +14,13 @@ export type Customer = {
 export type Product = {
   id: string;
   name: string;
+  nameEn?: string | null;
   description?: string | null;
+  descriptionEn?: string | null;
   imageUrl?: string | null;
   buttonIcon?: string | null;
   price: number;
+  usdtPrice?: string | number | null;
   deliveryType: "STOCK_ITEM" | "SHARED_CONTENT" | "MANUAL";
   manualStock?: number | null;
   category?: { id: string; name: string } | null;
@@ -35,11 +38,19 @@ export type PaymentResult = {
     code: string;
     amount: number;
     qrImageUrl: string;
+    checkoutUrl?: string | null;
+    deeplink?: string | null;
+    cryptoCurrency?: string | null;
+    cryptoAmount?: string | number | null;
     expiresAt: string;
   };
   code: string;
   amount: number;
   qrImageUrl: string;
+  checkoutUrl?: string | null;
+  deeplink?: string | null;
+  cryptoCurrency?: string | null;
+  cryptoAmount?: string | number | null;
   expiresAt: string;
 };
 
@@ -61,6 +72,8 @@ export type PaymentStatusResult = {
   kind: "TOPUP" | "DIRECT_ORDER" | "WALLET_PURCHASE" | "ADMIN_ADJUSTMENT";
   status: "PENDING" | "SUCCEEDED" | "EXPIRED" | "FAILED" | "CREDITED_TO_WALLET" | "MANUAL_REVIEW";
   amount: number;
+  cryptoCurrency?: string | null;
+  cryptoAmount?: string | number | null;
   expiresAt?: string | null;
   balance: number;
   order?: {
@@ -141,4 +154,9 @@ export function formatVnd(amount: number) {
     currency: "VND",
     maximumFractionDigits: 0
   }).format(amount);
+}
+
+export function formatUsdt(amount: string | number | null | undefined) {
+  const value = Number(amount ?? 0);
+  return `${value.toLocaleString("en-US", { maximumFractionDigits: 8 })} USDT`;
 }
