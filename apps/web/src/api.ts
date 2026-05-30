@@ -132,8 +132,10 @@ export class StoreApi {
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method,
+      cache: method === "GET" ? "no-store" : "default",
       headers: {
         "content-type": "application/json",
+        ...(method === "GET" ? { "cache-control": "no-cache" } : {}),
         ...(this.token ? { authorization: `Bearer ${this.token}` } : {})
       },
       body: body === undefined ? undefined : JSON.stringify(body)

@@ -149,6 +149,12 @@ function App() {
     return products.filter((product) => `${localizedName(product, language)} ${localizedDescription(product, language) ?? ""}`.toLocaleLowerCase("vi-VN").includes(normalized));
   }, [products, query, language]);
 
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const freshProduct = products.find((product) => product.id === selectedProduct.id);
+    if (freshProduct && freshProduct !== selectedProduct) setSelectedProduct(freshProduct);
+  }, [products, selectedProduct]);
+
   function changeLanguage(next: Language) {
     setLanguage(next);
     localStorage.setItem(LANGUAGE_KEY, next);
@@ -160,6 +166,16 @@ function App() {
     if (token) void loadPrivateData();
     else setLoading("");
   }, [token]);
+
+  useEffect(() => {
+    const refresh = () => void loadPublicData();
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 30000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (!qr || !token) return;

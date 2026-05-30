@@ -33,6 +33,10 @@ class ProductDto {
 
   @IsOptional()
   @IsString()
+  nameEn?: string | null;
+
+  @IsOptional()
+  @IsString()
   slug?: string;
 
   @IsOptional()
