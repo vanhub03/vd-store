@@ -60,6 +60,7 @@ const HELP_TEXT = [
 
 type ScreenKeyboard = ReturnType<typeof Markup.inlineKeyboard>;
 type ScreenMedia = string | Buffer;
+type PaymentMethod = "wallet" | "bank";
 
 function mainKeyboard() {
   return Markup.inlineKeyboard([
@@ -114,6 +115,10 @@ bot.action(/^prod:(.+)$/, async (ctx) => {
   await showProduct(ctx, ctx.match[1]);
 });
 
+bot.action("noop", async (ctx) => {
+  await ctx.answerCbQuery();
+});
+
 bot.action("wallet", async (ctx) => {
   await ctx.answerCbQuery();
   await showWallet(ctx);
@@ -131,12 +136,32 @@ bot.action(/^topup:(\d+)$/, async (ctx) => {
 
 bot.action(/^buy_wallet:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  await purchaseWithWallet(ctx, ctx.match[1]);
+  await showQuantitySelection(ctx, ctx.match[1], 1, "wallet");
 });
 
 bot.action(/^buy_bank:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  await createBankOrderQr(ctx, ctx.match[1]);
+  await showQuantitySelection(ctx, ctx.match[1], 1, "bank");
+});
+
+bot.action(/^buy:(.+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await showQuantitySelection(ctx, ctx.match[1], 1);
+});
+
+bot.action(/^qty:([^:]+):(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await showQuantitySelection(ctx, ctx.match[1], Number(ctx.match[2]));
+});
+
+bot.action(/^pay_wallet:([^:]+):(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await purchaseWithWallet(ctx, ctx.match[1], Number(ctx.match[2]));
+});
+
+bot.action(/^pay_bank:([^:]+):(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await createBankOrderQr(ctx, ctx.match[1], Number(ctx.match[2]));
 });
 
 bot.action("history", async (ctx) => {
@@ -262,6 +287,45 @@ async function showProductDetail(ctx: Context, product: ProductDetail) {
   await renderScreen(ctx, caption, keyboard);
 }
 
+async function showQuantitySelection(ctx: Context, productId: string, quantity: number, preferredMethod?: PaymentMethod) {
+  await upsertUser(ctx);
+  const product = await api.get<ProductDetail>(`/bot/products/${productId}`);
+  const available = productAvailableQuantity(product);
+  if (available === 0) {
+    await renderScreen(
+      ctx,
+      `${escapeHtml(productIcon(product))} <b>${escapeHtml(product.name)}</b>\n\nSan pham hien da het hang.`,
+      Markup.inlineKeyboard([[Markup.button.callback("Quay lai", `prod:${product.id}`)]])
+    );
+    return;
+  }
+
+  const safeQuantity = clampQuantity(quantity, product);
+  const stockLine = available === null ? "Kho: khong gioi han" : `Kho: ${available}`;
+  const methodHint =
+    preferredMethod === "wallet"
+      ? "\nBan dang chon thanh toan bang vi. Kiem tra so luong roi bam xac nhan."
+      : preferredMethod === "bank"
+        ? "\nBan dang chon chuyen khoan QR. Kiem tra so luong roi bam tao QR."
+        : "";
+
+  await renderScreen(
+    ctx,
+    [
+      `<b>${escapeHtml(productIcon(product))} ${escapeHtml(product.name)}</b>`,
+      product.description ? escapeHtml(product.description) : "",
+      `Gia: <b>${formatVnd(product.price)}</b>`,
+      stockLine,
+      "",
+      `So luong dang chon: <b>${safeQuantity}</b>`,
+      `Tong thanh toan: <b>${formatVnd(product.price * safeQuantity)}</b>${methodHint}`
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    quantityKeyboard(product, safeQuantity, preferredMethod)
+  );
+}
+
 async function showProductByCommand(ctx: Context) {
   const reference = getCommandArgs(ctx).join(" ").trim();
   if (!reference) return showCatalog(ctx);
@@ -291,15 +355,11 @@ async function purchaseByCommand(ctx: Context) {
   }
 
   if (!parsed.method) {
-    await showProductDetail(ctx, product);
+    await showQuantitySelection(ctx, product.id, 1);
     return;
   }
 
-  if (parsed.method === "wallet") {
-    await purchaseWithWallet(ctx, product.id);
-    return;
-  }
-  await createBankOrderQr(ctx, product.id);
+  await showQuantitySelection(ctx, product.id, 1, parsed.method);
 }
 
 async function topupByCommand(ctx: Context) {
@@ -324,12 +384,12 @@ async function createTopupQr(ctx: Context, amount: number) {
   await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption("Nạp tiền", result.code, amount, result.expiresAt));
 }
 
-async function purchaseWithWallet(ctx: Context, productId: string) {
+async function purchaseWithWallet(ctx: Context, productId: string, quantity = 1) {
   await upsertUser(ctx);
   const result = await api.post<WalletPurchaseResponse>("/bot/orders/wallet", {
     telegramId: String(ctx.from!.id),
     productId,
-    quantity: 1
+    quantity
   });
   await renderFinalDelivery(
     ctx,
@@ -339,12 +399,12 @@ async function purchaseWithWallet(ctx: Context, productId: string) {
   );
 }
 
-async function createBankOrderQr(ctx: Context, productId: string) {
+async function createBankOrderQr(ctx: Context, productId: string, quantity = 1) {
   await upsertUser(ctx);
   const result = await api.post<PaymentResponse>("/bot/orders/bank", {
     telegramId: String(ctx.from!.id),
     productId,
-    quantity: 1
+    quantity
   });
   await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption("Mua hàng", result.code, result.amount, result.expiresAt));
 }
@@ -573,6 +633,49 @@ function productStateIcon(product: ProductSummary | ProductDetail) {
 
 function productIcon(product: ProductSummary | ProductDetail) {
   return product.buttonIcon?.trim() || "🛍️";
+}
+
+function quantityKeyboard(product: ProductDetail, quantity: number, preferredMethod?: PaymentMethod) {
+  const previousQuantity = clampQuantity(quantity - 1, product);
+  const nextQuantity = clampQuantity(quantity + 1, product);
+  const quickQuantities = [1, 2, 5, 10]
+    .map((value) => clampQuantity(value, product))
+    .filter((value, index, values) => values.indexOf(value) === index && value !== quantity);
+  const paymentRows =
+    preferredMethod === "wallet"
+      ? [
+          [Markup.button.callback(`Xac nhan mua bang vi - ${quantity}`, `pay_wallet:${product.id}:${quantity}`)],
+          [Markup.button.callback("Doi sang QR", `pay_bank:${product.id}:${quantity}`)]
+        ]
+      : preferredMethod === "bank"
+        ? [
+            [Markup.button.callback(`Tao QR cho ${quantity} san pham`, `pay_bank:${product.id}:${quantity}`)],
+            [Markup.button.callback("Doi sang vi", `pay_wallet:${product.id}:${quantity}`)]
+          ]
+        : [
+            [
+              Markup.button.callback("Mua bang vi", `pay_wallet:${product.id}:${quantity}`),
+              Markup.button.callback("Chuyen khoan QR", `pay_bank:${product.id}:${quantity}`)
+            ]
+          ];
+
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback("-", `qty:${product.id}:${previousQuantity}`),
+      Markup.button.callback(`SL: ${quantity}`, "noop"),
+      Markup.button.callback("+", `qty:${product.id}:${nextQuantity}`)
+    ],
+    ...(quickQuantities.length ? [quickQuantities.map((value) => Markup.button.callback(String(value), `qty:${product.id}:${value}`))] : []),
+    ...paymentRows,
+    [Markup.button.callback("Quay lai", `prod:${product.id}`)]
+  ]);
+}
+
+function clampQuantity(quantity: number, product: ProductSummary | ProductDetail) {
+  const available = productAvailableQuantity(product);
+  const max = available === null ? 99 : Math.max(1, available);
+  if (!Number.isFinite(quantity)) return 1;
+  return Math.min(Math.max(1, Math.trunc(quantity)), max);
 }
 
 async function findProductByReference(reference: string) {
