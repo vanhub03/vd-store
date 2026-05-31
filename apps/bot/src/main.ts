@@ -58,17 +58,161 @@ const HELP_TEXT = [
   "Gửi /sanpham trước để xem số thứ tự sản phẩm."
 ].join("\n");
 
+const HELP_TEXT_EN = [
+  "Quick commands:",
+  "/menu - open main menu",
+  "/shop - view all products",
+  "/xem 1 - view product by catalog number",
+  "/xem product name - search product by name",
+  "/mua 1 usdt - create a Cryptomus USDT invoice",
+  "/mua 1 wallet - pay with wallet balance",
+  "/mua 1 bank - create a bank QR",
+  "/sodu - view wallet balance",
+  "/lichsu - view order and wallet history",
+  "/hotro - contact support",
+  "",
+  "Use /shop first to see product numbers. In English mode, USDT invoice is the default payment flow."
+].join("\n");
+
 type ScreenKeyboard = ReturnType<typeof Markup.inlineKeyboard>;
 type ScreenMedia = string | Buffer;
 type BotLanguage = "vi" | "en";
 type PaymentMethod = "wallet" | "bank" | "usdt";
 const userLanguages = new Map<number, BotLanguage>();
 
-function mainKeyboard() {
+const BOT_TEXT = {
+  vi: {
+    products: "Sản phẩm",
+    wallet: "Số dư",
+    topup: "Nạp tiền",
+    history: "Lịch sử",
+    support: "Hỗ trợ",
+    help: "Hướng dẫn",
+    back: "Quay lại",
+    home: "Menu chính\n\nGửi /help để xem cú pháp chat nhanh.",
+    start: "Chào bạn. Đây là bot bán hàng tự động.\nBạn có thể xem sản phẩm, nạp tiền, mua hàng và kiểm tra lịch sử ngay trong bot.\n\nGửi /help để xem cú pháp chat nhanh.",
+    unknown: "Mình chưa hiểu lệnh này. Gửi /help để xem cú pháp chat nhanh.",
+    noProducts: "Hiện chưa có sản phẩm đang bán.",
+    walletBalance: "Số dư hiện tại",
+    topupHint: "Chọn số tiền cần nạp. QR có hiệu lực trong 10 phút.\n\nBạn cũng có thể chat: /nap 100000",
+    recentOrders: "Đơn hàng gần đây",
+    recentLedger: "Giao dịch ví gần đây",
+    noOrders: "Chưa có đơn hàng.",
+    noLedger: "Chưa có giao dịch ví.",
+    contactAdmin: "Vui lòng liên hệ admin",
+    contactSupport: "để được hỗ trợ.",
+    category: "Danh mục",
+    price: "Giá",
+    quickChat: "Chat nhanh",
+    buyWallet: "Mua bằng ví",
+    bankQr: "Chuyển khoản QR",
+    buyUsdt: "USDT Cryptomus",
+    chooseProduct: "Chọn sản phẩm bên dưới hoặc chat theo cú pháp:",
+    viewProduct: "/xem 1 - xem sản phẩm số 1",
+    buyWalletSyntax: "/mua 1 vi - mua bằng ví",
+    buyBankSyntax: "/mua 1 ck - mua bằng chuyển khoản QR",
+    buyUsdtSyntax: "/mua 1 usdt - mua bằng USDT Cryptomus",
+    moreProducts: "sản phẩm khác. Bấm nút bên dưới để xem tiếp.",
+    stock: "Kho",
+    unlimited: "không giới hạn",
+    outOfStock: "Sản phẩm hiện đã hết hàng.",
+    selectedQty: "Số lượng đang chọn",
+    total: "Tổng thanh toán",
+    walletHint: "Bạn đang chọn thanh toán bằng ví. Kiểm tra số lượng rồi bấm xác nhận.",
+    bankHint: "Bạn đang chọn chuyển khoản QR. Kiểm tra số lượng rồi bấm tạo QR.",
+    usdtHint: "Bạn đang chọn USDT Cryptomus. Kiểm tra số lượng rồi bấm tạo invoice.",
+    confirmWallet: "Xác nhận mua bằng ví",
+    createBankQr: "Tạo QR",
+    createUsdtInvoice: "Tạo USDT invoice",
+    switchWallet: "Đổi sang ví",
+    switchBank: "Đổi sang QR",
+    minTopupError: "Số tiền nạp không hợp lệ.\nVí dụ: /nap 100000 hoặc /nap 100k",
+    missingProduct: "Thiếu sản phẩm cần mua.\nVí dụ: /mua 1 vi hoặc /mua 1 ck",
+    notFoundPrefix: "Không tìm thấy sản phẩm",
+    useCatalog: "Gửi /sanpham để xem danh sách.",
+    topupTitle: "Nạp tiền",
+    orderTitle: "Mua hàng",
+    bankContent: "Nội dung CK",
+    expires: "Hạn thanh toán",
+    autoProcess: "Hệ thống sẽ tự xử lý khi nhận tiền.",
+    paidSuccess: "Mua hàng thành công.",
+    balanceAfter: "Số dư còn lại",
+    yourGoods: "Hàng của bạn",
+    qrFallback: "Không thể tải ảnh QR. Bạn vẫn có thể mở link/kiểm tra thông tin thanh toán bên dưới.",
+    copyWarning: "Chỉ chuyển USDT đúng network hiển thị. Chuyển sai network có thể mất tiền.",
+    network: "Network",
+    checkout: "Checkout"
+  },
+  en: {
+    products: "Products",
+    wallet: "Balance",
+    topup: "Top up",
+    history: "History",
+    support: "Support",
+    help: "Help",
+    back: "Back",
+    home: "Main menu\n\nUse /help to view quick commands. English checkout uses USDT invoices when available.",
+    start: "Welcome to VD AI Shop.\nYou can browse products, create USDT invoices and check order history in this bot.\n\nUse /help to view quick commands.",
+    unknown: "I don't understand this command. Use /help to view quick commands.",
+    noProducts: "There are no active products yet.",
+    walletBalance: "Current balance",
+    topupHint: "Choose a VND top-up amount. The QR is valid for 10 minutes.\n\nYou can also type: /nap 100000",
+    recentOrders: "Recent orders",
+    recentLedger: "Recent wallet transactions",
+    noOrders: "No orders yet.",
+    noLedger: "No wallet transactions yet.",
+    contactAdmin: "Please contact admin",
+    contactSupport: "for support.",
+    category: "Category",
+    price: "Price",
+    quickChat: "Quick command",
+    buyWallet: "Pay with wallet",
+    bankQr: "Bank QR",
+    buyUsdt: "Pay with USDT",
+    chooseProduct: "Choose a product below or use a command:",
+    viewProduct: "/xem 1 - view product #1",
+    buyWalletSyntax: "/mua 1 wallet - pay with wallet",
+    buyBankSyntax: "/mua 1 bank - pay with bank QR",
+    buyUsdtSyntax: "/mua 1 usdt - create a Cryptomus invoice",
+    moreProducts: "more products. Use the buttons below to continue.",
+    stock: "Stock",
+    unlimited: "unlimited",
+    outOfStock: "This product is currently out of stock.",
+    selectedQty: "Selected quantity",
+    total: "Total",
+    walletHint: "You selected wallet payment. Check the quantity and confirm.",
+    bankHint: "You selected bank QR. Check the quantity and create a QR.",
+    usdtHint: "You selected USDT Cryptomus. Check the quantity and create an invoice.",
+    confirmWallet: "Confirm wallet payment",
+    createBankQr: "Create bank QR",
+    createUsdtInvoice: "Create USDT invoice",
+    switchWallet: "Switch to wallet",
+    switchBank: "Switch to bank QR",
+    minTopupError: "Invalid top-up amount.\nExample: /nap 100000 or /nap 100k",
+    missingProduct: "Missing product.\nExample: /mua 1 usdt",
+    notFoundPrefix: "Product not found",
+    useCatalog: "Use /shop to view the catalog.",
+    topupTitle: "Top up",
+    orderTitle: "Order payment",
+    bankContent: "Transfer content",
+    expires: "Payment expires",
+    autoProcess: "The system will process automatically after payment is received.",
+    paidSuccess: "Purchase successful.",
+    balanceAfter: "Balance after purchase",
+    yourGoods: "Your delivery",
+    qrFallback: "Could not load the QR image. You can still open the checkout link or use the payment details below.",
+    copyWarning: "Only send USDT through the displayed network. Sending via the wrong network may permanently lose funds.",
+    network: "Network",
+    checkout: "Checkout"
+  }
+} as const;
+
+function mainKeyboard(language: BotLanguage = "vi") {
+  const text = BOT_TEXT[language];
   return Markup.inlineKeyboard([
-    [Markup.button.callback("Sản phẩm", "catalog"), Markup.button.callback("Số dư", "wallet")],
-    [Markup.button.callback("Nạp tiền", "topup"), Markup.button.callback("Lịch sử", "history")],
-    [Markup.button.callback("Hỗ trợ", "support"), Markup.button.callback("Hướng dẫn", "help")],
+    [Markup.button.callback(text.products, "catalog"), Markup.button.callback(text.wallet, "wallet")],
+    [Markup.button.callback(text.topup, "topup"), Markup.button.callback(text.history, "history")],
+    [Markup.button.callback(text.support, "support"), Markup.button.callback(text.help, "help")],
     [Markup.button.callback("Tiếng Việt", "lang:vi"), Markup.button.callback("English", "lang:en")]
   ]);
 }
@@ -86,10 +230,7 @@ async function upsertUser(ctx: Context) {
 
 bot.start(async (ctx) => {
   await upsertUser(ctx);
-  await showHome(
-    ctx,
-    "Chào bạn. Đây là bot bán hàng tự động.\nBạn có thể xem sản phẩm, nạp tiền, mua hàng và kiểm tra lịch sử ngay trong bot.\n\nGửi /help để xem cú pháp chat nhanh."
-  );
+  await showHome(ctx, BOT_TEXT[currentLanguage(ctx)].start);
 });
 
 bot.command("help", (ctx) => showHelp(ctx));
@@ -98,6 +239,7 @@ bot.command("shop", (ctx) => showCatalog(ctx));
 bot.command("sanpham", (ctx) => showCatalog(ctx));
 bot.command("xem", (ctx) => showProductByCommand(ctx));
 bot.command("mua", (ctx) => purchaseByCommand(ctx));
+bot.command("buy", (ctx) => purchaseByCommand(ctx));
 bot.command("nap", (ctx) => topupByCommand(ctx));
 bot.command("sodu", (ctx) => showWallet(ctx));
 bot.command("lichsu", (ctx) => showHistory(ctx));
@@ -139,17 +281,17 @@ bot.action(/^topup:(\d+)$/, async (ctx) => {
 
 bot.action(/^buy_wallet:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  await showQuantitySelection(ctx, ctx.match[1], 1, "wallet");
+  await showQuantitySelection(ctx, ctx.match[1], 1, currentLanguage(ctx) === "en" ? "usdt" : "wallet");
 });
 
 bot.action(/^buy_bank:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  await showQuantitySelection(ctx, ctx.match[1], 1, "bank");
+  await showQuantitySelection(ctx, ctx.match[1], 1, currentLanguage(ctx) === "en" ? "usdt" : "bank");
 });
 
 bot.action(/^buy:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  await showQuantitySelection(ctx, ctx.match[1], 1);
+  await showQuantitySelection(ctx, ctx.match[1], 1, currentLanguage(ctx) === "en" ? "usdt" : undefined);
 });
 
 bot.action(/^qty:([^:]+):(\d+)$/, async (ctx) => {
@@ -207,79 +349,88 @@ bot.on("text", async (ctx) => {
   if (text === "help" || text === "tro giup" || text === "trợ giúp") return showHelp(ctx);
   if (text === "menu") return showHome(ctx);
   if (text === "shop") return showCatalog(ctx);
-  if (text === "san pham" || text === "sản phẩm") return showCatalog(ctx);
-  if (text === "so du" || text === "số dư") return showWallet(ctx);
-  if (text === "lich su" || text === "lịch sử") return showHistory(ctx);
-  return ctx.reply("Mình chưa hiểu lệnh này. Gửi /help để xem cú pháp chat nhanh.", mainKeyboard());
+  if (text === "san pham" || text === "sản phẩm" || text === "products") return showCatalog(ctx);
+  if (text === "so du" || text === "số dư" || text === "balance") return showWallet(ctx);
+  if (text === "lich su" || text === "lịch sử" || text === "history") return showHistory(ctx);
+  return ctx.reply(BOT_TEXT[currentLanguage(ctx)].unknown, mainKeyboard(currentLanguage(ctx)));
 });
 
 bot.catch(async (error, ctx) => {
   console.error(error);
   if (isCallbackContext(ctx)) {
-    await renderScreen(ctx, `Có lỗi xảy ra: ${escapeHtml((error as Error).message)}`, mainKeyboard()).catch(() => undefined);
+    const lang = currentLanguage(ctx);
+    await renderScreen(ctx, `${lang === "en" ? "Error" : "Có lỗi xảy ra"}: ${escapeHtml((error as Error).message)}`, mainKeyboard(lang)).catch(() => undefined);
     return;
   }
-  await ctx.reply(`Có lỗi xảy ra: ${(error as Error).message}`, mainKeyboard()).catch(() => undefined);
+  await ctx.reply(`Có lỗi xảy ra: ${(error as Error).message}`, mainKeyboard(currentLanguage(ctx))).catch(() => undefined);
 });
 
 async function showCatalog(ctx: Context) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
   const catalog = await api.get<CatalogResponse>("/bot/catalog");
   const products = flattenProducts(catalog);
   const buttons = products.slice(0, CATALOG_BUTTON_LIMIT).map((product, index) => [
-    Markup.button.callback(productButtonLabel(product, index, currentLanguage(ctx)), `prod:${product.id}`)
+    Markup.button.callback(productButtonLabel(product, index, lang), `prod:${product.id}`)
   ]);
-  buttons.push([Markup.button.callback("Quay lại", "home")]);
-  await renderScreen(ctx, buildCatalogText(products, currentLanguage(ctx)), Markup.inlineKeyboard(buttons));
+  buttons.push([Markup.button.callback(BOT_TEXT[lang].back, "home")]);
+  await renderScreen(ctx, buildCatalogText(products, lang), Markup.inlineKeyboard(buttons));
 }
 
 async function showWallet(ctx: Context) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
   const wallet = await api.get<{ balance: number }>(`/bot/wallet/${ctx.from!.id}`);
-  await renderScreen(ctx, `Số dư hiện tại: <b>${formatVnd(wallet.balance)}</b>`, mainKeyboard());
+  await renderScreen(ctx, `${BOT_TEXT[lang].walletBalance}: <b>${formatVnd(wallet.balance)}</b>`, mainKeyboard(lang));
 }
 
 async function showTopup(ctx: Context) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
   await renderScreen(
     ctx,
-    "Chọn số tiền cần nạp. QR có hiệu lực trong 10 phút.\n\nBạn cũng có thể chat: /nap 100000",
+    BOT_TEXT[lang].topupHint,
     Markup.inlineKeyboard([
       [Markup.button.callback("50.000đ", "topup:50000"), Markup.button.callback("100.000đ", "topup:100000")],
       [Markup.button.callback("200.000đ", "topup:200000"), Markup.button.callback("500.000đ", "topup:500000")],
-      [Markup.button.callback("Quay lại", "home")]
+      [Markup.button.callback(BOT_TEXT[lang].back, "home")]
     ])
   );
 }
 
 async function showHistory(ctx: Context) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
+  const text = BOT_TEXT[lang];
   const history = await api.get<HistoryResponse>(`/bot/history/${ctx.from!.id}`);
   const orderLines = history.orders.length
     ? history.orders
         .slice(0, 8)
         .map((order) => `${escapeHtml(order.code)} - ${escapeHtml(order.product.name)} - ${formatVnd(order.totalAmount)} - ${escapeHtml(order.status)}`)
         .join("\n")
-    : "Chưa có đơn hàng.";
+    : text.noOrders;
   const ledgerLines = history.ledger.length
     ? history.ledger
         .slice(0, 8)
         .map((entry) => `${formatVnd(entry.amount)} - ${escapeHtml(entry.type)}${entry.note ? ` - ${escapeHtml(entry.note)}` : ""}`)
         .join("\n")
-    : "Chưa có giao dịch ví.";
-  await renderScreen(ctx, `Đơn hàng gần đây:\n${orderLines}\n\nGiao dịch ví gần đây:\n${ledgerLines}`, mainKeyboard());
+    : text.noLedger;
+  await renderScreen(ctx, `${text.recentOrders}:\n${orderLines}\n\n${text.recentLedger}:\n${ledgerLines}`, mainKeyboard(lang));
 }
 
 async function showSupport(ctx: Context) {
-  await renderScreen(ctx, `Vui lòng liên hệ admin @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} để được hỗ trợ.`, mainKeyboard());
+  const lang = currentLanguage(ctx);
+  await renderScreen(ctx, `${BOT_TEXT[lang].contactAdmin} @${process.env.ADMIN_TELEGRAM_USERNAME ?? "vanhdao99"} ${BOT_TEXT[lang].contactSupport}`, mainKeyboard(lang));
 }
 
 async function showHelp(ctx: Context) {
-  await renderScreen(ctx, HELP_TEXT, mainKeyboard());
+  const lang = currentLanguage(ctx);
+  await renderScreen(ctx, lang === "en" ? HELP_TEXT_EN : HELP_TEXT, mainKeyboard(lang));
 }
 
-async function showHome(ctx: Context, message = "Menu chính\n\nGửi /help để xem cú pháp chat nhanh.") {
-  await renderScreen(ctx, message, mainKeyboard());
+async function showHome(ctx: Context, message?: string) {
+  const lang = currentLanguage(ctx);
+  await renderScreen(ctx, message ?? BOT_TEXT[lang].home, mainKeyboard(lang));
 }
 
 async function showProduct(ctx: Context, productId: string) {
@@ -289,93 +440,107 @@ async function showProduct(ctx: Context, productId: string) {
 
 async function showProductDetail(ctx: Context, product: ProductDetail) {
   const lang = currentLanguage(ctx);
+  const text = BOT_TEXT[lang];
   const description = localizedDescription(product, lang) ? `\n${escapeHtml(localizedDescription(product, lang)!)}` : "";
-  const categoryLine = product.category?.name ? `Danh mục: <b>${escapeHtml(product.category.name)}</b>\n` : "";
-  const caption = `${categoryLine}<b>${escapeHtml(productIcon(product))} ${escapeHtml(localizedName(product, lang))}</b>${description}\nGiá: <b>${localizedPrice(product, lang)}</b>\n${productStockLabel(
-    product
-  )}\n\nChat nhanh: /mua ${escapeHtml(product.name)} vi hoặc /mua ${escapeHtml(product.name)} ck`;
-  const keyboard = Markup.inlineKeyboard([
-    [Markup.button.callback("Mua bằng ví", `buy_wallet:${product.id}`)],
-    [Markup.button.callback("Chuyển khoản QR", `buy_bank:${product.id}`)],
-    [Markup.button.callback("Quay lại", "catalog")]
-  ]);
+  const categoryLine = product.category?.name ? `${text.category}: <b>${escapeHtml(product.category.name)}</b>\n` : "";
+  const stockText = productQuantityText(product);
+  const quickCommand = lang === "en" ? `/mua ${escapeHtml(product.name)} usdt` : `/mua ${escapeHtml(product.name)} vi hoặc /mua ${escapeHtml(product.name)} ck`;
+  const caption = `${categoryLine}<b>${escapeHtml(productIcon(product))} ${escapeHtml(localizedName(product, lang))}</b>${description}\n${text.price}: <b>${localizedPrice(
+    product,
+    lang
+  )}</b>\n${text.stock}: ${escapeHtml(stockText)}\n\n${text.quickChat}: ${quickCommand}`;
+  const keyboard =
+    lang === "en"
+      ? Markup.inlineKeyboard([
+          [Markup.button.callback(text.buyUsdt, `buy:${product.id}`)],
+          [Markup.button.callback(text.back, "catalog")]
+        ])
+      : Markup.inlineKeyboard([
+          [Markup.button.callback(text.buyWallet, `buy_wallet:${product.id}`)],
+          [Markup.button.callback(text.bankQr, `buy_bank:${product.id}`)],
+          [Markup.button.callback(text.buyUsdt, `buy:${product.id}`)],
+          [Markup.button.callback(text.back, "catalog")]
+        ]);
 
   await renderScreen(ctx, caption, keyboard);
 }
 
 async function showQuantitySelection(ctx: Context, productId: string, quantity: number, preferredMethod?: PaymentMethod) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
+  const text = BOT_TEXT[lang];
+  const normalizedMethod = lang === "en" && !preferredMethod ? "usdt" : preferredMethod;
   const product = await api.get<ProductDetail>(`/bot/products/${productId}`);
   const available = productAvailableQuantity(product);
   if (available === 0) {
     await renderScreen(
       ctx,
-      `${escapeHtml(productIcon(product))} <b>${escapeHtml(product.name)}</b>\n\nSan pham hien da het hang.`,
-      Markup.inlineKeyboard([[Markup.button.callback("Quay lai", `prod:${product.id}`)]])
+      `${escapeHtml(productIcon(product))} <b>${escapeHtml(localizedName(product, lang))}</b>\n\n${text.outOfStock}`,
+      Markup.inlineKeyboard([[Markup.button.callback(text.back, `prod:${product.id}`)]])
     );
     return;
   }
 
   const safeQuantity = clampQuantity(quantity, product);
-  const stockLine = available === null ? "Kho: khong gioi han" : `Kho: ${available}`;
+  const stockLine = available === null ? `${text.stock}: ${text.unlimited}` : `${text.stock}: ${available}`;
   const methodHint =
-    preferredMethod === "wallet"
-      ? "\nBan dang chon thanh toan bang vi. Kiem tra so luong roi bam xac nhan."
-      : preferredMethod === "bank"
-        ? "\nBan dang chon chuyen khoan QR. Kiem tra so luong roi bam tao QR."
+    normalizedMethod === "wallet"
+      ? `\n${text.walletHint}`
+      : normalizedMethod === "bank"
+        ? `\n${text.bankHint}`
+        : normalizedMethod === "usdt"
+          ? `\n${text.usdtHint}`
         : "";
 
   await renderScreen(
     ctx,
     [
-      `<b>${escapeHtml(productIcon(product))} ${escapeHtml(localizedName(product, currentLanguage(ctx)))}</b>`,
-      localizedDescription(product, currentLanguage(ctx)) ? escapeHtml(localizedDescription(product, currentLanguage(ctx))!) : "",
-      `Gia: <b>${localizedPrice(product, currentLanguage(ctx))}</b>`,
+      `<b>${escapeHtml(productIcon(product))} ${escapeHtml(localizedName(product, lang))}</b>`,
+      localizedDescription(product, lang) ? escapeHtml(localizedDescription(product, lang)!) : "",
+      `${text.price}: <b>${localizedPrice(product, lang)}</b>`,
       stockLine,
       "",
-      `So luong dang chon: <b>${safeQuantity}</b>`,
-      `Tong thanh toan: <b>${localizedTotal(product, safeQuantity, currentLanguage(ctx))}</b>${methodHint}`
+      `${text.selectedQty}: <b>${safeQuantity}</b>`,
+      `${text.total}: <b>${localizedTotal(product, safeQuantity, lang)}</b>${methodHint}`
     ]
       .filter(Boolean)
       .join("\n"),
-    quantityKeyboard(product, safeQuantity, preferredMethod)
+    quantityKeyboard(product, safeQuantity, normalizedMethod, lang)
   );
 }
 
 async function showProductByCommand(ctx: Context) {
+  const lang = currentLanguage(ctx);
   const reference = getCommandArgs(ctx).join(" ").trim();
   if (!reference) return showCatalog(ctx);
 
   await upsertUser(ctx);
   const product = await findProductByReference(reference);
   if (!product) {
-    await ctx.reply(`Không tìm thấy sản phẩm "${reference}". Gửi /sanpham để xem danh sách.`, mainKeyboard());
+    await ctx.reply(`${BOT_TEXT[lang].notFoundPrefix} "${reference}". ${BOT_TEXT[lang].useCatalog}`, mainKeyboard(lang));
     return;
   }
   await showProductDetail(ctx, product);
 }
 
 async function purchaseByCommand(ctx: Context) {
+  const lang = currentLanguage(ctx);
   const args = getCommandArgs(ctx);
   const parsed = parsePurchaseArgs(args);
   if (!parsed.productReference) {
-    await ctx.reply("Thiếu sản phẩm cần mua.\nVí dụ: /mua 1 vi hoặc /mua 1 ck", mainKeyboard());
+    await ctx.reply(BOT_TEXT[lang].missingProduct, mainKeyboard(lang));
     return;
   }
 
   await upsertUser(ctx);
   const product = await findProductByReference(parsed.productReference);
   if (!product) {
-    await ctx.reply(`Không tìm thấy sản phẩm "${parsed.productReference}". Gửi /sanpham để xem danh sách.`, mainKeyboard());
+    await ctx.reply(`${BOT_TEXT[lang].notFoundPrefix} "${parsed.productReference}". ${BOT_TEXT[lang].useCatalog}`, mainKeyboard(lang));
     return;
   }
 
-  if (!parsed.method) {
-    await showQuantitySelection(ctx, product.id, 1);
-    return;
-  }
-
-  await showQuantitySelection(ctx, product.id, 1, parsed.method);
+  const method = parsed.method ?? (lang === "en" ? "usdt" : undefined);
+  await showQuantitySelection(ctx, product.id, 1, method);
 }
 
 async function topupByCommand(ctx: Context) {
@@ -384,7 +549,7 @@ async function topupByCommand(ctx: Context) {
 
   const amount = parseVndAmount(amountText);
   if (!amount) {
-    await ctx.reply("Số tiền nạp không hợp lệ.\nVí dụ: /nap 100000 hoặc /nap 100k", mainKeyboard());
+    await ctx.reply(BOT_TEXT[currentLanguage(ctx)].minTopupError, mainKeyboard(currentLanguage(ctx)));
     return;
   }
 
@@ -393,15 +558,17 @@ async function topupByCommand(ctx: Context) {
 
 async function createTopupQr(ctx: Context, amount: number) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
   const result = await api.post<PaymentResponse>("/bot/topups", {
     telegramId: String(ctx.from!.id),
     amount
   });
-  await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption("Nạp tiền", result.code, amount, result.expiresAt));
+  await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption(BOT_TEXT[lang].topupTitle, result.code, amount, result.expiresAt, lang), lang);
 }
 
 async function purchaseWithWallet(ctx: Context, productId: string, quantity = 1) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
   const result = await api.post<WalletPurchaseResponse>("/bot/orders/wallet", {
     telegramId: String(ctx.from!.id),
     productId,
@@ -409,24 +576,27 @@ async function purchaseWithWallet(ctx: Context, productId: string, quantity = 1)
   });
   await renderFinalDelivery(
     ctx,
-    `Mua hàng thành công.\nSố dư còn lại: <b>${formatVnd(
+    `${BOT_TEXT[lang].paidSuccess}\n${BOT_TEXT[lang].balanceAfter}: <b>${formatVnd(
       result.balanceAfter
-    )}</b>\n\nHàng của bạn:\n<pre>${escapeHtml(result.deliveryText)}</pre>`
+    )}</b>\n\n${BOT_TEXT[lang].yourGoods}:\n<pre>${escapeHtml(result.deliveryText)}</pre>`
   );
 }
 
 async function createBankOrderQr(ctx: Context, productId: string, quantity = 1) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
   const result = await api.post<PaymentResponse>("/bot/orders/bank", {
     telegramId: String(ctx.from!.id),
     productId,
     quantity
   });
-  await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption("Mua hàng", result.code, result.amount, result.expiresAt));
+  await sendQr(ctx, result.payment.id, result.qrImageUrl, buildQrCaption(BOT_TEXT[lang].orderTitle, result.code, result.amount, result.expiresAt, lang), lang);
 }
 
 async function createUsdtOrder(ctx: Context, productId: string, quantity = 1) {
   await upsertUser(ctx);
+  const lang = currentLanguage(ctx);
+  const text = BOT_TEXT[lang];
   const result = await api.post<PaymentResponse>("/bot/orders/usdt", {
     telegramId: String(ctx.from!.id),
     productId,
@@ -435,21 +605,22 @@ async function createUsdtOrder(ctx: Context, productId: string, quantity = 1) {
   const amount = formatUsdt(result.cryptoAmount);
   const caption = [
     "USDT Cryptomus",
-    `Amount: <b>${amount} USDT</b>`,
-    result.network ? `Network: <b>${escapeHtml(result.network.toUpperCase())}</b>` : null,
+    `${text.total}: <b>${amount} USDT</b>`,
+    result.network ? `${text.network}: <b>${escapeHtml(cryptoNetworkLabel(result.network))}</b>` : null,
     result.address ? `Wallet: <code>${escapeHtml(result.address)}</code>` : null,
     `Order: <code>${escapeHtml(result.code)}</code>`,
-    result.checkoutUrl ? `Checkout: ${escapeHtml(result.checkoutUrl)}` : null,
-    `Expires: ${new Date(result.expiresAt).toLocaleString("vi-VN")}`,
-    "System will auto process after Cryptomus confirms."
+    result.checkoutUrl ? `${text.checkout}: ${escapeHtml(result.checkoutUrl)}` : null,
+    `${text.expires}: ${new Date(result.expiresAt).toLocaleString(lang === "vi" ? "vi-VN" : "en-US")}`,
+    text.copyWarning,
+    lang === "en" ? "The system will process automatically after Cryptomus confirms." : "Hệ thống sẽ tự xử lý sau khi Cryptomus xác nhận."
   ]
     .filter(Boolean)
     .join("\n");
   if (result.qrImageUrl) {
-    await sendQr(ctx, result.payment.id, result.qrImageUrl, caption);
+    await sendQr(ctx, result.payment.id, result.qrImageUrl, caption, lang);
     return;
   }
-  await renderScreen(ctx, caption, mainKeyboard());
+  await renderScreen(ctx, caption, mainKeyboard(lang));
 }
 
 async function renderScreen(ctx: Context, caption: string, keyboard?: ScreenKeyboard, media?: ScreenMedia) {
@@ -592,14 +763,21 @@ async function editCurrentText(ctx: Context, text: string, keyboard?: ScreenKeyb
   }
 }
 
-async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, caption: string) {
-  const buffer = await fetchQrImage(qrImageUrl);
+async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, caption: string, language: BotLanguage = "vi") {
+  let buffer: Buffer;
+  try {
+    buffer = await fetchQrImage(qrImageUrl);
+  } catch (error) {
+    console.error("Could not fetch payment QR image:", error);
+    await renderScreen(ctx, `${caption}\n\n${BOT_TEXT[language].qrFallback}`, mainKeyboard(language));
+    return;
+  }
   const messageId = isCallbackContext(ctx) ? await editCurrentMedia(ctx, buffer, caption) : await sendQrPhoto(ctx, buffer, caption);
   if (!messageId) {
     await editCurrentCaption(
       ctx,
-      `${caption}\n\nKhông thể đổi menu cũ sang ảnh QR. Gửi lại bằng cú pháp /nap số_tiền hoặc /mua sản_phẩm ck để tạo QR mới.`,
-      mainKeyboard()
+      `${caption}\n\n${language === "en" ? "Could not replace the menu with the QR image. Send the command again to create a new invoice." : "Không thể đổi menu cũ sang ảnh QR. Gửi lại bằng cú pháp /nap số_tiền hoặc /mua sản_phẩm ck để tạo QR mới."}`,
+      mainKeyboard(language)
     );
     return;
   }
@@ -612,11 +790,11 @@ async function sendQr(ctx: Context, paymentId: string, qrImageUrl: string, capti
 
 async function fetchQrImage(qrImageUrl: string) {
   const image = await fetch(qrImageUrl);
-  if (!image.ok) throw new Error(`Không tải được ảnh VietQR. HTTP ${image.status}`);
+  if (!image.ok) throw new Error(`Không tải được ảnh QR. HTTP ${image.status}`);
 
   const contentType = image.headers.get("content-type") ?? "";
   if (!contentType.includes("image")) {
-    throw new Error(`Không tải được ảnh VietQR. Server trả về ${contentType || "unknown content type"}.`);
+    throw new Error(`Không tải được ảnh QR. Server trả về ${contentType || "unknown content type"}.`);
   }
 
   return Buffer.from(await image.arrayBuffer());
@@ -632,41 +810,44 @@ function rememberBotMessage(chatId: number, messageId: number) {
   lastBotMessages.set(chatId, messageId);
 }
 
-function buildQrCaption(title: string, code: string, amount: number, expiresAt: string) {
-  return `${title}\nSố tiền: <b>${formatVnd(amount)}</b>\nNội dung CK: <code>${escapeHtml(code)}</code>\nHạn thanh toán: ${new Date(
+function buildQrCaption(title: string, code: string, amount: number, expiresAt: string, language: BotLanguage = "vi") {
+  const text = BOT_TEXT[language];
+  return `${title}\n${text.total}: <b>${formatVnd(amount)}</b>\n${text.bankContent}: <code>${escapeHtml(code)}</code>\n${text.expires}: ${new Date(
     expiresAt
-  ).toLocaleString("vi-VN")}\nHệ thống sẽ tự xử lý khi nhận tiền.`;
+  ).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}\n${text.autoProcess}`;
 }
 
 function buildCatalogText(products: ProductSummary[], language: BotLanguage) {
-  if (!products.length) return "Hiện chưa có sản phẩm đang bán.";
+  const text = BOT_TEXT[language];
+  if (!products.length) return text.noProducts;
 
   const productLines = products.slice(0, CATALOG_TEXT_LIMIT).map((product, index) => {
     const category = product.category?.name ? ` - ${escapeHtml(singleLine(product.category.name))}` : "";
     return `${index + 1}. ${escapeHtml(productStateIcon(product))} ${escapeHtml(singleLine(localizedName(product, language)))} - ${localizedPrice(
       product,
       language
-    )} - 📦 ${productQuantityText(product)}${category}`;
+    )} - 📦 ${productQuantityText(product, language)}${category}`;
   });
-  const moreLine = products.length > CATALOG_TEXT_LIMIT ? `\n\nCòn ${products.length - CATALOG_TEXT_LIMIT} sản phẩm khác. Bấm nút bên dưới để xem tiếp.` : "";
+  const moreLine = products.length > CATALOG_TEXT_LIMIT ? `\n\n${language === "vi" ? "Còn" : "There are"} ${products.length - CATALOG_TEXT_LIMIT} ${text.moreProducts}` : "";
 
   return [
-    "Chọn sản phẩm bên dưới hoặc chat theo cú pháp:",
-    "/xem 1 - xem sản phẩm số 1",
-    "/mua 1 vi - mua bằng ví",
-    "/mua 1 ck - mua bằng chuyển khoản QR",
+    text.chooseProduct,
+    text.viewProduct,
+    text.buyWalletSyntax,
+    text.buyBankSyntax,
+    text.buyUsdtSyntax,
     "",
     productLines.join("\n") + moreLine
   ].join("\n");
 }
 
-function productQuantityText(product: ProductSummary | ProductDetail) {
+function productQuantityText(product: ProductSummary | ProductDetail, language: BotLanguage = "vi") {
   const quantity = productAvailableQuantity(product);
-  return quantity === null ? "không giới hạn" : String(quantity);
+  return quantity === null ? BOT_TEXT[language].unlimited : String(quantity);
 }
 
 function productButtonLabel(product: ProductSummary, index: number, language: BotLanguage) {
-  return `${index + 1}. ${productStateIcon(product)} ${localizedName(product, language)} - ${localizedPrice(product, language)} | 📦 ${productQuantityText(product)}`;
+  return `${index + 1}. ${productStateIcon(product)} ${localizedName(product, language)} - ${localizedPrice(product, language)} | 📦 ${productQuantityText(product, language)}`;
 }
 
 function productStateIcon(product: ProductSummary | ProductDetail) {
@@ -708,7 +889,23 @@ function formatUsdt(value: string | number | null | undefined) {
   return amount.toLocaleString("en-US", { maximumFractionDigits: 8 });
 }
 
-function quantityKeyboard(product: ProductDetail, quantity: number, preferredMethod?: PaymentMethod) {
+function cryptoNetworkLabel(network: string) {
+  const normalized = network.trim().toUpperCase();
+  const labels: Record<string, string> = {
+    TRON: "TRON / TRC20",
+    BSC: "BSC / BEP20",
+    ETH: "Ethereum / ERC20",
+    POLYGON: "Polygon",
+    ARBITRUM: "Arbitrum",
+    TON: "TON",
+    SOL: "Solana",
+    AVALANCHE: "Avalanche"
+  };
+  return labels[normalized] ?? normalized;
+}
+
+function quantityKeyboard(product: ProductDetail, quantity: number, preferredMethod?: PaymentMethod, language: BotLanguage = "vi") {
+  const text = BOT_TEXT[language];
   const previousQuantity = clampQuantity(quantity - 1, product);
   const nextQuantity = clampQuantity(quantity + 1, product);
   const quickQuantities = [1, 2, 5, 10]
@@ -717,31 +914,44 @@ function quantityKeyboard(product: ProductDetail, quantity: number, preferredMet
   const paymentRows =
     preferredMethod === "wallet"
       ? [
-          [Markup.button.callback(`Xac nhan mua bang vi - ${quantity}`, `pay_wallet:${product.id}:${quantity}`)],
-          [Markup.button.callback("Doi sang QR", `pay_bank:${product.id}:${quantity}`)]
+          [Markup.button.callback(`${text.confirmWallet} - ${quantity}`, `pay_wallet:${product.id}:${quantity}`)],
+          ...(language === "vi" ? [[Markup.button.callback(text.switchBank, `pay_bank:${product.id}:${quantity}`)]] : []),
+          [Markup.button.callback(text.buyUsdt, `pay_usdt:${product.id}:${quantity}`)]
         ]
       : preferredMethod === "bank"
         ? [
-            [Markup.button.callback(`Tao QR cho ${quantity} san pham`, `pay_bank:${product.id}:${quantity}`)],
-            [Markup.button.callback("Doi sang vi", `pay_wallet:${product.id}:${quantity}`)]
+            [Markup.button.callback(`${text.createBankQr} - ${quantity}`, `pay_bank:${product.id}:${quantity}`)],
+            [Markup.button.callback(text.switchWallet, `pay_wallet:${product.id}:${quantity}`)],
+            [Markup.button.callback(text.buyUsdt, `pay_usdt:${product.id}:${quantity}`)]
           ]
-        : [
-            [
-              Markup.button.callback("Mua bang vi", `pay_wallet:${product.id}:${quantity}`),
-              Markup.button.callback("Chuyen khoan QR", `pay_bank:${product.id}:${quantity}`)
-            ],
-            [Markup.button.callback("USDT Cryptomus", `pay_usdt:${product.id}:${quantity}`)]
-          ];
+        : preferredMethod === "usdt"
+          ? [
+              [Markup.button.callback(`${text.createUsdtInvoice} - ${quantity}`, `pay_usdt:${product.id}:${quantity}`)],
+              ...(language === "vi"
+                ? [[Markup.button.callback(text.switchWallet, `pay_wallet:${product.id}:${quantity}`), Markup.button.callback(text.switchBank, `pay_bank:${product.id}:${quantity}`)]]
+                : [])
+            ]
+          : language === "en"
+            ? [
+                [Markup.button.callback(`${text.createUsdtInvoice} - ${quantity}`, `pay_usdt:${product.id}:${quantity}`)]
+              ]
+            : [
+                [
+                  Markup.button.callback(text.buyWallet, `pay_wallet:${product.id}:${quantity}`),
+                  Markup.button.callback(text.bankQr, `pay_bank:${product.id}:${quantity}`)
+                ],
+                [Markup.button.callback(text.buyUsdt, `pay_usdt:${product.id}:${quantity}`)]
+              ];
 
   return Markup.inlineKeyboard([
     [
       Markup.button.callback("-", `qty:${product.id}:${previousQuantity}`),
-      Markup.button.callback(`SL: ${quantity}`, "noop"),
+      Markup.button.callback(`${language === "vi" ? "SL" : "Qty"}: ${quantity}`, "noop"),
       Markup.button.callback("+", `qty:${product.id}:${nextQuantity}`)
     ],
     ...(quickQuantities.length ? [quickQuantities.map((value) => Markup.button.callback(String(value), `qty:${product.id}:${value}`))] : []),
     ...paymentRows,
-    [Markup.button.callback("Quay lai", `prod:${product.id}`)]
+    [Markup.button.callback(text.back, `prod:${product.id}`)]
   ]);
 }
 
@@ -792,6 +1002,7 @@ function parsePaymentMethod(input?: string) {
   if (!input) return null;
   if (["vi", "ví", "wallet", "sodu", "sốdư"].includes(input)) return "wallet" as const;
   if (["ck", "qr", "bank", "chuyenkhoan", "chuyểnkhoản"].includes(input)) return "bank" as const;
+  if (["usdt", "crypto", "cryptomus"].includes(input)) return "usdt" as const;
   return null;
 }
 

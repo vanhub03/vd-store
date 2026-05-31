@@ -49,6 +49,112 @@ const api = new StoreApi(savedToken);
 type Tab = "home" | "products" | "history";
 type Language = "vi" | "en";
 const initialTab = readInitialTab();
+const TEXT = {
+  vi: {
+    navHome: "Home",
+    navProducts: "Sản phẩm",
+    navHistory: "Lịch sử",
+    login: "Đăng nhập",
+    logout: "Đăng xuất",
+    topupTitle: "Nạp ví",
+    boot: "Đang mở VD AI Shop",
+    shopCta: "Xem sản phẩm",
+    walletCta: "Nạp ví",
+    detail: "Chi tiết",
+    buy: "Mua hàng",
+    categoryFallback: "Sản phẩm số",
+    unlimited: "Không giới hạn",
+    left: "còn lại",
+    searchPlaceholder: "Tìm ChatGPT, Claude, YouTube...",
+    noProducts: "Chưa có sản phẩm phù hợp.",
+    deliveryFallback: "Thông tin nhận hàng sẽ hiển thị sau khi thanh toán thành công.",
+    price: "Giá",
+    stock: "Kho",
+    delivery: "Nhận hàng",
+    quantity: "Số lượng",
+    max: "Tối đa",
+    total: "Tổng thanh toán",
+    payWallet: "Mua bằng ví",
+    payUsdt: "USDT Cryptomus",
+    payBank: "Chuyển khoản QR",
+    scanQr: "Quét QR thanh toán",
+    openInvoice: "Mở invoice Cryptomus",
+    code: "Mã",
+    amount: "Số tiền",
+    network: "Network",
+    walletAddress: "Địa chỉ ví",
+    copied: "Đã copy",
+    copy: "Copy",
+    expires: "Hạn",
+    status: "Trạng thái",
+    cryptoWarning: "Chỉ chuyển USDT qua mạng {network}. Chuyển sai network có thể mất tiền và hệ thống không thể tự đối soát.",
+    qrNote: "VND được đối soát qua SePay. USDT được đối soát qua Cryptomus webhook. Thông tin nhận hàng chỉ hiển thị khi đơn đã thanh toán thành công.",
+    refreshStatus: "Kiểm tra trạng thái",
+    historyTitle: "Lịch sử",
+    historySub: "Đơn hàng và biến động ví gần nhất.",
+    historyLogin: "Đăng nhập để xem lịch sử mua hàng.",
+    orderCode: "Mã đơn",
+    loginTitle: "Đăng nhập",
+    registerTitle: "Tạo tài khoản",
+    displayName: "Tên hiển thị",
+    password: "Mật khẩu",
+    register: "Đăng ký",
+    noAccount: "Chưa có tài khoản? Đăng ký",
+    hasAccount: "Đã có tài khoản? Đăng nhập"
+  },
+  en: {
+    navHome: "Home",
+    navProducts: "Products",
+    navHistory: "History",
+    login: "Sign in",
+    logout: "Sign out",
+    topupTitle: "Top up",
+    boot: "Opening VD AI Shop",
+    shopCta: "Browse products",
+    walletCta: "Top up wallet",
+    detail: "Details",
+    buy: "Buy now",
+    categoryFallback: "Digital product",
+    unlimited: "Unlimited",
+    left: "left",
+    searchPlaceholder: "Search ChatGPT, Claude, YouTube...",
+    noProducts: "No matching products.",
+    deliveryFallback: "Delivery information appears after successful payment.",
+    price: "Price",
+    stock: "Stock",
+    delivery: "Delivery",
+    quantity: "Quantity",
+    max: "Max",
+    total: "Total",
+    payWallet: "Pay with wallet",
+    payUsdt: "Pay with USDT",
+    payBank: "Bank QR",
+    scanQr: "Scan payment QR",
+    openInvoice: "Open Cryptomus invoice",
+    code: "Code",
+    amount: "Amount",
+    network: "Network",
+    walletAddress: "Wallet address",
+    copied: "Copied",
+    copy: "Copy",
+    expires: "Expires",
+    status: "Status",
+    cryptoWarning: "Only send USDT through {network}. Sending through the wrong network may permanently lose funds and cannot be reconciled automatically.",
+    qrNote: "VND payments are reconciled by SePay. USDT payments are reconciled by Cryptomus webhook. Delivery is shown only after successful payment.",
+    refreshStatus: "Check status",
+    historyTitle: "History",
+    historySub: "Recent orders and wallet activity.",
+    historyLogin: "Sign in to view your order history.",
+    orderCode: "Order code",
+    loginTitle: "Sign in",
+    registerTitle: "Create account",
+    displayName: "Display name",
+    password: "Password",
+    register: "Register",
+    noAccount: "No account yet? Register",
+    hasAccount: "Already have an account? Sign in"
+  }
+} as const;
 type DeliveryNotice = {
   title: string;
   deliveryText: string;
@@ -426,15 +532,15 @@ function App() {
       ) : null}
       {activeTab === "history" ? (
         <section className="shell tab-shell">
-          <HistoryPanel history={history} onRefresh={() => token && loadPrivateData()} loading={loading === "profile"} />
+          <HistoryPanel language={language} history={history} onRefresh={() => token && loadPrivateData()} loading={loading === "profile"} />
         </section>
       ) : null}
 
-      <Footer onTab={navigateTab} onSection={navigateHomeSection} />
+      <Footer language={language} onTab={navigateTab} onSection={navigateHomeSection} />
 
-      {authOpen ? <AuthDialog onClose={() => setAuthOpen(false)} onSession={saveSession} /> : null}
+      {authOpen ? <AuthDialog language={language} onClose={() => setAuthOpen(false)} onSession={saveSession} /> : null}
       {walletOpen ? (
-        <WalletDialog balance={balance} loading={loading} onTopup={createTopup} onClose={() => setWalletOpen(false)} />
+        <WalletDialog language={language} balance={balance} loading={loading} onTopup={createTopup} onClose={() => setWalletOpen(false)} />
       ) : null}
       {selectedProduct ? (
         <ProductDialog
@@ -453,12 +559,13 @@ function App() {
           payment={qr}
           status={qrStatus}
           loading={loading === "payment-status"}
+          language={language}
           onClose={() => setQr(null)}
           onRefresh={() => checkPaymentStatus(true)}
         />
       ) : null}
       {delivery ? <DeliveryDialog delivery={delivery} onClose={() => setDelivery(null)} /> : null}
-      {loading === "boot" ? <div className="boot"><Loader2 className="spin" /> Đang mở VD AI Shop</div> : null}
+      {loading === "boot" ? <div className="boot"><Loader2 className="spin" /> {TEXT[language].boot}</div> : null}
     </main>
   );
 }
@@ -486,10 +593,11 @@ function Header({
   onLogout: () => void;
   onWalletOpen: () => void;
 }) {
+  const copy = TEXT[language];
   const navItems: Array<{ tab: Tab; label: string; icon: React.ReactNode }> = [
-    { tab: "home", label: "Home", icon: <Home size={16} /> },
-    { tab: "products", label: "Sản phẩm", icon: <ShoppingBag size={16} /> },
-    { tab: "history", label: "Lịch sử", icon: <History size={16} /> }
+    { tab: "home", label: copy.navHome, icon: <Home size={16} /> },
+    { tab: "products", label: copy.navProducts, icon: <ShoppingBag size={16} /> },
+    { tab: "history", label: copy.navHistory, icon: <History size={16} /> }
   ];
 
   return (
@@ -498,7 +606,7 @@ function Header({
         <img className="brand-logo" src="/logo.png" alt="VD AI Shop" />
         <span>VD AI Shop</span>
       </button>
-      <nav className="tab-nav" aria-label="Điều hướng">
+      <nav className="tab-nav" aria-label={language === "en" ? "Navigation" : "Điều hướng"}>
         {navItems.map((item) => (
           <button key={item.tab} className={activeTab === item.tab ? "active" : ""} onClick={() => onTab(item.tab)}>
             {item.icon}
@@ -514,17 +622,17 @@ function Header({
           <>
             <span className="customer-pill">
               <UserRound size={15} /> {customer.displayName ?? customer.email}
-              <button className="balance-pill" onClick={onWalletOpen} title="Nạp ví">
+              <button className="balance-pill" onClick={onWalletOpen} title={copy.topupTitle}>
                 <Wallet size={14} />{formatVnd(balance)}
               </button>
             </span>
-            <button className="icon-button" onClick={onLogout} aria-label="Đăng xuất">
+            <button className="icon-button" onClick={onLogout} aria-label={copy.logout}>
               <LogOut size={17} />
             </button>
           </>
         ) : (
           <button className="primary-button" onClick={onLogin}>
-            <KeyRound size={17} /> Đăng nhập
+            <KeyRound size={17} /> {copy.login}
           </button>
         )}
       </div>
@@ -549,57 +657,62 @@ function HomeTab({
   onShop: () => void;
   onWallet: () => void;
 }) {
+  const vi = language === "vi";
   return (
     <>
-      <Hero onShop={onShop} onWallet={onWallet} />
+      <Hero language={language} onShop={onShop} onWallet={onWallet} />
       <FeaturedProducts products={products} loading={loading} language={language} onProduct={onProduct} onShop={onShop} />
-      <TrustShowcase />
-      <HowItWorks onShop={onShop} onWallet={onWallet} />
-      <BrandShowcase />
-      <MerchantInfo />
-      <PolicySections />
+      <TrustShowcase language={language} />
+      <HowItWorks language={language} onShop={onShop} onWallet={onWallet} />
+      <BrandShowcase language={language} />
+      <MerchantInfo language={language} />
+      <PolicySections language={language} />
     </>
   );
 }
 
 /* ─── Hero ────────────────────────────────────────────────── */
 
-function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
+function Hero({ language, onShop, onWallet }: { language: Language; onShop: () => void; onWallet: () => void }) {
+  const vi = language === "vi";
+  const copy = TEXT[language];
   return (
     <section className="hero">
       <div className="hero-backdrop" />
       <div className="hero-content reveal">
         <img className="hero-logo" src="/logo.png" alt="VD AI Shop" />
-        <p className="eyebrow">Tài khoản AI Premium &middot; Tự động 24/7 &middot; Bảo hành uy tín</p>
+        <p className="eyebrow">{vi ? "Tài khoản AI Premium · Tự động 24/7 · Bảo hành uy tín" : "AI premium access · 24/7 automation · Trusted support"}</p>
         <h1>VD AI Shop</h1>
         <p className="hero-text">
-          Cung cấp tài khoản ChatGPT Plus, Claude Pro, Gemini Advanced và key bản quyền phần mềm chính hãng hàng đầu Việt Nam. Tự động hóa hoàn toàn, kích hoạt siêu tốc trong 30 giây giúp nâng tầm hiệu suất công việc của bạn.
+          {vi
+            ? "Cung cấp tài khoản ChatGPT Plus, Claude Pro, Gemini Advanced và key phần mềm số. Tự động hóa hoàn toàn, kích hoạt nhanh giúp nâng tầm hiệu suất công việc của bạn."
+            : "Digital productivity services for AI tools, premium software access and online subscriptions. Fast checkout, clear delivery status and support after payment."}
         </p>
         <div className="hero-actions">
           <button className="primary-button" onClick={onShop}>
-            <ShoppingBag size={18} /> Xem sản phẩm
+            <ShoppingBag size={18} /> {copy.shopCta}
           </button>
           <button className="ghost-button" onClick={onWallet}>
-            <QrCode size={18} /> Nạp ví
+            <QrCode size={18} /> {copy.walletCta}
           </button>
         </div>
         <div className="hero-proofline" aria-label="Tín hiệu tin cậy">
-          <span>Giao hàng tự động 24/7</span>
-          <span>Chính hãng 100%</span>
-          <span>Bảo hành 1-đổi-1</span>
+          <span>{vi ? "Giao hàng tự động 24/7" : "24/7 digital delivery"}</span>
+          <span>{vi ? "Thông tin minh bạch" : "Clear order tracking"}</span>
+          <span>{vi ? "Hỗ trợ sau thanh toán" : "After-payment support"}</span>
         </div>
         <div className="hero-stats" style={{ "--d": "200ms" } as React.CSSProperties}>
-          <span><ShieldCheck size={16} /> Tiết kiệm đến 70%</span>
-          <span><TimerReset size={16} /> Hỗ trợ kỹ thuật 24/7</span>
-          <span><PackageCheck size={16} /> Thanh toán VietQR an toàn</span>
+          <span><ShieldCheck size={16} /> {vi ? "Giá niêm yết rõ ràng" : "Transparent pricing"}</span>
+          <span><TimerReset size={16} /> {vi ? "Hỗ trợ kỹ thuật 24/7" : "24/7 support"}</span>
+          <span><PackageCheck size={16} /> {vi ? "VietQR và ví nội bộ" : "USDT invoice support"}</span>
         </div>
       </div>
       <div className="hero-motion" aria-hidden="true">
         <div className="checkout-stage">
           <div className="stage-card stage-product">
             <span>ChatGPT Plus</span>
-            <b>250.000 d</b>
-            <i>5 còn lại</i>
+            <b>{vi ? "250.000 d" : "10 USDT"}</b>
+            <i>{vi ? "5 còn lại" : "5 left"}</i>
           </div>
           <div className="stage-card stage-qr">
             <span>DH_AUTO</span>
@@ -608,19 +721,19 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
                 <i key={index} />
               ))}
             </div>
-            <b>10 phút</b>
+            <b>{vi ? "10 phút" : "10 min"}</b>
           </div>
           <div className="stage-card stage-ledger">
             <span>VD AI Shop</span>
-            <b>Tự động 24/7</b>
-            <i>Giao hàng tức thì</i>
+            <b>{vi ? "Tự động 24/7" : "24/7 automated"}</b>
+            <i>{vi ? "Giao hàng tức thì" : "Fast delivery"}</i>
           </div>
         </div>
         <div className="route-map">
-          <span>Chọn hàng</span>
-          <span>Quét QR</span>
-          <span>Kích hoạt</span>
-          <span>Nhận hàng</span>
+          <span>{vi ? "Chọn hàng" : "Choose"}</span>
+          <span>{vi ? "Quét QR" : "Pay"}</span>
+          <span>{vi ? "Kích hoạt" : "Verify"}</span>
+          <span>{vi ? "Nhận hàng" : "Receive"}</span>
         </div>
       </div>
     </section>
@@ -629,27 +742,37 @@ function Hero({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }
 
 /* ─── Trust Showcase ──────────────────────────────────────── */
 
-function TrustShowcase() {
-  const cards = [
-    { icon: <BadgeCheck />, title: "Sức mạnh AI Tối thượng", text: "Truy cập không giới hạn GPT-4o, Claude 3.5 Sonnet, Gemini Advanced. Phản hồi siêu tốc, hỗ trợ lập trình, phân tích dữ liệu chuyên nghiệp." },
-    { icon: <Zap />, title: "Sáng tạo & Giải trí Đỉnh cao", text: "Mở khóa kho tài nguyên khổng lồ của Canva Pro, Adobe Creative Cloud, CapCut Pro hay YouTube Premium không quảng cáo chất lượng cao." },
-    { icon: <Headphones />, title: "Hỗ trợ Kỹ thuật 24/7", text: "Đội ngũ kỹ thuật túc trực sẵn sàng hỗ trợ cài đặt, kích hoạt và giải quyết mọi thắc mắc của khách hàng bất cứ lúc nào." },
-    { icon: <ShieldCheck />, title: "Bảo hành 1-đổi-1 Uy tín", text: "Cam kết tài khoản hoạt động ổn định, chính hãng 100%. Chính sách bảo hành 1-đổi-1 rõ ràng trong suốt thời gian sử dụng dịch vụ." }
-  ];
+function TrustShowcase({ language }: { language: Language }) {
+  const vi = language === "vi";
+  const cards = vi
+    ? [
+        { icon: <BadgeCheck />, title: "Đối soát rõ ràng", text: "Mỗi QR có mã thanh toán riêng, lịch sử đơn hàng và trạng thái xử lý minh bạch." },
+        { icon: <Zap />, title: "Mua nhanh", text: "Khách có thể thanh toán bằng ví, VietQR hoặc USDT tùy theo ngôn ngữ và cấu hình sản phẩm." },
+        { icon: <Headphones />, title: "Hỗ trợ thủ công", text: "Đơn cần admin xử lý sẽ hiện hướng dẫn sau khi thanh toán thành công." },
+        { icon: <ShieldCheck />, title: "Bảo mật giao dịch", text: "Webhook thanh toán kiểm tra mã đơn, số tiền và chống xử lý trùng." }
+      ]
+    : [
+        { icon: <BadgeCheck />, title: "Clear reconciliation", text: "Each invoice has a unique order code, visible status and trackable order history." },
+        { icon: <Zap />, title: "Fast checkout", text: "English checkout prioritizes USDT/Cryptomus invoices when a product has a USDT price." },
+        { icon: <Headphones />, title: "Manual support", text: "Manual-delivery items show admin contact instructions only after successful payment." },
+        { icon: <ShieldCheck />, title: "Payment safety", text: "Webhooks verify order codes, amounts and duplicate transaction processing." }
+      ];
 
   return (
     <section className="shell trust-showcase">
       <div className="section-head compact">
         <div>
-          <p className="eyebrow reveal">Giá trị vượt trội</p>
-          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Giải pháp Premium nâng tầm năng suất công việc và học tập</h2>
+          <p className="eyebrow reveal">{vi ? "Giá trị vượt trội" : "Trust signals"}</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>
+            {vi ? "Một quy trình mua hàng minh bạch từ QR đến giao hàng" : "A transparent checkout flow from invoice to delivery"}
+          </h2>
         </div>
       </div>
       <div className="trust-strip reveal" style={{ "--d": "120ms" } as React.CSSProperties} aria-label="Cam kết vận hành">
-        <span>Chính hãng 100%</span>
-        <span>Giao hàng tự động</span>
-        <span>Bảo hành trọn vẹn</span>
-        <span>Hỗ trợ tận tâm</span>
+        <span>{vi ? "Giá rõ ràng" : "Clear pricing"}</span>
+        <span>{vi ? "Giao hàng số" : "Digital delivery"}</span>
+        <span>{vi ? "Lưu lịch sử" : "Order history"}</span>
+        <span>{vi ? "Hỗ trợ trực tiếp" : "Direct support"}</span>
       </div>
       <div className="trust-grid">
         {cards.map((card, index) => (
@@ -677,18 +800,22 @@ function FeaturedProducts({
   onProduct: (product: Product) => void;
   onShop: () => void;
 }) {
+  const copy = TEXT[language];
+  const vi = language === "vi";
   return (
     <section className="shell featured-products" id="featured-products">
       <div className="section-head compact">
         <div>
-          <p className="eyebrow reveal">Sản phẩm đang bán</p>
-          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Tài khoản AI, phần mềm và dịch vụ số có giá niêm yết rõ ràng</h2>
+          <p className="eyebrow reveal">{vi ? "Sản phẩm đang bán" : "Available products"}</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>{vi ? "Tài khoản AI, phần mềm và dịch vụ số có giá niêm yết rõ ràng" : "AI access, software services and digital products with clear pricing"}</h2>
           <p className="product-section-copy reveal" style={{ "--d": "140ms" } as React.CSSProperties}>
-            Mỗi sản phẩm có giá, tồn kho, phương thức nhận hàng và lịch sử đơn hàng minh bạch. Thông tin giao hàng chỉ mở sau khi thanh toán thành công.
+            {vi
+              ? "Mỗi sản phẩm có giá, tồn kho, phương thức nhận hàng và lịch sử đơn hàng minh bạch. Thông tin giao hàng chỉ mở sau khi thanh toán thành công."
+              : "Each product shows price, stock, delivery type and order tracking. Delivery information is displayed only after successful payment."}
           </p>
         </div>
         <button className="ghost-button reveal" onClick={onShop} style={{ "--d": "180ms" } as React.CSSProperties}>
-          Xem tất cả <ArrowRight size={17} />
+          {vi ? "Xem tất cả" : "View all"} <ArrowRight size={17} />
         </button>
       </div>
       <div className="product-grid compact-grid">
@@ -703,7 +830,7 @@ function FeaturedProducts({
             />
           ))
         ) : (
-          <div className="empty-state">Danh sách sản phẩm đang được tải. Có thể xem đầy đủ tại tab Sản phẩm.</div>
+          <div className="empty-state">{vi ? "Danh sách sản phẩm đang được tải. Có thể xem đầy đủ tại tab Sản phẩm." : "Products are loading. You can view the full catalog in the Products tab."}</div>
         )}
       </div>
     </section>
@@ -712,24 +839,34 @@ function FeaturedProducts({
 
 /* ─── How It Works ────────────────────────────────────────── */
 
-function HowItWorks({ onShop, onWallet }: { onShop: () => void; onWallet: () => void }) {
-  const steps = [
-    ["1", "Lựa chọn dịch vụ", "Khám phá danh mục sản phẩm AI, thiết kế đồ họa hoặc giải trí và chọn gói phù hợp nhất."],
-    ["2", "Quét QR siêu tốc", "QR thanh toán tự động được tạo ngay lập tức với số tiền chính xác, xử lý giao dịch tức thì."],
-    ["3", "Xác thực tự động", "Giao dịch được xác minh tự động chỉ trong 5-10 giây, không cần chờ đợi xác nhận thủ công."],
-    ["4", "Nhận hàng & Sử dụng", "Thông tin tài khoản/key kèm hướng dẫn sử dụng chi tiết hiển thị trực tiếp và gửi qua Telegram."]
-  ];
+function HowItWorks({ language, onShop, onWallet }: { language: Language; onShop: () => void; onWallet: () => void }) {
+  const vi = language === "vi";
+  const steps = vi
+    ? [
+        ["1", "Lựa chọn dịch vụ", "Khám phá danh mục sản phẩm số và chọn gói phù hợp."],
+        ["2", "Thanh toán", "Tiếng Việt dùng ví hoặc VietQR. Tiếng Anh dùng USDT invoice khi sản phẩm có giá USDT."],
+        ["3", "Xác thực tự động", "Giao dịch được webhook xác nhận và cập nhật trạng thái đơn hàng."],
+        ["4", "Nhận hàng", "Thông tin nhận hàng chỉ hiển thị sau khi đơn thanh toán thành công."]
+      ]
+    : [
+        ["1", "Choose a service", "Browse digital services and select the package you need."],
+        ["2", "Pay securely", "English checkout uses USDT/Cryptomus invoices when available."],
+        ["3", "Auto verification", "The webhook verifies payment and updates the order status."],
+        ["4", "Receive delivery", "Delivery details are shown only after successful payment."]
+      ];
 
   return (
     <section className="shell flow-section">
       <div className="flow-copy reveal">
-        <h2>Hệ thống mua sắm tự động hóa, an toàn và bảo mật tối đa</h2>
+        <h2>{vi ? "Hệ thống mua sắm tự động hóa, an toàn và bảo mật tối đa" : "Automated checkout with clear payment separation"}</h2>
         <p>
-          Chúng tôi mang đến giải pháp sở hữu Premium account dễ dàng nhất. Mọi đơn hàng và số dư ví được lưu trữ minh bạch, hỗ trợ quản lý đồng bộ qua bot Telegram giúp bạn tra cứu lịch sử mua hàng mọi lúc mọi nơi.
+          {vi
+            ? "Mọi đơn hàng và số dư ví được lưu trữ minh bạch, hỗ trợ quản lý đồng bộ qua website và bot Telegram."
+            : "Orders, invoices and wallet activity are tracked clearly across the website and Telegram bot."}
         </p>
         <div className="flow-actions">
-          <button className="primary-button" onClick={onShop}>Mua ngay <ArrowRight size={17} /></button>
-          <button className="ghost-button" onClick={onWallet}>Nạp ví <Wallet size={17} /></button>
+          <button className="primary-button" onClick={onShop}>{vi ? "Mua ngay" : "Buy now"} <ArrowRight size={17} /></button>
+          <button className="ghost-button" onClick={onWallet}>{vi ? "Nạp ví" : "Top up"} <Wallet size={17} /></button>
         </div>
       </div>
       <div className="timeline">
@@ -749,14 +886,15 @@ function HowItWorks({ onShop, onWallet }: { onShop: () => void; onWallet: () => 
 
 /* ─── Brand Showcase ──────────────────────────────────────── */
 
-function BrandShowcase() {
+function BrandShowcase({ language }: { language: Language }) {
+  const vi = language === "vi";
   const brands = ["ChatGPT", "Claude", "Gemini", "Adobe", "CapCut", "YouTube", "Canva", "Cursor", "Grok", "Netflix"];
   return (
     <section className="shell brand-showcase">
       <div className="brand-panel reveal">
         <div>
-          <p className="eyebrow">Danh mục phổ biến</p>
-          <h2>Các gói AI, sáng tạo nội dung và premium account</h2>
+          <p className="eyebrow">{vi ? "Danh mục phổ biến" : "Popular categories"}</p>
+          <h2>{vi ? "Các gói AI, sáng tạo nội dung và premium account" : "AI, creative software and digital subscription services"}</h2>
         </div>
         <div className="brand-cloud" aria-label="Các thương hiệu phổ biến">
           {brands.map((brand) => (
@@ -770,9 +908,10 @@ function BrandShowcase() {
 
 /* ─── Products Tab ────────────────────────────────────────── */
 
-function MerchantInfo() {
+function MerchantInfo({ language }: { language: Language }) {
+  const vi = language === "vi";
   const contacts = [
-    { label: "Email hỗ trợ", value: "vietanh.dao99@gmail.com", href: "mailto:vietanh.dao99@gmail.com", icon: <Mail size={18} /> },
+    { label: vi ? "Email hỗ trợ" : "Support email", value: "vietanh.dao99@gmail.com", href: "mailto:vietanh.dao99@gmail.com", icon: <Mail size={18} /> },
     { label: "Zalo", value: "0377952999", href: "https://zalo.me/0377952999", icon: <Phone size={18} /> },
     { label: "Telegram", value: "@vanhdao99", href: "https://t.me/vanhdao99", icon: <Send size={18} /> }
   ];
@@ -780,13 +919,17 @@ function MerchantInfo() {
     <section className="shell merchant-section" id="contact">
       <div className="merchant-panel reveal">
         <div>
-          <p className="eyebrow">Thông tin cửa hàng</p>
-          <h2>VD AI Shop cung cấp dịch vụ số có hỗ trợ trực tiếp</h2>
+          <p className="eyebrow">{vi ? "Thông tin cửa hàng" : "Merchant information"}</p>
+          <h2>{vi ? "VD AI Shop cung cấp dịch vụ số có hỗ trợ trực tiếp" : "VD AI Shop provides digital services with direct support"}</h2>
           <p>
-            VD AI Shop là cửa hàng trực tuyến bán tài khoản AI, tài khoản premium, key phần mềm và dịch vụ số. Khách hàng có thể mua trên website hoặc Telegram bot, thanh toán bằng VietQR, ví nội bộ hoặc USDT khi cổng thanh toán được kích hoạt.
+            {vi
+              ? "VD AI Shop là cửa hàng trực tuyến bán tài khoản AI, tài khoản premium, key phần mềm và dịch vụ số. Khách hàng có thể mua trên website hoặc Telegram bot, thanh toán bằng VietQR, ví nội bộ hoặc USDT khi cổng thanh toán được kích hoạt."
+              : "VD AI Shop is an online digital-service store for AI productivity access, premium software services, software keys and digital subscriptions. Customers can purchase through the website or Telegram bot."}
           </p>
           <p>
-            Thời gian hỗ trợ: 08:00 đến 23:00 hằng ngày theo giờ Việt Nam. Các đơn cần xử lý thủ công sẽ được hướng dẫn liên hệ admin sau khi thanh toán thành công.
+            {vi
+              ? "Thời gian hỗ trợ: 08:00 đến 23:00 hằng ngày theo giờ Việt Nam. Các đơn cần xử lý thủ công sẽ được hướng dẫn liên hệ admin sau khi thanh toán thành công."
+              : "Support hours: 08:00 to 23:00 Vietnam time. Manual-delivery orders show admin contact instructions only after successful payment."}
           </p>
         </div>
         <div className="contact-cards" aria-label="Thông tin liên hệ VD AI Shop">
@@ -803,35 +946,27 @@ function MerchantInfo() {
   );
 }
 
-function PolicySections() {
-  const policies = [
-    {
-      id: "delivery-policy",
-      title: "Chính sách giao hàng",
-      text: "Sản phẩm dạng mã, tài khoản hoặc nội dung số sẽ được giao tự động sau khi hệ thống xác nhận thanh toán. Sản phẩm cần xử lý riêng sẽ hiển thị mã đơn và hướng dẫn liên hệ admin."
-    },
-    {
-      id: "refund-policy",
-      title: "Chính sách hoàn tiền",
-      text: "Nếu đơn hết hàng, thanh toán sai nội dung, thanh toán quá hạn hoặc không thể giao đúng sản phẩm, hệ thống sẽ cộng tiền về ví hoặc admin xử lý hoàn tiền theo từng trường hợp."
-    },
-    {
-      id: "terms",
-      title: "Điều khoản sử dụng",
-      text: "Khách hàng cần kiểm tra kỹ tên sản phẩm, số lượng và giá trước khi thanh toán. Sản phẩm số đã giao thành công không đổi trả nếu thông tin hoạt động đúng mô tả."
-    },
-    {
-      id: "privacy",
-      title: "Bảo mật thông tin",
-      text: "Website chỉ lưu thông tin cần thiết để tạo tài khoản, xử lý thanh toán, giao hàng và hỗ trợ đơn hàng. Thông tin thanh toán được dùng để đối soát giao dịch và không bán cho bên thứ ba."
-    }
-  ];
+function PolicySections({ language }: { language: Language }) {
+  const vi = language === "vi";
+  const policies = vi
+    ? [
+        { id: "delivery-policy", title: "Chính sách giao hàng", text: "Sản phẩm dạng mã, tài khoản hoặc nội dung số sẽ được giao tự động sau khi hệ thống xác nhận thanh toán. Sản phẩm cần xử lý riêng sẽ hiển thị mã đơn và hướng dẫn liên hệ admin." },
+        { id: "refund-policy", title: "Chính sách hoàn tiền", text: "Nếu đơn hết hàng, thanh toán sai nội dung, thanh toán quá hạn hoặc không thể giao đúng sản phẩm, hệ thống sẽ cộng tiền về ví hoặc admin xử lý hoàn tiền theo từng trường hợp." },
+        { id: "terms", title: "Điều khoản sử dụng", text: "Khách hàng cần kiểm tra kỹ tên sản phẩm, số lượng và giá trước khi thanh toán. Sản phẩm số đã giao thành công không đổi trả nếu thông tin hoạt động đúng mô tả." },
+        { id: "privacy", title: "Bảo mật thông tin", text: "Website chỉ lưu thông tin cần thiết để tạo tài khoản, xử lý thanh toán, giao hàng và hỗ trợ đơn hàng. Thông tin thanh toán được dùng để đối soát giao dịch và không bán cho bên thứ ba." }
+      ]
+    : [
+        { id: "delivery-policy", title: "Delivery policy", text: "Digital codes, account access or digital content are delivered after payment confirmation. Manual-delivery products display order details and admin contact instructions after payment." },
+        { id: "refund-policy", title: "Refund policy", text: "If an order is out of stock, paid late, paid incorrectly or cannot be delivered as described, the balance is credited back to the wallet or handled manually by support." },
+        { id: "terms", title: "Terms of use", text: "Customers should review product name, quantity and price before payment. Delivered digital services are not refundable when they work as described." },
+        { id: "privacy", title: "Privacy", text: "The website stores only the information needed for account access, payment processing, delivery and support. Payment data is used for reconciliation and is not sold to third parties." }
+      ];
   return (
     <section className="shell policy-section" id="policies">
       <div className="section-head compact">
         <div>
-          <p className="eyebrow reveal">Minh bạch giao dịch</p>
-          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>Chính sách mua hàng, giao hàng và hoàn tiền</h2>
+          <p className="eyebrow reveal">{vi ? "Minh bạch giao dịch" : "Transparent checkout"}</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>{vi ? "Chính sách mua hàng, giao hàng và hoàn tiền" : "Purchase, delivery and refund policies"}</h2>
         </div>
       </div>
       <div className="policy-grid">
@@ -863,19 +998,22 @@ function ProductsTab({
   onView: (product: Product) => void;
   language: Language;
 }) {
+  const copy = TEXT[language];
   return (
     <section className="shell product-section">
       <div className="section-head">
         <div>
-          <p className="eyebrow reveal">Sản phẩm Premium</p>
-          <h2 className="reveal" style={{ "--d": "60ms" } as React.CSSProperties}>Mở khóa Trí tuệ Nhân tạo & Sáng tạo</h2>
+          <p className="eyebrow reveal">{language === "vi" ? "Sản phẩm Premium" : "Premium products"}</p>
+          <h2 className="reveal" style={{ "--d": "60ms" } as React.CSSProperties}>{language === "vi" ? "Mở khóa Trí tuệ Nhân tạo & Sáng tạo" : "AI productivity and digital service catalog"}</h2>
           <p className="product-section-copy reveal" style={{ "--d": "120ms" } as React.CSSProperties}>
-            Danh sách tài khoản premium ChatGPT, Claude, Gemini, Canva, Adobe chính hãng được tuyển chọn để tăng tốc hiệu năng làm việc, tiết kiệm tối đa chi phí.
+            {language === "vi"
+              ? "Danh sách tài khoản premium ChatGPT, Claude, Gemini, Canva, Adobe được tuyển chọn để tăng tốc hiệu năng làm việc, tiết kiệm tối đa chi phí."
+              : "Browse AI access, creative software services and digital subscriptions. English checkout shows USDT pricing when configured."}
           </p>
         </div>
         <div className="search-box">
           <Search size={17} />
-          <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder="Tìm ChatGPT, Claude, YouTube..." />
+          <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={copy.searchPlaceholder} />
         </div>
       </div>
 
@@ -891,7 +1029,7 @@ function ProductsTab({
           />
         ))}
       </div>
-      {!products.length ? <div className="empty-state">Chưa có sản phẩm phù hợp.</div> : null}
+      {!products.length ? <div className="empty-state">{copy.noProducts}</div> : null}
     </section>
   );
 }
@@ -913,7 +1051,8 @@ function ProductCard({
   const disabled = stock <= 0;
   const opening = loading === `product:${product.id}`;
   const imageSrc = productArtUrl(product);
-  const stockLabel = product.deliveryType === "SHARED_CONTENT" ? "Không giới hạn" : `${stock} còn lại`;
+  const copy = TEXT[language];
+  const stockLabel = product.deliveryType === "SHARED_CONTENT" ? copy.unlimited : `${stock} ${copy.left}`;
   return (
     <article className="product-card reveal">
       <div className="product-media">
@@ -921,21 +1060,21 @@ function ProductCard({
       </div>
       <div className="product-body">
         <div className="product-kicker">
-          <span>{product.category?.name ?? "Sản phẩm số"}</span>
+          <span>{product.category?.name ?? copy.categoryFallback}</span>
           <span className={disabled ? "stock-empty" : ""}>{stockLabel}</span>
         </div>
         <h3>{localizedName(product, language)}</h3>
-        <p>{localizedDescription(product, language) || "Delivery information appears after successful payment."}</p>
+        <p>{localizedDescription(product, language) || copy.deliveryFallback}</p>
         <div className="product-summary">
           <strong>{formatProductPrice(product, language)}</strong>
-          <span>{postPaymentLabel(product.deliveryType)}</span>
+          <span>{postPaymentLabel(product.deliveryType, language)}</span>
         </div>
       </div>
       <div className="product-actions">
-        <button onClick={onView} disabled={opening}>{opening ? <Loader2 className="spin" size={15} /> : <Search size={15} />} Chi tiết</button>
+        <button onClick={onView} disabled={opening}>{opening ? <Loader2 className="spin" size={15} /> : <Search size={15} />} {copy.detail}</button>
         <button onClick={onView} disabled={opening || loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
           {opening || loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={15} /> : <ShoppingBag size={15} />}
-          Mua hàng
+          {copy.buy}
         </button>
       </div>
     </article>
@@ -945,11 +1084,13 @@ function ProductCard({
 /* ─── Wallet Dialog ───────────────────────────────────────── */
 
 function WalletDialog({
+  language,
   balance,
   loading,
   onTopup,
   onClose
 }: {
+  language: Language;
   balance: number;
   loading: string;
   onTopup: (amount: number) => void;
@@ -963,7 +1104,7 @@ function WalletDialog({
     event.preventDefault();
     const amount = Number(customAmount.replace(/[^\d]/g, ""));
     if (!Number.isFinite(amount) || amount < 1000) {
-      setAmountError("Số tiền nạp tối thiểu là 1.000đ.");
+      setAmountError(language === "vi" ? "Số tiền nạp tối thiểu là 1.000đ." : "Minimum top-up amount is 1,000 VND.");
       return;
     }
     setAmountError("");
@@ -976,8 +1117,8 @@ function WalletDialog({
     <div className="overlay" onClick={handleOverlayClick}>
       <div className="dialog">
         <button className="close" onClick={onClose}>&times;</button>
-        <h2>Ví VD</h2>
-        <p className="muted">Số dư dùng để mua nhanh mà không cần quét QR từng đơn.</p>
+        <h2>{language === "vi" ? "Ví VD" : "VD Wallet"}</h2>
+        <p className="muted">{language === "vi" ? "Số dư dùng để mua nhanh mà không cần quét QR từng đơn." : "Wallet balance lets you buy quickly without scanning a QR for every order."}</p>
         <div className="wallet-number">{formatVnd(balance)}</div>
         <div className="amount-grid">
           {amounts.map((amount) => (
@@ -988,13 +1129,13 @@ function WalletDialog({
           ))}
         </div>
         <form className="custom-topup" onSubmit={submitCustomTopup}>
-          <label htmlFor="custom-amount">Nạp số tiền tùy ý</label>
+          <label htmlFor="custom-amount">{language === "vi" ? "Nạp số tiền tùy ý" : "Custom top-up amount"}</label>
           <div>
             <input
               id="custom-amount"
               inputMode="numeric"
               min={1000}
-              placeholder="Ví dụ: 150000"
+              placeholder={language === "vi" ? "Ví dụ: 150000" : "Example: 150000"}
               value={customAmount}
               onChange={(event) => {
                 setCustomAmount(event.target.value);
@@ -1003,10 +1144,10 @@ function WalletDialog({
             />
             <button className="primary-button" disabled={loading === "topup"}>
               {loading === "topup" ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />}
-              Tạo QR
+              {language === "vi" ? "Tạo QR" : "Create QR"}
             </button>
           </div>
-          {amountError ? <p className="field-error">{amountError}</p> : <p className="muted">Nhập số tiền muốn nạp, hệ thống sẽ tạo QR VietQR theo đúng số tiền đó.</p>}
+          {amountError ? <p className="field-error">{amountError}</p> : <p className="muted">{language === "vi" ? "Nhập số tiền muốn nạp, hệ thống sẽ tạo QR VietQR theo đúng số tiền đó." : "Enter a VND top-up amount. The system will create a matching VietQR code."}</p>}
         </form>
       </div>
     </div>
@@ -1015,14 +1156,15 @@ function WalletDialog({
 
 /* ─── History Panel ───────────────────────────────────────── */
 
-function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory | null; onRefresh: () => void; loading: boolean }) {
+function HistoryPanel({ language, history, onRefresh, loading }: { language: Language; history: StoreHistory | null; onRefresh: () => void; loading: boolean }) {
+  const copy = TEXT[language];
   return (
     <section className="panel history-panel reveal" id="history">
       <div className="panel-title">
         <History />
         <div>
-          <h2>Lịch sử</h2>
-          <p>Đơn hàng và biến động ví gần nhất.</p>
+          <h2>{copy.historyTitle}</h2>
+          <p>{copy.historySub}</p>
         </div>
         <button className="icon-button" onClick={onRefresh} disabled={loading}>
           <RefreshCw className={loading ? "spin" : ""} size={17} />
@@ -1035,7 +1177,7 @@ function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory |
               <div>
                 <span>{order.product.name}</span>
                 <div className="history-order-meta">
-                  <b>Mã đơn: {order.code}</b>
+                  <b>{copy.orderCode}: {order.code}</b>
                   <b>SL: {order.quantity}</b>
                   <b>{new Date(order.createdAt).toLocaleString("vi-VN")}</b>
                 </div>
@@ -1047,7 +1189,7 @@ function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory |
             </div>
           ))
         ) : (
-          <p className="muted">Đăng nhập để xem lịch sử mua hàng.</p>
+          <p className="muted">{copy.historyLogin}</p>
         )}
       </div>
     </section>
@@ -1056,7 +1198,8 @@ function HistoryPanel({ history, onRefresh, loading }: { history: StoreHistory |
 
 /* ─── Auth Dialog ─────────────────────────────────────────── */
 
-function AuthDialog({ onClose, onSession }: { onClose: () => void; onSession: (session: Session) => void }) {
+function AuthDialog({ language, onClose, onSession }: { language: Language; onClose: () => void; onSession: (session: Session) => void }) {
+  const copy = TEXT[language];
   const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1086,19 +1229,19 @@ function AuthDialog({ onClose, onSession }: { onClose: () => void; onSession: (s
     <div className="overlay auth-overlay" onClick={handleOverlayClick}>
       <div className="dialog auth-dialog">
         <button className="close" onClick={onClose}>&times;</button>
-        <h2>{mode === "login" ? "Đăng nhập" : "Tạo tài khoản"}</h2>
+        <h2>{mode === "login" ? copy.loginTitle : copy.registerTitle}</h2>
         <form onSubmit={submit}>
-          {mode === "register" ? <input name="name" placeholder="Tên hiển thị" /> : null}
+          {mode === "register" ? <input name="name" placeholder={copy.displayName} /> : null}
           <input name="email" type="email" placeholder="Email" required />
-          <input name="password" type="password" minLength={6} placeholder="Mật khẩu" required />
+          <input name="password" type="password" minLength={6} placeholder={copy.password} required />
           {error ? <div className="alert">{error}</div> : null}
           <button className="primary-button" disabled={loading}>
             {loading ? <Loader2 className="spin" size={17} /> : <KeyRound size={17} />}
-            {mode === "login" ? "Đăng nhập" : "Đăng ký"}
+            {mode === "login" ? copy.login : copy.register}
           </button>
         </form>
         <button className="link-button" onClick={() => setMode(mode === "login" ? "register" : "login")} style={{ marginTop: 14 }}>
-          {mode === "login" ? "Chưa có tài khoản? Đăng ký" : "Đã có tài khoản? Đăng nhập"}
+          {mode === "login" ? copy.noAccount : copy.hasAccount}
         </button>
       </div>
     </div>
@@ -1129,7 +1272,8 @@ function ProductDialog({
   const [quantity, setQuantity] = useState(1);
   const invalidQuantity = quantity < 1 || quantity > maxQuantity;
   const imageSrc = productArtUrl(product);
-  const deliveryLabel = postPaymentLabel(product.deliveryType);
+  const copy = TEXT[language];
+  const deliveryLabel = postPaymentLabel(product.deliveryType, language);
 
   const { handleOverlayClick } = useDialogClose(onClose);
 
@@ -1141,28 +1285,28 @@ function ProductDialog({
           {imageSrc ? <img src={imageSrc} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{brandGlyph(product.name)}</span>}
         </div>
         <div className="dialog-heading">
-          <span>{product.category?.name ?? "Sản phẩm số"}</span>
+          <span>{product.category?.name ?? copy.categoryFallback}</span>
           <h2>{localizedName(product, language)}</h2>
-          <p>{localizedDescription(product, language) || "Delivery information appears after successful payment."}</p>
+          <p>{localizedDescription(product, language) || copy.deliveryFallback}</p>
         </div>
         <div className="detail-grid">
           <div>
-            <span>Giá</span>
+            <span>{copy.price}</span>
             <b>{formatProductPrice(product, language)}</b>
           </div>
           <div>
-            <span>Kho</span>
-            <b>{product.deliveryType === "SHARED_CONTENT" ? "Không giới hạn" : availableQuantity(product)}</b>
+            <span>{copy.stock}</span>
+            <b>{product.deliveryType === "SHARED_CONTENT" ? copy.unlimited : availableQuantity(product)}</b>
           </div>
           <div>
-            <span>Nhận hàng</span>
+            <span>{copy.delivery}</span>
             <b>{deliveryLabel}</b>
           </div>
         </div>
         <div className="quantity-box">
           <div className="quantity-head">
-            <label htmlFor="order-quantity">Số lượng</label>
-            <span>Tối đa {maxQuantity}</span>
+            <label htmlFor="order-quantity">{copy.quantity}</label>
+            <span>{copy.max} {maxQuantity}</span>
           </div>
           <div className="quantity-stepper">
             <button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>&#8722;</button>
@@ -1177,20 +1321,28 @@ function ProductDialog({
             <button type="button" onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}>+</button>
           </div>
           <div className="quantity-total">
-            <span>Tổng thanh toán</span>
+            <span>{copy.total}</span>
             <b>{formatProductTotal(product, quantity, language)}</b>
           </div>
         </div>
         <div className="dialog-actions">
-          <button className="primary-button" onClick={() => onWallet(quantity)} disabled={loading === `wallet:${product.id}` || invalidQuantity}>
-            {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={17} /> : <Wallet size={17} />} Mua bằng ví
-          </button>
-          <button className="ghost-button" onClick={() => onUsdt(quantity)} disabled={loading === `usdt:${product.id}` || invalidQuantity || !product.usdtPrice}>
-            {loading === `usdt:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} USDT Cryptomus
-          </button>
-          <button className="ghost-button" onClick={() => onBank(quantity)} disabled={loading === `bank:${product.id}` || invalidQuantity}>
-            {loading === `bank:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} Chuyển khoản QR
-          </button>
+          {language === "en" ? (
+            <button className="primary-button" onClick={() => onUsdt(quantity)} disabled={loading === `usdt:${product.id}` || invalidQuantity || !product.usdtPrice}>
+              {loading === `usdt:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} {copy.payUsdt}
+            </button>
+          ) : (
+            <>
+              <button className="primary-button" onClick={() => onWallet(quantity)} disabled={loading === `wallet:${product.id}` || invalidQuantity}>
+                {loading === `wallet:${product.id}` ? <Loader2 className="spin" size={17} /> : <Wallet size={17} />} {copy.payWallet}
+              </button>
+              <button className="ghost-button" onClick={() => onUsdt(quantity)} disabled={loading === `usdt:${product.id}` || invalidQuantity || !product.usdtPrice}>
+                {loading === `usdt:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} {copy.payUsdt}
+              </button>
+              <button className="ghost-button" onClick={() => onBank(quantity)} disabled={loading === `bank:${product.id}` || invalidQuantity}>
+                {loading === `bank:${product.id}` ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />} {copy.payBank}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1203,17 +1355,20 @@ function QrDialog({
   payment,
   status,
   loading,
+  language,
   onClose,
   onRefresh
 }: {
   payment: PaymentResult;
   status: PaymentStatusResult | null;
   loading: boolean;
+  language: Language;
   onClose: () => void;
   onRefresh: () => void;
 }) {
   const { handleOverlayClick } = useDialogClose(onClose);
   const [copiedAddress, setCopiedAddress] = useState(false);
+  const copy = TEXT[language];
   const networkLabel = payment.network ? cryptoNetworkLabel(payment.network) : "";
 
   async function copyAddress() {
@@ -1231,44 +1386,44 @@ function QrDialog({
     <div className="overlay" onClick={handleOverlayClick}>
       <div className="dialog qr-dialog">
         <button className="close" onClick={onClose}>&times;</button>
-        <h2>Quét QR thanh toán</h2>
+        <h2>{copy.scanQr}</h2>
         {payment.qrImageUrl ? <img className="qr-image" src={payment.qrImageUrl} alt={`QR ${payment.code}`} /> : null}
         {payment.checkoutUrl ? (
           <a className="primary-button" href={payment.checkoutUrl} target="_blank" rel="noreferrer" style={{ width: "100%", justifyContent: "center" }}>
-            Open Cryptomus invoice
+            {copy.openInvoice}
           </a>
         ) : null}
         <div className="detail-grid">
-          <span>Mã</span><b>{payment.code}</b>
-          <span>Số tiền</span><b>{payment.cryptoCurrency === "USDT" ? formatUsdt(payment.cryptoAmount) : formatVnd(payment.amount)}</b>
+          <span>{copy.code}</span><b>{payment.code}</b>
+          <span>{copy.amount}</span><b>{payment.cryptoCurrency === "USDT" ? formatUsdt(payment.cryptoAmount) : formatVnd(payment.amount)}</b>
           {payment.network ? (
             <>
-              <span>Network</span><b>{networkLabel}</b>
+              <span>{copy.network}</span><b>{networkLabel}</b>
             </>
           ) : null}
           {payment.address ? (
             <>
-              <span>Địa chỉ ví</span>
+              <span>{copy.walletAddress}</span>
               <div className="wallet-address-row">
                 <b className="break-all">{payment.address}</b>
                 <button type="button" onClick={copyAddress}>
                   {copiedAddress ? <Check size={15} /> : <Copy size={15} />}
-                  {copiedAddress ? "Đã copy" : "Copy"}
+                  {copiedAddress ? copy.copied : copy.copy}
                 </button>
               </div>
             </>
           ) : null}
-          <span>Hạn</span><b>{new Date(payment.expiresAt).toLocaleTimeString("vi-VN")}</b>
-          <span>Trạng thái</span><b>{statusLabel(status?.status ?? "PENDING")}</b>
+          <span>{copy.expires}</span><b>{new Date(payment.expiresAt).toLocaleTimeString(language === "vi" ? "vi-VN" : "en-US")}</b>
+          <span>{copy.status}</span><b>{statusLabel(status?.status ?? "PENDING", language)}</b>
         </div>
         {payment.cryptoCurrency === "USDT" && payment.network ? (
           <div className="network-warning">
-            Chỉ chuyển <b>USDT</b> qua mạng <b>{networkLabel}</b>. Chuyển sai network có thể mất tiền và hệ thống không thể tự đối soát.
+            {copy.cryptoWarning.split("{network}")[0]}<b>{networkLabel}</b>{copy.cryptoWarning.split("{network}")[1]}
           </div>
         ) : null}
-        <p className="muted">VND được đối soát qua SePay. USDT được đối soát qua Cryptomus webhook. Thông tin nhận hàng chỉ hiển thị khi đơn đã thanh toán thành công.</p>
+        <p className="muted">{copy.qrNote}</p>
         <button className="ghost-button" onClick={onRefresh} disabled={loading} style={{ width: "100%", marginTop: 12 }}>
-          <RefreshCw className={loading ? "spin" : ""} size={17} /> Kiểm tra trạng thái
+          <RefreshCw className={loading ? "spin" : ""} size={17} /> {copy.refreshStatus}
         </button>
       </div>
     </div>
@@ -1341,20 +1496,21 @@ function FloatingCtas() {
 
 /* ─── Footer ──────────────────────────────────────────────── */
 
-function Footer({ onTab, onSection }: { onTab: (tab: Tab) => void; onSection: (sectionId: string) => void }) {
+function Footer({ language, onTab, onSection }: { language: Language; onTab: (tab: Tab) => void; onSection: (sectionId: string) => void }) {
+  const vi = language === "vi";
   return (
     <footer>
       <div>
         <span>VD AI Shop</span>
-        <small>Tài khoản AI, premium account, key phần mềm và dịch vụ số.</small>
+        <small>{vi ? "Tài khoản AI, premium account, key phần mềm và dịch vụ số." : "AI access, premium accounts, software keys and digital services."}</small>
       </div>
       <nav aria-label="Liên kết thông tin cửa hàng">
-        <button onClick={() => onTab("products")}>Sản phẩm</button>
-        <button onClick={() => onSection("contact")}>Liên hệ</button>
-        <button onClick={() => onSection("delivery-policy")}>Giao hàng</button>
-        <button onClick={() => onSection("refund-policy")}>Hoàn tiền</button>
-        <button onClick={() => onSection("terms")}>Điều khoản</button>
-        <button onClick={() => onSection("privacy")}>Bảo mật</button>
+        <button onClick={() => onTab("products")}>{vi ? "Sản phẩm" : "Products"}</button>
+        <button onClick={() => onSection("contact")}>{vi ? "Liên hệ" : "Contact"}</button>
+        <button onClick={() => onSection("delivery-policy")}>{vi ? "Giao hàng" : "Delivery"}</button>
+        <button onClick={() => onSection("refund-policy")}>{vi ? "Hoàn tiền" : "Refund"}</button>
+        <button onClick={() => onSection("terms")}>{vi ? "Điều khoản" : "Terms"}</button>
+        <button onClick={() => onSection("privacy")}>{vi ? "Bảo mật" : "Privacy"}</button>
       </nav>
       <div className="footer-contact">
         <a href="mailto:vietanh.dao99@gmail.com">vietanh.dao99@gmail.com</a>
@@ -1367,14 +1523,26 @@ function Footer({ onTab, onSection }: { onTab: (tab: Tab) => void; onSection: (s
 
 /* ─── Utility Functions (unchanged logic) ─────────────────── */
 
-function postPaymentLabel(type: Product["deliveryType"]) {
+function postPaymentLabel(type: Product["deliveryType"], language: Language = "vi") {
+  if (language === "en") {
+    if (type === "STOCK_ITEM") return "Delivered after payment";
+    if (type === "SHARED_CONTENT") return "Unlocked after payment";
+    return "Manual after payment";
+  }
   if (type === "STOCK_ITEM") return "Nhận sau thanh toán";
   if (type === "SHARED_CONTENT") return "Mở sau thanh toán";
   return "Xử lý sau thanh toán";
 }
 
-function statusLabel(status: PaymentStatusResult["status"]) {
-  const labels: Record<PaymentStatusResult["status"], string> = {
+function statusLabel(status: PaymentStatusResult["status"], language: Language = "vi") {
+  const labels: Record<PaymentStatusResult["status"], string> = language === "en" ? {
+    PENDING: "Pending payment",
+    SUCCEEDED: "Paid",
+    EXPIRED: "Expired",
+    FAILED: "Failed",
+    CREDITED_TO_WALLET: "Credited to wallet",
+    MANUAL_REVIEW: "Manual review"
+  } : {
     PENDING: "Đang chờ thanh toán",
     SUCCEEDED: "Đã thanh toán",
     EXPIRED: "Đã hết hạn",
