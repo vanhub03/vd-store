@@ -381,9 +381,22 @@ function App() {
     }
   }
 
+  function navigateTab(next: Tab) {
+    setActiveTab(next);
+    window.history.replaceState(null, "", next === "home" ? window.location.pathname : `${window.location.pathname}?tab=${next}`);
+  }
+
+  function navigateHomeSection(sectionId: string) {
+    setActiveTab("home");
+    window.history.replaceState(null, "", `${window.location.pathname}#${sectionId}`);
+    window.setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }
+
   return (
     <main>
-      <Header customer={customer} balance={balance} activeTab={activeTab} language={language} onLanguage={changeLanguage} onTab={setActiveTab} onLogin={() => setAuthOpen(true)} onLogout={logout} onWalletOpen={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} />
+      <Header customer={customer} balance={balance} activeTab={activeTab} language={language} onLanguage={changeLanguage} onTab={navigateTab} onLogin={() => setAuthOpen(true)} onLogout={logout} onWalletOpen={() => { if (token) setWalletOpen(true); else setAuthOpen(true); }} />
 
       {activeTab === "home" ? (
         <HomeTab
@@ -391,7 +404,7 @@ function App() {
           loading={loading}
           language={language}
           onProduct={(product) => void openProduct(product)}
-          onShop={() => setActiveTab("products")}
+          onShop={() => navigateTab("products")}
           onWallet={() => {
             if (token) setWalletOpen(true);
             else setAuthOpen(true);
@@ -415,7 +428,7 @@ function App() {
         </section>
       ) : null}
 
-      <Footer onTab={setActiveTab} />
+      <Footer onTab={navigateTab} onSection={navigateHomeSection} />
 
       {authOpen ? <AuthDialog onClose={() => setAuthOpen(false)} onSession={saveSession} /> : null}
       {walletOpen ? (
@@ -1301,7 +1314,7 @@ function FloatingCtas() {
 
 /* ─── Footer ──────────────────────────────────────────────── */
 
-function Footer({ onTab }: { onTab: (tab: Tab) => void }) {
+function Footer({ onTab, onSection }: { onTab: (tab: Tab) => void; onSection: (sectionId: string) => void }) {
   return (
     <footer>
       <div>
@@ -1310,11 +1323,11 @@ function Footer({ onTab }: { onTab: (tab: Tab) => void }) {
       </div>
       <nav aria-label="Liên kết thông tin cửa hàng">
         <button onClick={() => onTab("products")}>Sản phẩm</button>
-        <a href="#contact">Liên hệ</a>
-        <a href="#delivery-policy">Giao hàng</a>
-        <a href="#refund-policy">Hoàn tiền</a>
-        <a href="#terms">Điều khoản</a>
-        <a href="#privacy">Bảo mật</a>
+        <button onClick={() => onSection("contact")}>Liên hệ</button>
+        <button onClick={() => onSection("delivery-policy")}>Giao hàng</button>
+        <button onClick={() => onSection("refund-policy")}>Hoàn tiền</button>
+        <button onClick={() => onSection("terms")}>Điều khoản</button>
+        <button onClick={() => onSection("privacy")}>Bảo mật</button>
       </nav>
       <div className="footer-contact">
         <a href="mailto:vietanh.dao99@gmail.com">vietanh.dao99@gmail.com</a>
