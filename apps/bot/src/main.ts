@@ -78,7 +78,14 @@ type ScreenKeyboard = ReturnType<typeof Markup.inlineKeyboard>;
 type ScreenMedia = string | Buffer;
 type BotLanguage = "vi" | "en";
 type PaymentMethod = "wallet" | "bank" | "usdt";
+type PendingQuantity = {
+  productId: string;
+  preferredMethod?: PaymentMethod;
+  createdAt: number;
+};
+
 const userLanguages = new Map<number, BotLanguage>();
+const pendingQuantities = new Map<number, PendingQuantity>();
 
 const BOT_TEXT = {
   vi: {
@@ -141,7 +148,14 @@ const BOT_TEXT = {
     qrFallback: "Không thể tải ảnh QR. Bạn vẫn có thể mở link/kiểm tra thông tin thanh toán bên dưới.",
     copyWarning: "Chỉ chuyển USDT đúng network hiển thị. Chuyển sai network có thể mất tiền.",
     network: "Network",
-    checkout: "Checkout"
+    checkout: "Checkout",
+    quantityPrompt: "Nhập số lượng bạn muốn mua vào ô chat rồi gửi.",
+    quantityExample: "Ví dụ: 2",
+    quantityInvalid: "Số lượng không hợp lệ. Vui lòng chỉ nhập số nguyên lớn hơn 0, ví dụ: 2",
+    quantityChoosePayment: "Đã nhận số lượng. Chọn phương thức thanh toán để tiếp tục.",
+    quantityWalletNext: "Sau khi gửi số lượng, bot sẽ mua bằng ví.",
+    quantityBankNext: "Sau khi gửi số lượng, bot sẽ tạo QR chuyển khoản.",
+    quantityUsdtNext: "Sau khi gửi số lượng, bot sẽ tạo invoice USDT."
   },
   en: {
     products: "Products",
@@ -203,7 +217,14 @@ const BOT_TEXT = {
     qrFallback: "Could not load the QR image. You can still open the checkout link or use the payment details below.",
     copyWarning: "Only send USDT through the displayed network. Sending via the wrong network may permanently lose funds.",
     network: "Network",
-    checkout: "Checkout"
+    checkout: "Checkout",
+    quantityPrompt: "Type the quantity you want to buy in the chat box and send it.",
+    quantityExample: "Example: 2",
+    quantityInvalid: "Invalid quantity. Please send a positive whole number, for example: 2",
+    quantityChoosePayment: "Quantity received. Choose a payment method to continue.",
+    quantityWalletNext: "After you send the quantity, the bot will pay with wallet balance.",
+    quantityBankNext: "After you send the quantity, the bot will create a bank QR.",
+    quantityUsdtNext: "After you send the quantity, the bot will create a USDT invoice."
   }
 } as const;
 
@@ -289,6 +310,11 @@ bot.action(/^buy_bank:(.+)$/, async (ctx) => {
   await showQuantitySelection(ctx, ctx.match[1], 1, currentLanguage(ctx) === "en" ? "usdt" : "bank");
 });
 
+bot.action(/^buy_usdt:(.+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  await showQuantitySelection(ctx, ctx.match[1], 1, "usdt");
+});
+
 bot.action(/^buy:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   await showQuantitySelection(ctx, ctx.match[1], 1, currentLanguage(ctx) === "en" ? "usdt" : undefined);
@@ -343,6 +369,7 @@ bot.action(/^lang:(vi|en)$/, async (ctx) => {
 
 bot.on("text", async (ctx) => {
   const rawText = ctx.message.text.trim();
+  if (await handlePendingQuantityText(ctx, rawText)) return;
   const text = rawText.toLocaleLowerCase("vi-VN");
   const topupAmount = parseTopupAmountMessage(rawText);
   if (topupAmount) return createTopupQr(ctx, topupAmount);
@@ -367,6 +394,7 @@ bot.catch(async (error, ctx) => {
 
 async function showCatalog(ctx: Context) {
   await upsertUser(ctx);
+  clearPendingQuantity(ctx);
   const lang = currentLanguage(ctx);
   const catalog = await api.get<CatalogResponse>("/bot/catalog");
   const products = flattenProducts(catalog);
@@ -429,6 +457,7 @@ async function showHelp(ctx: Context) {
 }
 
 async function showHome(ctx: Context, message?: string) {
+  clearPendingQuantity(ctx);
   const lang = currentLanguage(ctx);
   await renderScreen(ctx, message ?? BOT_TEXT[lang].home, mainKeyboard(lang));
 }
@@ -439,6 +468,7 @@ async function showProduct(ctx: Context, productId: string) {
 }
 
 async function showProductDetail(ctx: Context, product: ProductDetail) {
+  clearPendingQuantity(ctx);
   const lang = currentLanguage(ctx);
   const text = BOT_TEXT[lang];
   const description = localizedDescription(product, lang) ? `\n${escapeHtml(localizedDescription(product, lang)!)}` : "";
@@ -458,7 +488,7 @@ async function showProductDetail(ctx: Context, product: ProductDetail) {
       : Markup.inlineKeyboard([
           [Markup.button.callback(text.buyWallet, `buy_wallet:${product.id}`)],
           [Markup.button.callback(text.bankQr, `buy_bank:${product.id}`)],
-          [Markup.button.callback(text.buyUsdt, `buy:${product.id}`)],
+          [Markup.button.callback(text.buyUsdt, `buy_usdt:${product.id}`)],
           [Markup.button.callback(text.back, "catalog")]
         ]);
 
@@ -483,14 +513,16 @@ async function showQuantitySelection(ctx: Context, productId: string, quantity: 
 
   const safeQuantity = clampQuantity(quantity, product);
   const stockLine = available === null ? `${text.stock}: ${text.unlimited}` : `${text.stock}: ${available}`;
-  const methodHint =
+  const nextHint =
     normalizedMethod === "wallet"
-      ? `\n${text.walletHint}`
+      ? text.quantityWalletNext
       : normalizedMethod === "bank"
-        ? `\n${text.bankHint}`
+        ? text.quantityBankNext
         : normalizedMethod === "usdt"
-          ? `\n${text.usdtHint}`
-        : "";
+          ? text.quantityUsdtNext
+          : text.quantityChoosePayment;
+
+  setPendingQuantity(ctx, product.id, normalizedMethod);
 
   await renderScreen(
     ctx,
@@ -500,12 +532,88 @@ async function showQuantitySelection(ctx: Context, productId: string, quantity: 
       `${text.price}: <b>${localizedPrice(product, lang)}</b>`,
       stockLine,
       "",
+      text.quantityPrompt,
+      `${text.quantityExample}`,
+      nextHint,
+      "",
       `${text.selectedQty}: <b>${safeQuantity}</b>`,
-      `${text.total}: <b>${localizedTotal(product, safeQuantity, lang)}</b>${methodHint}`
+      `${text.total}: <b>${localizedTotal(product, safeQuantity, lang)}</b>`
     ]
       .filter(Boolean)
       .join("\n"),
-    quantityKeyboard(product, safeQuantity, normalizedMethod, lang)
+    Markup.inlineKeyboard([[Markup.button.callback(text.back, `prod:${product.id}`)]])
+  );
+}
+
+async function handlePendingQuantityText(ctx: Context, rawText: string) {
+  const pending = getPendingQuantity(ctx);
+  if (!pending) return false;
+
+  const lang = currentLanguage(ctx);
+  const text = BOT_TEXT[lang];
+  const quantity = parseQuantityInput(rawText);
+  if (!quantity) {
+    await ctx.reply(text.quantityInvalid, Markup.inlineKeyboard([[Markup.button.callback(text.back, `prod:${pending.productId}`)]]));
+    return true;
+  }
+
+  const product = await api.get<ProductDetail>(`/bot/products/${pending.productId}`);
+  const available = productAvailableQuantity(product);
+  if (available === 0) {
+    clearPendingQuantity(ctx);
+    await renderScreen(
+      ctx,
+      `${escapeHtml(productIcon(product))} <b>${escapeHtml(localizedName(product, lang))}</b>\n\n${text.outOfStock}`,
+      Markup.inlineKeyboard([[Markup.button.callback(text.back, `prod:${product.id}`)]])
+    );
+    return true;
+  }
+
+  const safeQuantity = clampQuantity(quantity, product);
+  clearPendingQuantity(ctx);
+
+  const method = lang === "en" ? "usdt" : pending.preferredMethod;
+  if (method === "wallet") {
+    await purchaseWithWallet(ctx, product.id, safeQuantity);
+    return true;
+  }
+  if (method === "bank") {
+    await createBankOrderQr(ctx, product.id, safeQuantity);
+    return true;
+  }
+  if (method === "usdt") {
+    await createUsdtOrder(ctx, product.id, safeQuantity);
+    return true;
+  }
+
+  await showPaymentMethodSelection(ctx, product, safeQuantity);
+  return true;
+}
+
+async function showPaymentMethodSelection(ctx: Context, product: ProductDetail, quantity: number) {
+  const lang = currentLanguage(ctx);
+  const text = BOT_TEXT[lang];
+  await renderScreen(
+    ctx,
+    [
+      `<b>${escapeHtml(productIcon(product))} ${escapeHtml(localizedName(product, lang))}</b>`,
+      `${text.selectedQty}: <b>${quantity}</b>`,
+      `${text.total}: <b>${localizedTotal(product, quantity, lang)}</b>`,
+      "",
+      text.quantityChoosePayment
+    ].join("\n"),
+    Markup.inlineKeyboard([
+      ...(lang === "vi"
+        ? [
+            [
+              Markup.button.callback(text.buyWallet, `pay_wallet:${product.id}:${quantity}`),
+              Markup.button.callback(text.bankQr, `pay_bank:${product.id}:${quantity}`)
+            ]
+          ]
+        : []),
+      [Markup.button.callback(text.buyUsdt, `pay_usdt:${product.id}:${quantity}`)],
+      [Markup.button.callback(text.back, `prod:${product.id}`)]
+    ])
   );
 }
 
@@ -860,6 +968,37 @@ function productIcon(product: ProductSummary | ProductDetail) {
   return product.buttonIcon?.trim() || "🛍️";
 }
 
+function pendingQuantityKey(ctx: Context) {
+  return ctx.from?.id ?? null;
+}
+
+function setPendingQuantity(ctx: Context, productId: string, preferredMethod?: PaymentMethod) {
+  const key = pendingQuantityKey(ctx);
+  if (!key) return;
+  pendingQuantities.set(key, {
+    productId,
+    preferredMethod,
+    createdAt: Date.now()
+  });
+}
+
+function getPendingQuantity(ctx: Context) {
+  const key = pendingQuantityKey(ctx);
+  if (!key) return null;
+  const pending = pendingQuantities.get(key);
+  if (!pending) return null;
+  if (Date.now() - pending.createdAt > 10 * 60 * 1000) {
+    pendingQuantities.delete(key);
+    return null;
+  }
+  return pending;
+}
+
+function clearPendingQuantity(ctx: Context) {
+  const key = pendingQuantityKey(ctx);
+  if (key) pendingQuantities.delete(key);
+}
+
 function currentLanguage(ctx: Context): BotLanguage {
   return ctx.from?.id ? userLanguages.get(ctx.from.id) ?? "vi" : "vi";
 }
@@ -1004,6 +1143,13 @@ function parsePaymentMethod(input?: string) {
   if (["ck", "qr", "bank", "chuyenkhoan", "chuyểnkhoản"].includes(input)) return "bank" as const;
   if (["usdt", "crypto", "cryptomus"].includes(input)) return "usdt" as const;
   return null;
+}
+
+function parseQuantityInput(input: string) {
+  const normalized = input.trim().replace(/\s/g, "");
+  if (!/^\d+$/.test(normalized)) return null;
+  const quantity = Number(normalized);
+  return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
 }
 
 function parseVndAmount(input?: string) {
