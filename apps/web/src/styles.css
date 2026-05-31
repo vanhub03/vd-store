@@ -1586,6 +1586,50 @@ h1 {
   word-break: break-word;
 }
 
+.wallet-address-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.wallet-address-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: all 200ms var(--ease-out);
+}
+
+.wallet-address-row button:hover {
+  border-color: var(--line-hover);
+  background: rgba(244, 241, 234, 0.06);
+}
+
+.network-warning {
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: rgba(244, 241, 234, 0.06);
+  border: 1px solid var(--line-hover);
+  border-radius: var(--r-input);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.network-warning b {
+  color: var(--ink);
+}
+
 
 /* ─── DELIVERY DIALOG ────────────────────────────────────── */
 

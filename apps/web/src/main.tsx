@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
   BadgeCheck,
+  Check,
+  Copy,
   Headphones,
   History,
   Home,
@@ -1211,6 +1213,19 @@ function QrDialog({
   onRefresh: () => void;
 }) {
   const { handleOverlayClick } = useDialogClose(onClose);
+  const [copiedAddress, setCopiedAddress] = useState(false);
+  const networkLabel = payment.network ? cryptoNetworkLabel(payment.network) : "";
+
+  async function copyAddress() {
+    if (!payment.address) return;
+    try {
+      await navigator.clipboard.writeText(payment.address);
+      setCopiedAddress(true);
+      window.setTimeout(() => setCopiedAddress(false), 1800);
+    } catch {
+      setCopiedAddress(false);
+    }
+  }
 
   return (
     <div className="overlay" onClick={handleOverlayClick}>
@@ -1228,17 +1243,29 @@ function QrDialog({
           <span>Số tiền</span><b>{payment.cryptoCurrency === "USDT" ? formatUsdt(payment.cryptoAmount) : formatVnd(payment.amount)}</b>
           {payment.network ? (
             <>
-              <span>Network</span><b>{payment.network.toUpperCase()}</b>
+              <span>Network</span><b>{networkLabel}</b>
             </>
           ) : null}
           {payment.address ? (
             <>
-              <span>Địa chỉ ví</span><b className="break-all">{payment.address}</b>
+              <span>Địa chỉ ví</span>
+              <div className="wallet-address-row">
+                <b className="break-all">{payment.address}</b>
+                <button type="button" onClick={copyAddress}>
+                  {copiedAddress ? <Check size={15} /> : <Copy size={15} />}
+                  {copiedAddress ? "Đã copy" : "Copy"}
+                </button>
+              </div>
             </>
           ) : null}
           <span>Hạn</span><b>{new Date(payment.expiresAt).toLocaleTimeString("vi-VN")}</b>
           <span>Trạng thái</span><b>{statusLabel(status?.status ?? "PENDING")}</b>
         </div>
+        {payment.cryptoCurrency === "USDT" && payment.network ? (
+          <div className="network-warning">
+            Chỉ chuyển <b>USDT</b> qua mạng <b>{networkLabel}</b>. Chuyển sai network có thể mất tiền và hệ thống không thể tự đối soát.
+          </div>
+        ) : null}
         <p className="muted">VND được đối soát qua SePay. USDT được đối soát qua Cryptomus webhook. Thông tin nhận hàng chỉ hiển thị khi đơn đã thanh toán thành công.</p>
         <button className="ghost-button" onClick={onRefresh} disabled={loading} style={{ width: "100%", marginTop: 12 }}>
           <RefreshCw className={loading ? "spin" : ""} size={17} /> Kiểm tra trạng thái
@@ -1405,6 +1432,21 @@ function formatProductPrice(product: Product, language: Language) {
 
 function formatProductTotal(product: Product, quantity: number, language: Language) {
   return language === "en" && product.usdtPrice ? formatUsdt(Number(product.usdtPrice) * quantity) : formatVnd(product.price * quantity);
+}
+
+function cryptoNetworkLabel(network: string) {
+  const normalized = network.trim().toUpperCase();
+  const labels: Record<string, string> = {
+    TRON: "TRON / TRC20",
+    BSC: "BSC / BEP20",
+    ETH: "Ethereum / ERC20",
+    POLYGON: "Polygon",
+    ARBITRUM: "Arbitrum",
+    TON: "TON",
+    SOL: "Solana",
+    AVALANCHE: "Avalanche"
+  };
+  return labels[normalized] ?? normalized;
 }
 
 function persistSessionToken(token: string) {
