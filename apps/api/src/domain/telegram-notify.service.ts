@@ -39,7 +39,7 @@ export class TelegramNotifyService {
   }
 
   async notifyTopup(chatId: string, amount: number, code: string) {
-    await this.sendMessage(chatId, `Nạp tiền thành công\nMã: <b>${code}</b>\nSố tiền: <b>${formatVnd(amount)}</b>`);
+    await this.sendMessage(chatId, `Nạp tiền thành công\nMã giao dịch: <b>${code}</b>\nSố tiền: <b>${formatVnd(amount)}</b>`);
   }
 
   async notifyManualReview(chatId: string, code: string) {
@@ -50,13 +50,16 @@ export class TelegramNotifyService {
   }
 
   async notifyDirectOrderFulfilled(chatId: string, code: string, deliveryText: string) {
-    await this.sendMessage(chatId, `Thanh toán đơn <b>${code}</b> thành công.\n\nHàng của bạn:\n<pre>${escapeHtml(deliveryText)}</pre>`);
+    await this.sendMessage(
+      chatId,
+      `Thanh toán đơn hàng thành công.\nMã đơn: <b>${code}</b>\n\nHàng của bạn:\n<pre>${escapeHtml(deliveryText)}</pre>`
+    );
   }
 
   async notifyPaymentCredited(chatId: string, code: string, amount: number, reason: string) {
     await this.sendMessage(
       chatId,
-      `Thanh toán <b>${code}</b> đã được cộng vào ví.\nSố tiền: <b>${formatVnd(amount)}</b>\nLý do: ${escapeHtml(reason)}`
+      `Thanh toán đơn hàng đã được cộng vào ví.\nMã đơn/giao dịch: <b>${code}</b>\nSố tiền: <b>${formatVnd(amount)}</b>\nLý do: ${escapeHtml(reason)}`
     );
   }
 
