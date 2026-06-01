@@ -50,6 +50,11 @@ export type ProductInput = {
 };
 
 type SalesChannel = "bot" | "web";
+const ORDER_TRANSACTION_OPTIONS = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  maxWait: 10_000,
+  timeout: 30_000
+};
 
 @Injectable()
 export class ShopService {
@@ -377,7 +382,7 @@ export class ShopService {
 
         return { order: fulfilledOrder, payment, deliveryText, balanceAfter: balance - totalAmount };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      ORDER_TRANSACTION_OPTIONS
     );
     await this.notifyManualOrderIfNeeded(result.order.id);
     return result;
@@ -459,7 +464,7 @@ export class ShopService {
           return { outcome: "credited_out_of_stock" as const, payment: updatedPayment, user: payment.order.user, error };
         }
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      ORDER_TRANSACTION_OPTIONS
     );
   }
 
@@ -483,7 +488,7 @@ export class ShopService {
         });
         return { outcome: "credited" as const, payment: updatedPayment, user: payment.user };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+      ORDER_TRANSACTION_OPTIONS
     );
   }
 
@@ -617,7 +622,7 @@ export class ShopService {
         }
       });
       return { entry, balanceAfter: balance + amount };
-    });
+    }, ORDER_TRANSACTION_OPTIONS);
   }
 
   async listProducts() {
