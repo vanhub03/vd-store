@@ -87,43 +87,45 @@ export class ShopService {
   }
 
   async getCatalog(channel: SalesChannel = "bot") {
-    const categories = await this.prisma.category.findMany({
-      where: { active: true },
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      include: {
-        products: {
-          where: productVisibilityWhere(channel),
-          orderBy: { createdAt: "desc" },
-          include: {
-            _count: {
-              select: {
-                inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
+    return this.prisma.withConnectionRetry(async () => {
+      const categories = await this.prisma.category.findMany({
+        where: { active: true },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        include: {
+          products: {
+            where: productVisibilityWhere(channel),
+            orderBy: { createdAt: "desc" },
+            include: {
+              _count: {
+                select: {
+                  inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
+                }
               }
             }
           }
         }
-      }
-    });
+      });
 
-    const uncategorized = await this.prisma.product.findMany({
-      where: { categoryId: null, ...productVisibilityWhere(channel) },
-      orderBy: { createdAt: "desc" },
-      include: {
-        _count: {
-          select: {
-            inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
+      const uncategorized = await this.prisma.product.findMany({
+        where: { categoryId: null, ...productVisibilityWhere(channel) },
+        orderBy: { createdAt: "desc" },
+        include: {
+          _count: {
+            select: {
+              inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
+            }
           }
         }
-      }
-    });
+      });
 
-    return {
-      categories: categories.map((category) => ({
-        ...category,
-        products: category.products.map((product) => applyChannelPrice(product, channel))
-      })),
-      uncategorized: uncategorized.map((product) => applyChannelPrice(product, channel))
-    };
+      return {
+        categories: categories.map((category) => ({
+          ...category,
+          products: category.products.map((product) => applyChannelPrice(product, channel))
+        })),
+        uncategorized: uncategorized.map((product) => applyChannelPrice(product, channel))
+      };
+    }, `getCatalog:${channel}`);
   }
 
   async getProduct(productId: string, channel: SalesChannel = "bot") {
