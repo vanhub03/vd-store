@@ -144,6 +144,9 @@ const BOT_TEXT = {
     autoProcess: "Hệ thống sẽ tự xử lý khi nhận tiền.",
     paidSuccess: "Mua hàng thành công.",
     balanceAfter: "Số dư còn lại",
+    orderCode: "Mã đơn",
+    quantityLabel: "Số lượng",
+    orderTotal: "Tổng tiền",
     yourGoods: "Hàng của bạn",
     qrFallback: "Không thể tải ảnh QR. Bạn vẫn có thể mở link/kiểm tra thông tin thanh toán bên dưới.",
     copyWarning: "Chỉ chuyển USDT đúng network hiển thị. Chuyển sai network có thể mất tiền.",
@@ -213,6 +216,9 @@ const BOT_TEXT = {
     autoProcess: "The system will process automatically after payment is received.",
     paidSuccess: "Purchase successful.",
     balanceAfter: "Balance after purchase",
+    orderCode: "Order code",
+    quantityLabel: "Quantity",
+    orderTotal: "Order total",
     yourGoods: "Your delivery",
     qrFallback: "Could not load the QR image. You can still open the checkout link or use the payment details below.",
     copyWarning: "Only send USDT through the displayed network. Sending via the wrong network may permanently lose funds.",
@@ -677,6 +683,7 @@ async function createTopupQr(ctx: Context, amount: number) {
 async function purchaseWithWallet(ctx: Context, productId: string, quantity = 1) {
   await upsertUser(ctx);
   const lang = currentLanguage(ctx);
+  const text = BOT_TEXT[lang];
   const result = await api.post<WalletPurchaseResponse>("/bot/orders/wallet", {
     telegramId: String(ctx.from!.id),
     productId,
@@ -684,9 +691,16 @@ async function purchaseWithWallet(ctx: Context, productId: string, quantity = 1)
   });
   await renderFinalDelivery(
     ctx,
-    `${BOT_TEXT[lang].paidSuccess}\n${BOT_TEXT[lang].balanceAfter}: <b>${formatVnd(
-      result.balanceAfter
-    )}</b>\n\n${BOT_TEXT[lang].yourGoods}:\n<pre>${escapeHtml(result.deliveryText)}</pre>`
+    [
+      text.paidSuccess,
+      `${text.orderCode}: <code>${escapeHtml(result.order.code)}</code>`,
+      `${text.quantityLabel}: <b>${result.order.quantity}</b>`,
+      `${text.orderTotal}: <b>${formatVnd(result.order.totalAmount)}</b>`,
+      `${text.balanceAfter}: <b>${formatVnd(result.balanceAfter)}</b>`,
+      "",
+      `${text.yourGoods}:`,
+      `<pre>${escapeHtml(result.deliveryText)}</pre>`
+    ].join("\n")
   );
 }
 

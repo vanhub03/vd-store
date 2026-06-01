@@ -83,6 +83,11 @@ export type PaymentResponse = {
 };
 
 export type WalletPurchaseResponse = {
+  order: {
+    code: string;
+    quantity: number;
+    totalAmount: number;
+  };
   deliveryText: string;
   balanceAfter: number;
 };
