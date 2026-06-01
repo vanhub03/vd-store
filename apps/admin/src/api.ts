@@ -1,4 +1,11 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? resolveDefaultApiBaseUrl();
+
+function resolveDefaultApiBaseUrl() {
+  if (typeof window !== "undefined" && window.location.hostname === "admin.vanhdao.io.vn") {
+    return "https://api.vanhdao.io.vn";
+  }
+  return "http://localhost:3000";
+}
 
 export type AdminSession = {
   token: string;
