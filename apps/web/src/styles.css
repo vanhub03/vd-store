@@ -860,6 +860,47 @@ h1 {
   align-items: start;
 }
 
+.product-groups {
+  display: grid;
+  gap: 54px;
+}
+
+.product-group {
+  display: grid;
+  gap: 22px;
+}
+
+.group-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.group-heading span {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.group-heading h3 {
+  color: var(--ink);
+  font-size: clamp(24px, 3vw, 42px);
+  letter-spacing: -0.045em;
+  margin: 4px 0 0;
+}
+
+.group-heading b {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .product-card {
   background: var(--surface);
   border: 1px solid var(--line);

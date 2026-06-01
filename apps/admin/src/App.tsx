@@ -22,7 +22,7 @@ type Dashboard = {
   recentWalletEntries: Array<{ id: string; amount: number; type: string; note?: string; createdAt: string; user?: User }>;
   manualOrderAlerts: Order[];
 };
-type Category = { id: string; name: string };
+type Category = { id: string; name: string; sortOrder?: number };
 type Product = {
   id: string;
   categoryId?: string | null;
@@ -319,6 +319,9 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
   const [creating, setCreating] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [categoryName, setCategoryName] = useState("");
+  const [categorySortOrder, setCategorySortOrder] = useState(0);
   const [importing, setImporting] = useState(false);
   const [inventoryProductId, setInventoryProductId] = useState("");
   const [inventoryContent, setInventoryContent] = useState("");
@@ -356,6 +359,24 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       onError((err as Error).message);
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function submitCategory(event: FormEvent) {
+    event.preventDefault();
+    const name = categoryName.trim();
+    if (!name) return;
+    setCreatingCategory(true);
+    try {
+      await api.post("/admin/categories", { name, sortOrder: Number(categorySortOrder) || 0 });
+      setCategoryName("");
+      setCategorySortOrder(0);
+      await load();
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setCreatingCategory(false);
     }
   }
 
@@ -424,6 +445,30 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
   return (
     <div className="stack">
       {loading && <LoadingBlock label="Đang tải sản phẩm..." />}
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>Nhóm sản phẩm</h2>
+          <span className="mutedText">{categories.length} nhóm</span>
+        </div>
+        <form className="formGrid compactForm" onSubmit={submitCategory}>
+          <label>
+            Tên nhóm
+            <input value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="VD: AI Accounts, YouTube, Canva..." />
+          </label>
+          <label>
+            Thứ tự
+            <input type="number" value={categorySortOrder} onChange={(event) => setCategorySortOrder(Number(event.target.value))} />
+          </label>
+          <button className="primaryButton" disabled={creatingCategory || !categoryName.trim()}>
+            {creatingCategory ? <RefreshCw className="spin" size={16} /> : <PackagePlus size={16} />} {creatingCategory ? "Đang tạo..." : "Tạo nhóm"}
+          </button>
+        </form>
+        <div className="categoryPills">
+          {categories.map((category) => (
+            <span key={category.id}>{category.name}</span>
+          ))}
+        </div>
+      </section>
       <section className="panel">
         <div className="panelHeader">
           <h2>{editingProductId ? "Cập nhật sản phẩm" : "Tạo sản phẩm"}</h2>

@@ -168,6 +168,11 @@ type DeliveryNotice = {
     product?: { name: string; deliveryType?: Product["deliveryType"] };
   };
 };
+type ProductGroup = {
+  id: string;
+  name: string;
+  products: Product[];
+};
 
 /* ─── Scroll Reveal Observer ──────────────────────────────── */
 
@@ -258,6 +263,7 @@ function App() {
     if (!normalized) return products;
     return products.filter((product) => `${localizedName(product, language)} ${localizedDescription(product, language) ?? ""}`.toLocaleLowerCase("vi-VN").includes(normalized));
   }, [products, query, language]);
+  const groupedProducts = useMemo(() => groupCatalogProducts(catalog, query, language), [catalog, query, language]);
 
   useEffect(() => {
     if (!selectedProduct) return;
@@ -521,7 +527,8 @@ function App() {
       ) : null}
       {activeTab === "products" ? (
         <ProductsTab
-          products={filteredProducts}
+          groups={groupedProducts}
+          productCount={filteredProducts.length}
           query={query}
           loading={loading}
           error={error}
@@ -982,7 +989,8 @@ function PolicySections({ language }: { language: Language }) {
 }
 
 function ProductsTab({
-  products,
+  groups,
+  productCount,
   query,
   loading,
   error,
@@ -990,7 +998,8 @@ function ProductsTab({
   onView,
   language
 }: {
-  products: Product[];
+  groups: ProductGroup[];
+  productCount: number;
   query: string;
   loading: string;
   error: string;
@@ -1018,18 +1027,31 @@ function ProductsTab({
       </div>
 
       {error ? <div className="alert">{error}</div> : null}
-      <div className="product-grid">
-        {products.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            loading={loading}
-            onView={() => onView(product)}
-            language={language}
-          />
+      <div className="product-groups">
+        {groups.map((group) => (
+          <section className="product-group" key={group.id}>
+            <div className="group-heading">
+              <div>
+                <span>{language === "vi" ? "Nhóm" : "Group"}</span>
+                <h3>{group.name}</h3>
+              </div>
+              <b>{group.products.length} {language === "vi" ? "sản phẩm" : "products"}</b>
+            </div>
+            <div className="product-grid">
+              {group.products.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  loading={loading}
+                  onView={() => onView(product)}
+                  language={language}
+                />
+              ))}
+            </div>
+          </section>
         ))}
       </div>
-      {!products.length ? <div className="empty-state">{copy.noProducts}</div> : null}
+      {!productCount ? <div className="empty-state">{copy.noProducts}</div> : null}
     </section>
   );
 }
@@ -1532,6 +1554,33 @@ function postPaymentLabel(type: Product["deliveryType"], language: Language = "v
   if (type === "STOCK_ITEM") return "Nhận sau thanh toán";
   if (type === "SHARED_CONTENT") return "Mở sau thanh toán";
   return "Xử lý sau thanh toán";
+}
+
+function groupCatalogProducts(catalog: Catalog | null, query: string, language: Language): ProductGroup[] {
+  if (!catalog) return [];
+  const normalized = query.toLocaleLowerCase("vi-VN").trim();
+  const matches = (product: Product) => {
+    if (!normalized) return true;
+    return `${localizedName(product, language)} ${localizedDescription(product, language) ?? ""}`
+      .toLocaleLowerCase("vi-VN")
+      .includes(normalized);
+  };
+  const groups: ProductGroup[] = catalog.categories
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      products: category.products.map((product) => ({ ...product, category: { id: category.id, name: category.name } })).filter(matches)
+    }))
+    .filter((group) => group.products.length > 0);
+  const uncategorized = catalog.uncategorized.filter(matches);
+  if (uncategorized.length) {
+    groups.push({
+      id: "uncategorized",
+      name: language === "vi" ? "Sản phẩm khác" : "Other products",
+      products: uncategorized
+    });
+  }
+  return groups;
 }
 
 function statusLabel(status: PaymentStatusResult["status"], language: Language = "vi") {

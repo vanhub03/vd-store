@@ -109,6 +109,10 @@ const BOT_TEXT = {
     contactAdmin: "Vui lòng liên hệ admin",
     contactSupport: "để được hỗ trợ.",
     category: "Danh mục",
+    groups: "Nhóm sản phẩm",
+    chooseGroup: "Chọn nhóm sản phẩm bên dưới để xem danh sách hàng.",
+    uncategorizedGroup: "Sản phẩm khác",
+    noGroups: "Hiện chưa có nhóm sản phẩm nào đang bán.",
     price: "Giá",
     quickChat: "Chat nhanh",
     buyWallet: "Mua bằng ví",
@@ -181,6 +185,10 @@ const BOT_TEXT = {
     contactAdmin: "Please contact admin",
     contactSupport: "for support.",
     category: "Category",
+    groups: "Product groups",
+    chooseGroup: "Choose a product group below to view items.",
+    uncategorizedGroup: "Other products",
+    noGroups: "There are no active product groups yet.",
     price: "Price",
     quickChat: "Quick command",
     buyWallet: "Pay with wallet",
@@ -279,7 +287,7 @@ bot.action("catalog", async (ctx) => {
 
 bot.action(/^cat:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
-  await showCatalog(ctx);
+  await showCategoryProducts(ctx, ctx.match[1]);
 });
 
 bot.action(/^prod:(.+)$/, async (ctx) => {
@@ -403,12 +411,27 @@ async function showCatalog(ctx: Context) {
   clearPendingQuantity(ctx);
   const lang = currentLanguage(ctx);
   const catalog = await api.get<CatalogResponse>("/bot/catalog");
-  const products = flattenProducts(catalog);
-  const buttons = products.slice(0, CATALOG_BUTTON_LIMIT).map((product, index) => [
+  const groups = catalogGroups(catalog, lang);
+  const buttons = groups.map((group) => [Markup.button.callback(groupButtonLabel(group), `cat:${group.id}`)]);
+  buttons.push([Markup.button.callback(BOT_TEXT[lang].back, "home")]);
+  await renderScreen(ctx, buildGroupCatalogText(groups, lang), Markup.inlineKeyboard(buttons));
+}
+
+async function showCategoryProducts(ctx: Context, categoryId: string) {
+  await upsertUser(ctx);
+  clearPendingQuantity(ctx);
+  const lang = currentLanguage(ctx);
+  const catalog = await api.get<CatalogResponse>("/bot/catalog");
+  const group = catalogGroups(catalog, lang).find((item) => item.id === categoryId);
+  if (!group) {
+    await renderScreen(ctx, BOT_TEXT[lang].noProducts, Markup.inlineKeyboard([[Markup.button.callback(BOT_TEXT[lang].back, "catalog")]]));
+    return;
+  }
+  const buttons = group.products.slice(0, CATALOG_BUTTON_LIMIT).map((product, index) => [
     Markup.button.callback(productButtonLabel(product, index, lang), `prod:${product.id}`)
   ]);
-  buttons.push([Markup.button.callback(BOT_TEXT[lang].back, "home")]);
-  await renderScreen(ctx, buildCatalogText(products, lang), Markup.inlineKeyboard(buttons));
+  buttons.push([Markup.button.callback(BOT_TEXT[lang].back, "catalog")]);
+  await renderScreen(ctx, buildCatalogText(group.products, lang, group.name), Markup.inlineKeyboard(buttons));
 }
 
 async function showWallet(ctx: Context) {
@@ -939,7 +962,24 @@ function buildQrCaption(title: string, code: string, amount: number, expiresAt: 
   ).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}\n${text.autoProcess}`;
 }
 
-function buildCatalogText(products: ProductSummary[], language: BotLanguage) {
+type CatalogGroup = {
+  id: string;
+  name: string;
+  products: ProductSummary[];
+};
+
+function buildGroupCatalogText(groups: CatalogGroup[], language: BotLanguage) {
+  const text = BOT_TEXT[language];
+  if (!groups.length) return text.noGroups;
+  const lines = groups.map((group, index) => `${index + 1}. <b>${escapeHtml(group.name)}</b> - ${group.products.length} ${text.products.toLocaleLowerCase()}`);
+  return [`<b>${text.groups}</b>`, text.chooseGroup, "", lines.join("\n")].join("\n");
+}
+
+function groupButtonLabel(group: CatalogGroup) {
+  return `${group.name} (${group.products.length})`;
+}
+
+function buildCatalogText(products: ProductSummary[], language: BotLanguage, groupName?: string) {
   const text = BOT_TEXT[language];
   if (!products.length) return text.noProducts;
 
@@ -953,6 +993,7 @@ function buildCatalogText(products: ProductSummary[], language: BotLanguage) {
   const moreLine = products.length > CATALOG_TEXT_LIMIT ? `\n\n${language === "vi" ? "Còn" : "There are"} ${products.length - CATALOG_TEXT_LIMIT} ${text.moreProducts}` : "";
 
   return [
+    groupName ? `<b>${escapeHtml(groupName)}</b>` : "",
     text.chooseProduct,
     text.viewProduct,
     text.buyWalletSyntax,
@@ -960,7 +1001,7 @@ function buildCatalogText(products: ProductSummary[], language: BotLanguage) {
     text.buyUsdtSyntax,
     "",
     productLines.join("\n") + moreLine
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function productQuantityText(product: ProductSummary | ProductDetail, language: BotLanguage = "vi") {
@@ -1132,6 +1173,24 @@ function findProductByNameOrId(products: ProductSummary[], reference: string) {
     products.find((product) => normalizeText(product.name) === normalizedReference) ??
     products.find((product) => normalizeText(product.name).includes(normalizedReference))
   );
+}
+
+function catalogGroups(catalog: CatalogResponse, language: BotLanguage): CatalogGroup[] {
+  const groups: CatalogGroup[] = catalog.categories
+    .filter((category) => category.products.length > 0)
+    .map((category) => ({
+      id: category.id,
+      name: category.name,
+      products: category.products.map((product) => ({ ...product, category: { id: category.id, name: category.name } }))
+    }));
+  if (catalog.uncategorized.length) {
+    groups.push({
+      id: "uncategorized",
+      name: BOT_TEXT[language].uncategorizedGroup,
+      products: catalog.uncategorized
+    });
+  }
+  return groups;
 }
 
 function flattenProducts(catalog: CatalogResponse): ProductSummary[] {
