@@ -1327,11 +1327,21 @@ h1 {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(3, 3, 2, 0.82);
-  backdrop-filter: blur(20px) saturate(1.1);
-  -webkit-backdrop-filter: blur(20px) saturate(1.1);
+  background: rgba(2, 2, 2, 0.92);
+  backdrop-filter: blur(24px) brightness(0.28) saturate(0.68);
+  -webkit-backdrop-filter: blur(24px) brightness(0.28) saturate(0.68);
   z-index: 50;
   animation: overlayIn 320ms var(--ease-out) both;
+  overscroll-behavior: contain;
+}
+
+.overlay.is-closing {
+  pointer-events: none;
+  animation: overlayOut 260ms var(--ease-out) both;
+}
+
+.overlay.is-closing .dialog {
+  animation: dialogOut 260ms var(--ease-out) both;
 }
 
 .auth-overlay {
@@ -1415,10 +1425,36 @@ h1 {
 /* ─── PRODUCT DIALOG ─────────────────────────────────────── */
 
 .product-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(640px, 100%);
+  height: min(800px, calc(100dvh - 48px));
   max-width: 640px;
+  max-height: calc(100dvh - 48px);
   padding: 8px;
   background: rgba(247, 244, 236, 0.035);
   overflow: hidden;
+}
+
+.product-dialog-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(247, 244, 236, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.product-dialog-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.product-dialog-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.product-dialog-scroll::-webkit-scrollbar-thumb {
+  background: rgba(247, 244, 236, 0.18);
+  border-radius: var(--r-pill);
 }
 
 .product-dialog .close {
@@ -1593,6 +1629,8 @@ h1 {
   gap: 8px;
   padding: 22px 26px 26px;
   border-top: 1px solid rgba(247, 244, 236, 0.1);
+  background: #0b0c0b;
+  flex-shrink: 0;
 }
 
 .dialog-actions .primary-button,
@@ -2062,6 +2100,11 @@ footer button:hover {
   to { opacity: 1; }
 }
 
+@keyframes overlayOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
 @keyframes dialogIn {
   0% {
     opacity: 0;
@@ -2070,6 +2113,17 @@ footer button:hover {
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dialogOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
   }
 }
 
@@ -2247,6 +2301,16 @@ footer button:hover {
   .dialog-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .overlay {
+    padding: 12px;
+  }
+
+  .product-dialog {
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+    border-radius: 24px;
   }
 
   .product-dialog .detail-grid {

@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
@@ -215,25 +215,36 @@ function useReveal() {
 
 function useDialogClose(onClose: () => void) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const requestClose = useCallback(() => {
+    if (closeTimerRef.current !== null) return;
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(onClose, 260);
+  }, [onClose]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        requestClose();
       }
     }
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    };
+  }, [requestClose]);
 
   function handleOverlayClick(event: React.MouseEvent<HTMLDivElement>) {
     if (event.target === event.currentTarget) {
-      onClose();
+      requestClose();
     }
   }
 
-  return { dialogRef, handleOverlayClick };
+  return { dialogRef, handleOverlayClick, isClosing, requestClose };
 }
 /* ─── App ─────────────────────────────────────────────────── */
 
@@ -1133,12 +1144,12 @@ function WalletDialog({
     onTopup(amount);
   }
 
-  const { handleOverlayClick } = useDialogClose(onClose);
+  const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
 
   return (
-    <div className="overlay" onClick={handleOverlayClick}>
+    <div className={`overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
       <div className="dialog">
-        <button className="close" onClick={onClose}>&times;</button>
+        <button className="close" onClick={requestClose}>&times;</button>
         <h2>{language === "vi" ? "Ví VD" : "VD Wallet"}</h2>
         <p className="muted">{language === "vi" ? "Số dư dùng để mua nhanh mà không cần quét QR từng đơn." : "Wallet balance lets you buy quickly without scanning a QR for every order."}</p>
         <div className="wallet-number">{formatVnd(balance)}</div>
@@ -1245,12 +1256,12 @@ function AuthDialog({ language, onClose, onSession }: { language: Language; onCl
     }
   }
 
-  const { handleOverlayClick } = useDialogClose(onClose);
+  const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
 
   return (
-    <div className="overlay auth-overlay" onClick={handleOverlayClick}>
+    <div className={`overlay auth-overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
       <div className="dialog auth-dialog">
-        <button className="close" onClick={onClose}>&times;</button>
+        <button className="close" onClick={requestClose}>&times;</button>
         <h2>{mode === "login" ? copy.loginTitle : copy.registerTitle}</h2>
         <form onSubmit={submit}>
           {mode === "register" ? <input name="name" placeholder={copy.displayName} /> : null}
@@ -1297,54 +1308,56 @@ function ProductDialog({
   const copy = TEXT[language];
   const deliveryLabel = postPaymentLabel(product.deliveryType, language);
 
-  const { handleOverlayClick } = useDialogClose(onClose);
+  const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
 
   return (
-    <div className="overlay" onClick={handleOverlayClick}>
+    <div className={`overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
       <div className="dialog product-dialog">
-        <button className="close" onClick={onClose}>&times;</button>
-        <div className="dialog-media">
-          {imageSrc ? <img src={imageSrc} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{brandGlyph(product.name)}</span>}
-        </div>
-        <div className="dialog-heading">
-          <span>{product.category?.name ?? copy.categoryFallback}</span>
-          <h2>{localizedName(product, language)}</h2>
-          <p>{localizedDescription(product, language) || copy.deliveryFallback}</p>
-        </div>
-        <div className="detail-grid">
-          <div>
-            <span>{copy.price}</span>
-            <b>{formatProductPrice(product, language)}</b>
+        <button className="close" onClick={requestClose}>&times;</button>
+        <div className="product-dialog-scroll">
+          <div className="dialog-media">
+            {imageSrc ? <img src={imageSrc} alt={`${product.name} - VD AI Shop`} referrerPolicy="no-referrer" /> : <span>{brandGlyph(product.name)}</span>}
           </div>
-          <div>
-            <span>{copy.stock}</span>
-            <b>{product.deliveryType === "SHARED_CONTENT" ? copy.unlimited : availableQuantity(product)}</b>
+          <div className="dialog-heading">
+            <span>{product.category?.name ?? copy.categoryFallback}</span>
+            <h2>{localizedName(product, language)}</h2>
+            <p>{localizedDescription(product, language) || copy.deliveryFallback}</p>
           </div>
-          <div>
-            <span>{copy.delivery}</span>
-            <b>{deliveryLabel}</b>
+          <div className="detail-grid">
+            <div>
+              <span>{copy.price}</span>
+              <b>{formatProductPrice(product, language)}</b>
+            </div>
+            <div>
+              <span>{copy.stock}</span>
+              <b>{product.deliveryType === "SHARED_CONTENT" ? copy.unlimited : availableQuantity(product)}</b>
+            </div>
+            <div>
+              <span>{copy.delivery}</span>
+              <b>{deliveryLabel}</b>
+            </div>
           </div>
-        </div>
-        <div className="quantity-box">
-          <div className="quantity-head">
-            <label htmlFor="order-quantity">{copy.quantity}</label>
-            <span>{copy.max} {maxQuantity}</span>
-          </div>
-          <div className="quantity-stepper">
-            <button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>&#8722;</button>
-            <input
-              id="order-quantity"
-              inputMode="numeric"
-              min={1}
-              max={maxQuantity}
-              value={quantity}
-              onChange={(event) => setQuantity(Number(event.target.value.replace(/[^\d]/g, "")) || 1)}
-            />
-            <button type="button" onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}>+</button>
-          </div>
-          <div className="quantity-total">
-            <span>{copy.total}</span>
-            <b>{formatProductTotal(product, quantity, language)}</b>
+          <div className="quantity-box">
+            <div className="quantity-head">
+              <label htmlFor="order-quantity">{copy.quantity}</label>
+              <span>{copy.max} {maxQuantity}</span>
+            </div>
+            <div className="quantity-stepper">
+              <button type="button" onClick={() => setQuantity((value) => Math.max(1, value - 1))}>&#8722;</button>
+              <input
+                id="order-quantity"
+                inputMode="numeric"
+                min={1}
+                max={maxQuantity}
+                value={quantity}
+                onChange={(event) => setQuantity(Number(event.target.value.replace(/[^\d]/g, "")) || 1)}
+              />
+              <button type="button" onClick={() => setQuantity((value) => Math.min(maxQuantity, value + 1))}>+</button>
+            </div>
+            <div className="quantity-total">
+              <span>{copy.total}</span>
+              <b>{formatProductTotal(product, quantity, language)}</b>
+            </div>
           </div>
         </div>
         <div className="dialog-actions">
@@ -1388,7 +1401,7 @@ function QrDialog({
   onClose: () => void;
   onRefresh: () => void;
 }) {
-  const { handleOverlayClick } = useDialogClose(onClose);
+  const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const copy = TEXT[language];
   const networkLabel = payment.network ? cryptoNetworkLabel(payment.network) : "";
@@ -1405,9 +1418,9 @@ function QrDialog({
   }
 
   return (
-    <div className="overlay" onClick={handleOverlayClick}>
+    <div className={`overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
       <div className="dialog qr-dialog">
-        <button className="close" onClick={onClose}>&times;</button>
+        <button className="close" onClick={requestClose}>&times;</button>
         <h2>{copy.scanQr}</h2>
         {payment.qrImageUrl ? <img className="qr-image" src={payment.qrImageUrl} alt={`QR ${payment.code}`} /> : null}
         {payment.checkoutUrl ? (
@@ -1470,12 +1483,12 @@ function DeliveryDialog({ delivery, onClose }: { delivery: DeliveryNotice; onClo
     }
   }
 
-  const { handleOverlayClick } = useDialogClose(onClose);
+  const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
 
   return (
-    <div className="overlay" onClick={handleOverlayClick}>
+    <div className={`overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
       <div className="dialog">
-        <button className="close" onClick={onClose}>&times;</button>
+        <button className="close" onClick={requestClose}>&times;</button>
         <h2>{delivery.title}</h2>
         {delivery.balanceAfter !== undefined ? <p>Số dư hiện tại: <b>{formatVnd(delivery.balanceAfter)}</b></p> : null}
         {isManualOrder ? (
