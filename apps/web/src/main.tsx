@@ -1086,8 +1086,31 @@ function ProductCard({
   const imageSrc = productArtUrl(product);
   const copy = TEXT[language];
   const stockLabel = product.deliveryType === "SHARED_CONTENT" ? copy.unlimited : `${stock} ${copy.left}`;
+
+  function openProduct() {
+    if (!opening) onView();
+  }
+
+  function handleCardKeyDown(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openProduct();
+  }
+
+  function handleActionClick(event: React.MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation();
+    openProduct();
+  }
+
   return (
-    <article className="product-card reveal">
+    <article
+      className="product-card reveal"
+      role="button"
+      tabIndex={0}
+      aria-label={`${copy.detail}: ${localizedName(product, language)}`}
+      onClick={openProduct}
+      onKeyDown={handleCardKeyDown}
+    >
       <div className="product-media">
         {imageSrc ? <img src={imageSrc} alt={`${product.name} tại VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{brandGlyph(product.name)}</span>}
       </div>
@@ -1104,8 +1127,8 @@ function ProductCard({
         </div>
       </div>
       <div className="product-actions">
-        <button onClick={onView} disabled={opening}>{opening ? <Loader2 className="spin" size={15} /> : <Search size={15} />} {copy.detail}</button>
-        <button onClick={onView} disabled={opening || loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
+        <button onClick={handleActionClick} disabled={opening}>{opening ? <Loader2 className="spin" size={15} /> : <Search size={15} />} {copy.detail}</button>
+        <button onClick={handleActionClick} disabled={opening || loading === `wallet:${product.id}` || loading === `bank:${product.id}` || disabled}>
           {opening || loading === `wallet:${product.id}` || loading === `bank:${product.id}` ? <Loader2 className="spin" size={15} /> : <ShoppingBag size={15} />}
           {copy.buy}
         </button>
