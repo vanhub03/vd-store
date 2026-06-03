@@ -101,13 +101,13 @@ export class StoreService {
       },
       select: { id: true }
     });
-    if (!product) throw new BadRequestException("San pham khong hop le.");
+    if (!product) throw new BadRequestException("Sản phẩm không hợp lệ.");
 
     const content = input.content.trim().replace(/\s+/g, " ");
     const title = input.title?.trim().replace(/\s+/g, " ") || null;
-    if (content.length < 8) throw new BadRequestException("Noi dung review qua ngan.");
-    if (content.length > 800) throw new BadRequestException("Noi dung review toi da 800 ky tu.");
-    if (title && title.length > 90) throw new BadRequestException("Tieu de review toi da 90 ky tu.");
+    if (content.length < 8) throw new BadRequestException("Nội dung review quá ngắn.");
+    if (content.length > 800) throw new BadRequestException("Nội dung review tối đa 800 ký tự.");
+    if (title && title.length > 90) throw new BadRequestException("Tiêu đề review tối đa 90 ký tự.");
 
     const review = await this.prisma.productReview.create({
       data: {

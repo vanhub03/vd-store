@@ -345,7 +345,7 @@ function App() {
     try {
       const [nextCatalog, nextReviews] = await Promise.all([
         api.get<Catalog>("/store/catalog"),
-        api.get<ReviewsResponse>("/store/reviews")
+        api.get<ReviewsResponse>("/store/reviews").catch(() => ({ reviews: [] }))
       ]);
       setCatalog(nextCatalog);
       setReviews(nextReviews.reviews);
@@ -927,18 +927,18 @@ function ReviewsShowcase({ reviews, language }: { reviews: ProductReview[]; lang
     <section className="shell review-showcase">
       <div className="section-head compact">
         <div>
-          <p className="eyebrow reveal">{vi ? "Khach hang noi gi" : "Customer notes"}</p>
+          <p className="eyebrow reveal">{vi ? "Khách hàng nói gì" : "Customer notes"}</p>
           <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>
-            {vi ? "Review that tu nguoi dung sau khi trai nghiem dich vu" : "Real feedback from customers using VD AI Shop"}
+            {vi ? "Review thật từ người dùng sau khi trải nghiệm dịch vụ" : "Real feedback from customers using VD AI Shop"}
           </h2>
           <p className="product-section-copy reveal" style={{ "--d": "140ms" } as React.CSSProperties}>
             {vi
-              ? "Moi review deu gan voi mot mat hang cu the de khach moi co them can cu khi chon mua."
+              ? "Mỗi review đều gắn với một mặt hàng cụ thể để khách mới có thêm căn cứ khi chọn mua."
               : "Each review is attached to a specific product, giving new customers clearer context before checkout."}
           </p>
         </div>
       </div>
-      <div className="review-marquee" aria-label={vi ? "Danh sach review khach hang" : "Customer review list"}>
+      <div className="review-marquee" aria-label={vi ? "Danh sách review khách hàng" : "Customer review list"}>
         {shownReviews.map((review, index) => (
           <ReviewCard review={review} language={language} key={review.id} index={index} />
         ))}
@@ -1366,7 +1366,7 @@ function ReviewTab({
       return;
     }
     if (content.trim().length < 8) {
-      setMessage(vi ? "Noi dung review toi thieu 8 ky tu." : "Review content must be at least 8 characters.");
+      setMessage(vi ? "Nội dung review tối thiểu 8 ký tự." : "Review content must be at least 8 characters.");
       return;
     }
     await Promise.resolve(onSubmit({ productId, rating, title: title.trim() || undefined, content: content.trim() }));
@@ -1380,7 +1380,7 @@ function ReviewTab({
     <div className="review-tab-grid">
       <section className="review-form-card reveal">
         <p className="eyebrow">{copy.reviewTitle}</p>
-        <h1>{vi ? "Chia se trai nghiem mua hang cua ban" : "Share your purchase experience"}</h1>
+        <h1>{vi ? "Chia sẻ trải nghiệm mua hàng của bạn" : "Share your purchase experience"}</h1>
         <p>{copy.reviewSub}</p>
         <form onSubmit={submitReview}>
           <label>
@@ -1427,13 +1427,13 @@ function ReviewTab({
       </section>
       <section className="review-live-wall reveal" style={{ "--d": "120ms" } as React.CSSProperties}>
         <div>
-          <p className="eyebrow">{vi ? "Review moi nhat" : "Latest reviews"}</p>
-          <h2>{vi ? "Bang tin cam nhan cua khach hang" : "A wall of recent customer notes"}</h2>
+          <p className="eyebrow">{vi ? "Review mới nhất" : "Latest reviews"}</p>
+          <h2>{vi ? "Bảng tin cảm nhận của khách hàng" : "A wall of recent customer notes"}</h2>
         </div>
         {reviews.length ? (
           reviews.slice(0, 8).map((review, index) => <ReviewCard review={review} language={language} index={index} key={review.id} />)
         ) : (
-          <div className="empty-state">{vi ? "Chua co review nao. Hay la nguoi dau tien chia se trai nghiem." : "No reviews yet. Be the first to share your experience."}</div>
+          <div className="empty-state">{vi ? "Chưa có review nào. Hãy là người đầu tiên chia sẻ trải nghiệm." : "No reviews yet. Be the first to share your experience."}</div>
         )}
       </section>
     </div>
