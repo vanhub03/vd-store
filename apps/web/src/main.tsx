@@ -21,6 +21,7 @@ import {
   Send,
   ShieldCheck,
   ShoppingBag,
+  Star,
   TimerReset,
   UserRound,
   Wallet,
@@ -36,6 +37,8 @@ import {
   PaymentResult,
   PaymentStatusResult,
   Product,
+  ProductReview,
+  ReviewsResponse,
   Session,
   StoreApi,
   WalletPurchaseResult
@@ -46,13 +49,14 @@ const TOKEN_KEY = "vd_store_token";
 const LANGUAGE_KEY = "vd_store_language";
 const savedToken = readStoredToken();
 const api = new StoreApi(savedToken);
-type Tab = "home" | "products" | "history";
+type Tab = "home" | "products" | "reviews" | "history";
 type Language = "vi" | "en";
 const initialTab = readInitialTab();
 const TEXT = {
   vi: {
     navHome: "Home",
     navProducts: "Sản phẩm",
+    navReviews: "Review",
     navHistory: "Lịch sử",
     login: "Đăng nhập",
     logout: "Đăng xuất",
@@ -100,11 +104,24 @@ const TEXT = {
     password: "Mật khẩu",
     register: "Đăng ký",
     noAccount: "Chưa có tài khoản? Đăng ký",
-    hasAccount: "Đã có tài khoản? Đăng nhập"
+    hasAccount: "Đã có tài khoản? Đăng nhập",
+    reviewTitle: "Gửi review",
+    reviewSub: "Chia sẻ trải nghiệm của bạn để khách mới chọn sản phẩm dễ hơn.",
+    reviewProduct: "Mặt hàng",
+    reviewRating: "Đánh giá",
+    reviewHeadline: "Tiêu đề ngắn",
+    reviewContent: "Nội dung review",
+    reviewSubmit: "Đăng review",
+    reviewLogin: "Đăng nhập để gửi review.",
+    reviewThanks: "Cảm ơn bạn, review đã được hiển thị trên trang chủ.",
+    reviewPickProduct: "Chọn sản phẩm để review",
+    reviewPlaceholder: "Ví dụ: giao nhanh, đúng mô tả, admin hỗ trợ rõ ràng...",
+    reviewHeadlinePlaceholder: "Ví dụ: Giao nhanh và dễ dùng"
   },
   en: {
     navHome: "Home",
     navProducts: "Products",
+    navReviews: "Reviews",
     navHistory: "History",
     login: "Sign in",
     logout: "Sign out",
@@ -152,7 +169,19 @@ const TEXT = {
     password: "Password",
     register: "Register",
     noAccount: "No account yet? Register",
-    hasAccount: "Already have an account? Sign in"
+    hasAccount: "Already have an account? Sign in",
+    reviewTitle: "Write a review",
+    reviewSub: "Share your experience so new customers can choose with more confidence.",
+    reviewProduct: "Product",
+    reviewRating: "Rating",
+    reviewHeadline: "Short headline",
+    reviewContent: "Review content",
+    reviewSubmit: "Publish review",
+    reviewLogin: "Sign in to write a review.",
+    reviewThanks: "Thank you, your review is now visible on the homepage.",
+    reviewPickProduct: "Choose a product to review",
+    reviewPlaceholder: "Example: fast delivery, accurate description, clear support...",
+    reviewHeadlinePlaceholder: "Example: Fast delivery and easy to use"
   }
 } as const;
 type DeliveryNotice = {
@@ -252,6 +281,7 @@ function App() {
   const [token, setToken] = useState(savedToken);
   const [customer, setCustomer] = useState<Session["customer"] | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [history, setHistory] = useState<StoreHistory | null>(null);
   const [balance, setBalance] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -313,7 +343,12 @@ function App() {
 
   async function loadPublicData() {
     try {
-      setCatalog(await api.get<Catalog>("/store/catalog"));
+      const [nextCatalog, nextReviews] = await Promise.all([
+        api.get<Catalog>("/store/catalog"),
+        api.get<ReviewsResponse>("/store/reviews")
+      ]);
+      setCatalog(nextCatalog);
+      setReviews(nextReviews.reviews);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -494,6 +529,14 @@ function App() {
     });
   }
 
+  async function createReview(input: { productId: string; rating: number; title?: string; content: string }) {
+    if (!requireLogin()) return;
+    await runAction("review", async () => {
+      const result = await api.post<{ review: ProductReview }>("/store/reviews", input);
+      setReviews((current) => [result.review, ...current.filter((review) => review.id !== result.review.id)].slice(0, 18));
+    });
+  }
+
   async function runAction(name: string, action: () => Promise<void>) {
     try {
       setLoading(name);
@@ -526,6 +569,7 @@ function App() {
       {activeTab === "home" ? (
         <HomeTab
           products={products.slice(0, 6)}
+          reviews={reviews}
           loading={loading}
           language={language}
           onProduct={(product) => void openProduct(product)}
@@ -547,6 +591,19 @@ function App() {
           onView={(product) => void openProduct(product)}
           language={language}
         />
+      ) : null}
+      {activeTab === "reviews" ? (
+        <section className="shell tab-shell">
+          <ReviewTab
+            products={products}
+            reviews={reviews}
+            customer={customer}
+            loading={loading}
+            language={language}
+            onLogin={() => setAuthOpen(true)}
+            onSubmit={(input) => createReview(input)}
+          />
+        </section>
       ) : null}
       {activeTab === "history" ? (
         <section className="shell tab-shell">
@@ -615,6 +672,7 @@ function Header({
   const navItems: Array<{ tab: Tab; label: string; icon: React.ReactNode }> = [
     { tab: "home", label: copy.navHome, icon: <Home size={16} /> },
     { tab: "products", label: copy.navProducts, icon: <ShoppingBag size={16} /> },
+    { tab: "reviews", label: copy.navReviews, icon: <Star size={16} /> },
     { tab: "history", label: copy.navHistory, icon: <History size={16} /> }
   ];
 
@@ -662,6 +720,7 @@ function Header({
 
 function HomeTab({
   products,
+  reviews,
   loading,
   language,
   onProduct,
@@ -669,6 +728,7 @@ function HomeTab({
   onWallet
 }: {
   products: Product[];
+  reviews: ProductReview[];
   loading: string;
   language: Language;
   onProduct: (product: Product) => void;
@@ -680,6 +740,7 @@ function HomeTab({
     <>
       <Hero language={language} onShop={onShop} onWallet={onWallet} />
       <FeaturedProducts products={products} loading={loading} language={language} onProduct={onProduct} onShop={onShop} />
+      <ReviewsShowcase reviews={reviews} language={language} />
       <TrustShowcase language={language} />
       <HowItWorks language={language} onShop={onShop} onWallet={onWallet} />
       <BrandShowcase language={language} />
@@ -856,6 +917,58 @@ function FeaturedProducts({
 }
 
 /* ─── How It Works ────────────────────────────────────────── */
+
+function ReviewsShowcase({ reviews, language }: { reviews: ProductReview[]; language: Language }) {
+  const vi = language === "vi";
+  const shownReviews = reviews.slice(0, 6);
+  if (!shownReviews.length) return null;
+
+  return (
+    <section className="shell review-showcase">
+      <div className="section-head compact">
+        <div>
+          <p className="eyebrow reveal">{vi ? "Khach hang noi gi" : "Customer notes"}</p>
+          <h2 className="reveal" style={{ "--d": "80ms" } as React.CSSProperties}>
+            {vi ? "Review that tu nguoi dung sau khi trai nghiem dich vu" : "Real feedback from customers using VD AI Shop"}
+          </h2>
+          <p className="product-section-copy reveal" style={{ "--d": "140ms" } as React.CSSProperties}>
+            {vi
+              ? "Moi review deu gan voi mot mat hang cu the de khach moi co them can cu khi chon mua."
+              : "Each review is attached to a specific product, giving new customers clearer context before checkout."}
+          </p>
+        </div>
+      </div>
+      <div className="review-marquee" aria-label={vi ? "Danh sach review khach hang" : "Customer review list"}>
+        {shownReviews.map((review, index) => (
+          <ReviewCard review={review} language={language} key={review.id} index={index} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReviewCard({ review, language, index = 0 }: { review: ProductReview; language: Language; index?: number }) {
+  const productName = localizedReviewProductName(review, language);
+  const date = new Date(review.createdAt).toLocaleDateString(language === "vi" ? "vi-VN" : "en-US");
+
+  return (
+    <article className="review-card reveal" style={{ "--d": `${index * 70}ms` } as React.CSSProperties}>
+      <div className="review-card-top">
+        <img src={reviewProductArtUrl(review)} alt={productName} loading="lazy" referrerPolicy="no-referrer" />
+        <div>
+          <span>{productName}</span>
+          <b aria-label={`${review.rating}/5`}>{renderStars(review.rating)}</b>
+        </div>
+      </div>
+      {review.title ? <h3>{review.title}</h3> : null}
+      <p>{review.content}</p>
+      <div className="review-card-foot">
+        <strong>{review.author}</strong>
+        <time dateTime={review.createdAt}>{date}</time>
+      </div>
+    </article>
+  );
+}
 
 function HowItWorks({ language, onShop, onWallet }: { language: Language; onShop: () => void; onWallet: () => void }) {
   const vi = language === "vi";
@@ -1211,6 +1324,121 @@ function WalletDialog({
 }
 
 /* ─── History Panel ───────────────────────────────────────── */
+
+function ReviewTab({
+  products,
+  reviews,
+  customer,
+  loading,
+  language,
+  onLogin,
+  onSubmit
+}: {
+  products: Product[];
+  reviews: ProductReview[];
+  customer: Session["customer"] | null;
+  loading: string;
+  language: Language;
+  onLogin: () => void;
+  onSubmit: (input: { productId: string; rating: number; title?: string; content: string }) => Promise<void> | void;
+}) {
+  const copy = TEXT[language];
+  const vi = language === "vi";
+  const [productId, setProductId] = useState("");
+  const [rating, setRating] = useState(5);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!productId && products[0]) setProductId(products[0].id);
+  }, [productId, products]);
+
+  async function submitReview(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    if (!customer) {
+      onLogin();
+      return;
+    }
+    if (!productId) {
+      setMessage(copy.reviewPickProduct);
+      return;
+    }
+    if (content.trim().length < 8) {
+      setMessage(vi ? "Noi dung review toi thieu 8 ky tu." : "Review content must be at least 8 characters.");
+      return;
+    }
+    await Promise.resolve(onSubmit({ productId, rating, title: title.trim() || undefined, content: content.trim() }));
+    setTitle("");
+    setContent("");
+    setRating(5);
+    setMessage(copy.reviewThanks);
+  }
+
+  return (
+    <div className="review-tab-grid">
+      <section className="review-form-card reveal">
+        <p className="eyebrow">{copy.reviewTitle}</p>
+        <h1>{vi ? "Chia se trai nghiem mua hang cua ban" : "Share your purchase experience"}</h1>
+        <p>{copy.reviewSub}</p>
+        <form onSubmit={submitReview}>
+          <label>
+            {copy.reviewProduct}
+            <select value={productId} onChange={(event) => setProductId(event.target.value)}>
+              <option value="">{copy.reviewPickProduct}</option>
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {localizedName(product, language)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {copy.reviewRating}
+            <div className="rating-picker" role="radiogroup" aria-label={copy.reviewRating}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  type="button"
+                  className={value <= rating ? "active" : ""}
+                  aria-pressed={value === rating}
+                  key={value}
+                  onClick={() => setRating(value)}
+                >
+                  <Star size={16} fill="currentColor" />
+                </button>
+              ))}
+            </div>
+          </label>
+          <label>
+            {copy.reviewHeadline}
+            <input maxLength={90} value={title} onChange={(event) => setTitle(event.target.value)} placeholder={copy.reviewHeadlinePlaceholder} />
+          </label>
+          <label>
+            {copy.reviewContent}
+            <textarea maxLength={800} value={content} onChange={(event) => setContent(event.target.value)} placeholder={copy.reviewPlaceholder} />
+          </label>
+          {message ? <p className="review-message">{message}</p> : null}
+          <button className="primary-button" disabled={loading === "review"}>
+            {loading === "review" ? <Loader2 className="spin" size={17} /> : <Send size={17} />}
+            {customer ? copy.reviewSubmit : copy.reviewLogin}
+          </button>
+        </form>
+      </section>
+      <section className="review-live-wall reveal" style={{ "--d": "120ms" } as React.CSSProperties}>
+        <div>
+          <p className="eyebrow">{vi ? "Review moi nhat" : "Latest reviews"}</p>
+          <h2>{vi ? "Bang tin cam nhan cua khach hang" : "A wall of recent customer notes"}</h2>
+        </div>
+        {reviews.length ? (
+          reviews.slice(0, 8).map((review, index) => <ReviewCard review={review} language={language} index={index} key={review.id} />)
+        ) : (
+          <div className="empty-state">{vi ? "Chua co review nao. Hay la nguoi dau tien chia se trai nghiem." : "No reviews yet. Be the first to share your experience."}</div>
+        )}
+      </section>
+    </div>
+  );
+}
 
 function HistoryPanel({ language, history, onRefresh, loading }: { language: Language; history: StoreHistory | null; onRefresh: () => void; loading: boolean }) {
   const copy = TEXT[language];
@@ -1664,7 +1892,7 @@ function readStoredToken() {
 
 function readInitialTab(): Tab {
   const tab = new URLSearchParams(window.location.search).get("tab");
-  return tab === "products" || tab === "history" ? tab : "home";
+  return tab === "products" || tab === "reviews" || tab === "history" ? tab : "home";
 }
 
 function readStoredLanguage(): Language {
@@ -1677,6 +1905,21 @@ function localizedName(product: Product, language: Language) {
 
 function localizedDescription(product: Product, language: Language) {
   return language === "en" ? product.descriptionEn?.trim() || product.description : product.description;
+}
+
+function localizedReviewProductName(review: ProductReview, language: Language) {
+  return language === "en" ? review.product.nameEn?.trim() || review.product.name : review.product.name;
+}
+
+function reviewProductArtUrl(review: ProductReview) {
+  if (review.product.imageUrl) return review.product.imageUrl;
+  const name = review.product.name || review.product.nameEn || "Digital product";
+  return `https://placehold.co/320x240/10100e/f3eee4?text=${encodeURIComponent(brandGlyph(name))}`;
+}
+
+function renderStars(rating: number) {
+  const normalized = Math.max(1, Math.min(5, Math.round(rating)));
+  return `${"★".repeat(normalized)}${"☆".repeat(5 - normalized)}`;
 }
 
 function formatProductPrice(product: Product, language: Language) {

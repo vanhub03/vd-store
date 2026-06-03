@@ -27,6 +27,26 @@ export type Product = {
   _count?: { inventoryItems: number };
 };
 
+export type ProductReview = {
+  id: string;
+  rating: number;
+  title?: string | null;
+  content: string;
+  createdAt: string;
+  author: string;
+  product: {
+    id: string;
+    name: string;
+    nameEn?: string | null;
+    imageUrl?: string | null;
+    buttonIcon?: string | null;
+  };
+};
+
+export type ReviewsResponse = {
+  reviews: ProductReview[];
+};
+
 export type Catalog = {
   categories: Array<{ id: string; name: string; products: Product[] }>;
   uncategorized: Product[];

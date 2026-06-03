@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
-import { OrderStatus, PaymentStatus } from "@prisma/client";
+import { OrderStatus, PaymentStatus, ProductStatus } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
 import { ShopService } from "../domain/shop.service";
 
@@ -58,6 +58,86 @@ export class StoreService {
 
   product(productId: string) {
     return this.shop.getProduct(productId, "web");
+  }
+
+  async reviews() {
+    const reviews = await this.prisma.productReview.findMany({
+      where: {
+        product: {
+          status: ProductStatus.ACTIVE,
+          showInWeb: true
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 18,
+      include: {
+        user: {
+          select: {
+            displayName: true,
+            email: true,
+            username: true
+          }
+        },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            nameEn: true,
+            imageUrl: true,
+            buttonIcon: true
+          }
+        }
+      }
+    });
+    return { reviews: reviews.map(publicReview) };
+  }
+
+  async createReview(customerId: string, input: { productId: string; rating: number; title?: string; content: string }) {
+    const product = await this.prisma.product.findFirst({
+      where: {
+        id: input.productId,
+        status: ProductStatus.ACTIVE,
+        showInWeb: true
+      },
+      select: { id: true }
+    });
+    if (!product) throw new BadRequestException("San pham khong hop le.");
+
+    const content = input.content.trim().replace(/\s+/g, " ");
+    const title = input.title?.trim().replace(/\s+/g, " ") || null;
+    if (content.length < 8) throw new BadRequestException("Noi dung review qua ngan.");
+    if (content.length > 800) throw new BadRequestException("Noi dung review toi da 800 ky tu.");
+    if (title && title.length > 90) throw new BadRequestException("Tieu de review toi da 90 ky tu.");
+
+    const review = await this.prisma.productReview.create({
+      data: {
+        userId: customerId,
+        productId: product.id,
+        rating: Math.max(1, Math.min(5, Math.round(input.rating))),
+        title,
+        content
+      },
+      include: {
+        user: {
+          select: {
+            displayName: true,
+            email: true,
+            username: true
+          }
+        },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            nameEn: true,
+            imageUrl: true,
+            buttonIcon: true
+          }
+        }
+      }
+    });
+
+    return { review: publicReview(review) };
   }
 
   async wallet(customerId: string) {
@@ -191,6 +271,33 @@ export class StoreService {
 
 function normalizeEmail(email: string) {
   return email.toLowerCase().trim();
+}
+
+function publicReview(review: {
+  id: string;
+  rating: number;
+  title: string | null;
+  content: string;
+  createdAt: Date;
+  user: { displayName: string | null; email: string | null; username: string | null };
+  product: { id: string; name: string; nameEn: string | null; imageUrl: string | null; buttonIcon: string | null };
+}) {
+  return {
+    id: review.id,
+    rating: review.rating,
+    title: review.title,
+    content: review.content,
+    createdAt: review.createdAt,
+    author: review.user.displayName || review.user.username || maskEmail(review.user.email) || "VD customer",
+    product: review.product
+  };
+}
+
+function maskEmail(email: string | null) {
+  if (!email) return null;
+  const [name, domain] = email.split("@");
+  if (!name || !domain) return email;
+  return `${name.slice(0, 2)}***@${domain}`;
 }
 
 function cryptoPayload(value: unknown) {

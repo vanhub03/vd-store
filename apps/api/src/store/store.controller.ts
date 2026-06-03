@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Header, Param, Post, Req, UseGuards } from "@nestjs/common";
-import { IsEmail, IsInt, IsOptional, IsString, Min, MinLength } from "class-validator";
+import { IsEmail, IsInt, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
 import { CustomerAuthGuard, CustomerRequest } from "../common/customer-auth.guard";
 import { StoreService } from "./store.service";
 
@@ -41,6 +41,24 @@ class OrderDto {
   quantity?: number;
 }
 
+class ReviewDto {
+  @IsString()
+  productId!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating!: number;
+
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsString()
+  @MinLength(8)
+  content!: string;
+}
+
 @Controller("store")
 export class StoreController {
   constructor(private readonly store: StoreService) {}
@@ -65,6 +83,12 @@ export class StoreController {
   @Header("Cache-Control", "no-store")
   catalog() {
     return this.store.catalog();
+  }
+
+  @Get("reviews")
+  @Header("Cache-Control", "no-store")
+  reviews() {
+    return this.store.reviews();
   }
 
   @Get("products/:id")
@@ -113,5 +137,11 @@ export class StoreController {
   @UseGuards(CustomerAuthGuard)
   buyWithUsdt(@Req() request: CustomerRequest, @Body() body: OrderDto) {
     return this.store.createUsdtOrder(request.customer!.telegramId, body.productId, body.quantity ?? 1);
+  }
+
+  @Post("reviews")
+  @UseGuards(CustomerAuthGuard)
+  createReview(@Req() request: CustomerRequest, @Body() body: ReviewDto) {
+    return this.store.createReview(request.customer!.id, body);
   }
 }
