@@ -1,4 +1,4 @@
-﻿CREATE TABLE "ProductReview" (
+CREATE TABLE "ProductReview" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "productId" TEXT NOT NULL,
