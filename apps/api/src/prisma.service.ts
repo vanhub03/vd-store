@@ -48,7 +48,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 function isRetryableConnectionError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? String(error.code) : "";
-  return code === "P1001" || code === "P1017";
+  const message = "message" in error ? String(error.message) : "";
+  return code === "P1001" || code === "P1017" || message.includes("Engine is not yet connected");
 }
 
 function delay(ms: number) {

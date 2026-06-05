@@ -61,34 +61,38 @@ export class StoreService {
   }
 
   async reviews() {
-    const reviews = await this.prisma.productReview.findMany({
-      where: {
-        product: {
-          status: ProductStatus.ACTIVE,
-          showInWeb: true
-        }
-      },
-      orderBy: { createdAt: "desc" },
-      take: 18,
-      include: {
-        user: {
-          select: {
-            displayName: true,
-            email: true,
-            username: true
+    const reviews = await this.prisma.withConnectionRetry(
+      () =>
+        this.prisma.productReview.findMany({
+          where: {
+            product: {
+              status: ProductStatus.ACTIVE,
+              showInWeb: true
+            }
+          },
+          orderBy: { createdAt: "desc" },
+          take: 18,
+          include: {
+            user: {
+              select: {
+                displayName: true,
+                email: true,
+                username: true
+              }
+            },
+            product: {
+              select: {
+                id: true,
+                name: true,
+                nameEn: true,
+                imageUrl: true,
+                buttonIcon: true
+              }
+            }
           }
-        },
-        product: {
-          select: {
-            id: true,
-            name: true,
-            nameEn: true,
-            imageUrl: true,
-            buttonIcon: true
-          }
-        }
-      }
-    });
+        }),
+      "store reviews"
+    );
     return { reviews: reviews.map(publicReview) };
   }
 
