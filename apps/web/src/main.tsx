@@ -246,6 +246,10 @@ type CartItem = {
 type CartFlyItem = {
   id: number;
   name: string;
+  categoryName: string;
+  description: string;
+  deliveryLabel: string;
+  stockLabel: string;
   price: string;
   image: string | null;
   glyph: string;
@@ -601,15 +605,17 @@ function App() {
   function playCartFlyAnimation(product: Product, origin?: Element | null) {
     const targetRect = cartButtonRef.current?.getBoundingClientRect();
     const sourceRect = origin?.getBoundingClientRect();
-    if (!targetRect || !sourceRect || sourceRect.width <= 0 || sourceRect.height <= 0) return;
+    if (!targetRect || !sourceRect || !origin || sourceRect.width <= 0 || sourceRect.height <= 0) return;
 
     const compact = window.innerWidth < 640;
-    const width = Math.min(Math.max(sourceRect.width * 0.72, compact ? 148 : 210), compact ? 220 : 270);
-    const height = Math.min(Math.max(sourceRect.height * 0.86, compact ? 178 : 238), compact ? 280 : 336);
+    const sourceCard = origin.closest(".product-card") ?? origin;
+    sourceCard.classList.add("cart-throw-origin");
+    const width = Math.min(Math.max(sourceRect.width * 0.54, compact ? 166 : 190), compact ? 190 : 224);
+    const height = Math.min(Math.max(sourceRect.height * 0.38, compact ? 140 : 158), compact ? 164 : 188);
     const rawLeft = sourceRect.left + sourceRect.width / 2 - width / 2;
-    const rawTop = sourceRect.top + sourceRect.height / 2 - height / 2;
+    const rawTop = sourceRect.top + Math.min(sourceRect.height * 0.26, 96) - height / 2;
     const minLeft = compact ? 10 : 18;
-    const minTop = compact ? 12 : Math.min(96, window.innerHeight * 0.16);
+    const minTop = compact ? 12 : Math.min(94, window.innerHeight * 0.15);
     const left = Math.min(Math.max(rawLeft, minLeft), Math.max(minLeft, window.innerWidth - width - minLeft));
     const top = Math.min(Math.max(rawTop, minTop), Math.max(minTop, window.innerHeight - height - 18));
     const centerX = left + width / 2;
@@ -619,9 +625,9 @@ function App() {
     const dx = targetX - centerX;
     const dy = targetY - centerY;
     const distance = Math.hypot(dx, dy);
-    const lift = Math.min(290, Math.max(130, distance * 0.26));
-    const controlX = centerX + dx * 0.52;
-    const controlY = Math.min(centerY, targetY) - lift;
+    const lift = Math.min(compact ? 164 : 196, Math.max(compact ? 90 : 112, distance * 0.2));
+    const controlX = centerX + dx * 0.5;
+    const controlY = Math.max(compact ? 28 : 58, Math.min(centerY, targetY) - lift);
     const trailPad = 88;
     const trailLeft = Math.floor(Math.min(centerX, controlX, targetX) - trailPad);
     const trailTop = Math.floor(Math.min(centerY, controlY, targetY) - trailPad);
@@ -631,12 +637,26 @@ function App() {
     const trailHeight = Math.max(1, trailBottom - trailTop);
     const trailPath = `M ${Math.round(centerX - trailLeft)} ${Math.round(centerY - trailTop)} Q ${Math.round(controlX - trailLeft)} ${Math.round(controlY - trailTop)} ${Math.round(targetX - trailLeft)} ${Math.round(targetY - trailTop)}`;
     const id = Date.now() + Math.random();
+    const minVisibleY = compact ? 8 : 16;
+    const clampFlyY = (value: number, scale: number) => {
+      const scaledInset = (height - height * scale) / 2;
+      return Math.max(value, minVisibleY - top - scaledInset);
+    };
+    const deliveryLabel = postPaymentLabel(product.deliveryType, language);
+    const stockLabel =
+      product.deliveryType === "SHARED_CONTENT"
+        ? TEXT[language].unlimited
+        : `${availableQuantity(product)} ${TEXT[language].left}`;
 
     setCartFlyItems((current) => [
       ...current,
       {
         id,
         name: localizedName(product, language),
+        categoryName: product.category?.name ?? TEXT[language].categoryFallback,
+        description: localizedDescription(product, language) || TEXT[language].deliveryFallback,
+        deliveryLabel,
+        stockLabel,
         price: formatProductPrice(product, language),
         image: productArtUrl(product),
         glyph: brandGlyph(product.name),
@@ -652,14 +672,14 @@ function App() {
         targetY,
         dx,
         dy,
-        shrinkX: dx * 0.02,
-        shrinkY: Math.min(-34, dy * 0.04),
-        earlyX: dx * 0.2,
-        earlyY: dy * 0.08 - lift * 0.72,
+        shrinkX: dx * 0.03,
+        shrinkY: clampFlyY(Math.min(-16, dy * 0.035), 0.78),
+        earlyX: dx * 0.18,
+        earlyY: clampFlyY(dy * 0.08 - lift * 0.66, 0.58),
         midX: dx * 0.52,
-        midY: dy * 0.28 - lift * 0.86,
-        lateX: dx * 0.84,
-        lateY: dy * 0.72 - lift * 0.2,
+        midY: clampFlyY(dy * 0.3 - lift * 0.84, 0.36),
+        lateX: dx * 0.83,
+        lateY: clampFlyY(dy * 0.73 - lift * 0.2, 0.18),
         trailLeft,
         trailTop,
         trailWidth,
@@ -670,15 +690,19 @@ function App() {
 
     const receiveTimer = window.setTimeout(() => {
       setCartPulse(true);
-    }, 2140);
+    }, 2060);
     const clearPulseTimer = window.setTimeout(() => {
       setCartPulse(false);
-    }, 2980);
+    }, 2860);
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
     }, 2520);
-    cartFlyTimersRef.current.push(receiveTimer, clearPulseTimer, timer);
+    const originTimer = window.setTimeout(() => {
+      sourceCard.classList.remove("cart-throw-origin");
+      cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== originTimer);
+    }, 760);
+    cartFlyTimersRef.current.push(receiveTimer, clearPulseTimer, timer, originTimer);
   }
 
   function addToCart(product: Product, quantity = 1, origin?: Element | null) {
@@ -1408,16 +1432,15 @@ function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
               <path className="cart-fly-trail-line" d={item.trailPath} pathLength={1} />
             </svg>
 
-            <div className="cart-fly-ghost cart-fly-ghost-one" style={motionStyle} />
-            <div className="cart-fly-ghost cart-fly-ghost-two" style={motionStyle} />
-            {[-34, -18, 8, 24, 42, 58].map((offset, index) => (
+            <div className="cart-fly-ghost" style={motionStyle} />
+            {[-28, -8, 18, 38].map((offset, index) => (
               <i
                 className="cart-fly-spark"
                 key={`${item.id}-spark-${index}`}
                 style={
                   {
                     ...motionStyle,
-                    "--spark-delay": `${index * 70}ms`,
+                    "--spark-delay": `${index * 80}ms`,
                     "--spark-x": `${offset}px`,
                     "--spark-y": `${index % 2 ? -18 : 16}px`,
                     "--spark-size": `${index % 3 === 0 ? 7 : 5}px`
@@ -1427,11 +1450,20 @@ function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
             ))}
 
             <div className="cart-fly-card" style={motionStyle}>
+              <em className="cart-fly-badge">{item.deliveryLabel}</em>
               <div className="cart-fly-media">
                 {item.image ? <img src={item.image} alt="" /> : <span className="cart-fly-glyph">{item.glyph}</span>}
               </div>
               <span className="cart-fly-copy">
+                <i>{item.categoryName}</i>
                 <b>{item.name}</b>
+                <small>{item.description}</small>
+              </span>
+              <span className="cart-fly-meta">
+                <i>{item.deliveryLabel}</i>
+                <i>{item.stockLabel}</i>
+              </span>
+              <span className="cart-fly-price">
                 <small>{item.price}</small>
               </span>
               <span className="cart-fly-actions">
