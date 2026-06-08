@@ -1834,6 +1834,16 @@ textarea {
   line-height: 1.5;
 }
 
+.payment-feedback {
+  margin-top: 12px;
+}
+
+.payment-feedback.is-loading {
+  border-color: rgba(94, 234, 212, 0.28);
+  background: rgba(20, 184, 166, 0.1);
+  color: #b9fff5;
+}
+
 .empty-state,
 .api-empty-state {
   grid-column: 1 / -1;

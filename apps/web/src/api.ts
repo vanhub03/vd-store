@@ -184,7 +184,8 @@ export class StoreApi {
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    const timeoutMs = isPaymentCreationPath(path) ? 45000 : 8000;
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -217,6 +218,16 @@ export class StoreApi {
       window.clearTimeout(timeout);
     }
   }
+}
+
+function isPaymentCreationPath(path: string) {
+  return (
+    path === "/store/topups" ||
+    path === "/store/orders/bank" ||
+    path === "/store/orders/usdt" ||
+    path === "/store/cart/orders/bank" ||
+    path === "/store/cart/orders/usdt"
+  );
 }
 
 export function flattenCatalog(catalog: Catalog) {

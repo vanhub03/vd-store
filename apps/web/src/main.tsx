@@ -1169,6 +1169,7 @@ function App() {
           customer={customer}
           balance={balance}
           loading={loading}
+          actionError={error}
           language={language}
           onClose={() => setCheckoutItem(null)}
           onQuantity={updateCheckoutQuantity}
@@ -1192,6 +1193,7 @@ function App() {
           customer={customer}
           balance={balance}
           loading={loading}
+          actionError={error}
           language={language}
           onClose={() => setCheckoutCartItems(null)}
           onWallet={(voucherCode) => buyCartWithWallet(checkoutCartItems, voucherCode)}
@@ -2343,6 +2345,7 @@ function CheckoutDialog({
   customer,
   balance,
   loading,
+  actionError,
   language,
   onClose,
   onQuantity,
@@ -2356,12 +2359,13 @@ function CheckoutDialog({
   customer: Session["customer"] | null;
   balance: number;
   loading: string;
+  actionError: string;
   language: Language;
   onClose: () => void;
   onQuantity: (quantity: number) => void;
-  onWallet: (quantity: number, voucherCode?: string | null) => void;
-  onBank: (quantity: number, voucherCode?: string | null) => void;
-  onUsdt: (quantity: number, voucherCode?: string | null) => void;
+  onWallet: (quantity: number, voucherCode?: string | null) => Promise<void> | void;
+  onBank: (quantity: number, voucherCode?: string | null) => Promise<void> | void;
+  onUsdt: (quantity: number, voucherCode?: string | null) => Promise<void> | void;
   onWalletOpen: () => void;
   onBackToCart: () => void;
 }) {
@@ -2373,6 +2377,8 @@ function CheckoutDialog({
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
+  const [localProcessing, setLocalProcessing] = useState(false);
+  const [paymentAttempted, setPaymentAttempted] = useState(false);
   const [contact, setContact] = useState({
     name: customer?.displayName ?? "",
     email: customer?.email ?? "",
@@ -2382,9 +2388,18 @@ function CheckoutDialog({
   const discountAmount = voucherPreview?.discountAmount ?? 0;
   const amount = voucherPreview?.totalAmount ?? subtotal;
   const walletMissing = Math.max(0, amount - balance);
-  const busy = loading === `wallet:${item.product.id}` || loading === `bank:${item.product.id}` || loading === `usdt:${item.product.id}`;
+  const actionLoading = loading === `wallet:${item.product.id}` || loading === `bank:${item.product.id}` || loading === `usdt:${item.product.id}`;
+  const busy = actionLoading || localProcessing;
   const canUseUsdt = Boolean(item.product.usdtPrice);
   const checkoutTotalLabel = method === "usdt" ? formatCheckoutTotal(item.product, item.quantity, "en", amount) : formatVnd(amount);
+  const processingText =
+    method === "bank"
+      ? vi ? "Đang tạo mã VietQR..." : "Creating VietQR code..."
+      : method === "usdt"
+        ? vi ? "Đang tạo invoice Cryptomus..." : "Creating Cryptomus invoice..."
+        : vi ? "Đang xử lý thanh toán ví..." : "Processing wallet payment...";
+  const paymentFeedback = paymentAttempted && actionError ? actionError : busy ? processingText : "";
+  const paymentFeedbackIsError = paymentAttempted && Boolean(actionError);
 
   useEffect(() => {
     const code = coupon.trim();
@@ -2398,6 +2413,18 @@ function CheckoutDialog({
     }
   }, [coupon, voucherPreview?.code]);
 
+  function runPayment(action: () => Promise<void> | void) {
+    setCouponMessage("");
+    setPaymentAttempted(true);
+    setLocalProcessing(true);
+    try {
+      void Promise.resolve(action()).finally(() => setLocalProcessing(false));
+    } catch (err) {
+      setLocalProcessing(false);
+      setCouponMessage((err as Error).message);
+    }
+  }
+
   function pay() {
     if (!contact.email.trim()) {
       setCouponMessage(vi ? "Vui lòng nhập email nhận hàng trước khi thanh toán." : "Please enter a delivery email before checkout.");
@@ -2408,9 +2435,9 @@ function CheckoutDialog({
       return;
     }
     const voucherCode = voucherPreview?.code ?? undefined;
-    if (method === "wallet") onWallet(item.quantity, voucherCode);
-    if (method === "bank") onBank(item.quantity, voucherCode);
-    if (method === "usdt") onUsdt(item.quantity, voucherCode);
+    if (method === "wallet") runPayment(() => onWallet(item.quantity, voucherCode));
+    if (method === "bank") runPayment(() => onBank(item.quantity, voucherCode));
+    if (method === "usdt") runPayment(() => onUsdt(item.quantity, voucherCode));
   }
 
   async function validateCoupon(code = coupon, silent = false) {
@@ -2526,9 +2553,9 @@ function CheckoutDialog({
             <section className="checkout-card">
               <h3>3. {vi ? "Phương thức thanh toán" : "Payment method"}</h3>
               <div className="payment-methods">
-                <button className={method === "bank" ? "active" : ""} onClick={() => setMethod("bank")}><QrCode size={17} /> VietQR</button>
-                <button className={method === "wallet" ? "active" : ""} onClick={() => setMethod("wallet")}><Wallet size={17} /> {vi ? "Ví nội bộ" : "Wallet"}</button>
-                <button className={method === "usdt" ? "active" : ""} onClick={() => setMethod("usdt")} disabled={!canUseUsdt}><CreditCard size={17} /> USDT</button>
+                <button type="button" className={method === "bank" ? "active" : ""} onClick={() => setMethod("bank")}><QrCode size={17} /> VietQR</button>
+                <button type="button" className={method === "wallet" ? "active" : ""} onClick={() => setMethod("wallet")}><Wallet size={17} /> {vi ? "Ví nội bộ" : "Wallet"}</button>
+                <button type="button" className={method === "usdt" ? "active" : ""} onClick={() => setMethod("usdt")} disabled={!canUseUsdt}><CreditCard size={17} /> USDT</button>
               </div>
               <div className={`payment-preview ${method}`}>
                 {method === "bank" ? (
@@ -2560,6 +2587,7 @@ function CheckoutDialog({
                   </div>
                 ) : null}
               </div>
+              {paymentFeedback ? <p className={`inline-message payment-feedback${paymentFeedbackIsError ? "" : " is-loading"}`}>{paymentFeedback}</p> : null}
             </section>
           </div>
 
@@ -2590,7 +2618,7 @@ function CheckoutDialog({
         </div>
 
         <div className="checkout-sticky-bar">
-          <button className="secondary-button" onClick={onBackToCart}>
+          <button type="button" className="secondary-button" onClick={onBackToCart}>
             <ArrowRight size={16} className="back-arrow" />
             {vi ? "Quay lại giỏ hàng" : "Back to cart"}
           </button>
@@ -2598,7 +2626,7 @@ function CheckoutDialog({
             <span>{copy.total}</span>
             <b>{checkoutTotalLabel}</b>
           </div>
-          <button className="primary-button" onClick={pay} disabled={busy || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
+          <button type="button" className="primary-button" onClick={pay} disabled={busy || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
             {busy ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />}
             {vi ? `Thanh toán ${checkoutTotalLabel}` : "Pay securely"}
           </button>
@@ -2613,6 +2641,7 @@ function CartCheckoutDialog({
   customer,
   balance,
   loading,
+  actionError,
   language,
   onClose,
   onWallet,
@@ -2625,11 +2654,12 @@ function CartCheckoutDialog({
   customer: Session["customer"] | null;
   balance: number;
   loading: string;
+  actionError: string;
   language: Language;
   onClose: () => void;
-  onWallet: (voucherCode?: string | null) => void;
-  onBank: (voucherCode?: string | null) => void;
-  onUsdt: (voucherCode?: string | null) => void;
+  onWallet: (voucherCode?: string | null) => Promise<void> | void;
+  onBank: (voucherCode?: string | null) => Promise<void> | void;
+  onUsdt: (voucherCode?: string | null) => Promise<void> | void;
   onWalletOpen: () => void;
   onBackToCart: () => void;
 }) {
@@ -2641,13 +2671,24 @@ function CartCheckoutDialog({
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
+  const [localProcessing, setLocalProcessing] = useState(false);
+  const [paymentAttempted, setPaymentAttempted] = useState(false);
   const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const discountAmount = voucherPreview?.discountAmount ?? 0;
   const amount = voucherPreview?.totalAmount ?? subtotal;
   const walletMissing = Math.max(0, amount - balance);
   const canUseUsdt = items.every((item) => Boolean(item.product.usdtPrice));
-  const busy = loading === "cart-wallet" || loading === "cart-bank" || loading === "cart-usdt";
+  const actionLoading = loading === "cart-wallet" || loading === "cart-bank" || loading === "cart-usdt";
+  const busy = actionLoading || localProcessing;
   const checkoutTotalLabel = method === "usdt" ? formatCartCheckoutTotal(items, amount) : formatVnd(amount);
+  const processingText =
+    method === "bank"
+      ? vi ? "Đang tạo mã VietQR cho toàn bộ giỏ hàng..." : "Creating VietQR code for the full cart..."
+      : method === "usdt"
+        ? vi ? "Đang tạo invoice Cryptomus cho toàn bộ giỏ hàng..." : "Creating Cryptomus invoice for the full cart..."
+        : vi ? "Đang xử lý thanh toán ví cho toàn bộ giỏ hàng..." : "Processing wallet payment for the full cart...";
+  const paymentFeedback = paymentAttempted && actionError ? actionError : busy ? processingText : "";
+  const paymentFeedbackIsError = paymentAttempted && Boolean(actionError);
 
   useEffect(() => {
     const code = coupon.trim();
@@ -2692,15 +2733,27 @@ function CartCheckoutDialog({
     void validateCoupon();
   }
 
+  function runPayment(action: () => Promise<void> | void) {
+    setCouponMessage("");
+    setPaymentAttempted(true);
+    setLocalProcessing(true);
+    try {
+      void Promise.resolve(action()).finally(() => setLocalProcessing(false));
+    } catch (err) {
+      setLocalProcessing(false);
+      setCouponMessage((err as Error).message);
+    }
+  }
+
   function pay() {
     if (coupon.trim() && !voucherPreview && coupon.trim().toUpperCase() !== "FIRST20") {
       setCouponMessage(vi ? "Vui lòng áp dụng mã ưu đãi trước khi thanh toán." : "Apply the promo code before checkout.");
       return;
     }
     const voucherCode = voucherPreview?.code ?? undefined;
-    if (method === "wallet") onWallet(voucherCode);
-    if (method === "bank") onBank(voucherCode);
-    if (method === "usdt") onUsdt(voucherCode);
+    if (method === "wallet") runPayment(() => onWallet(voucherCode));
+    if (method === "bank") runPayment(() => onBank(voucherCode));
+    if (method === "usdt") runPayment(() => onUsdt(voucherCode));
   }
 
   return (
@@ -2747,13 +2800,14 @@ function CartCheckoutDialog({
               <div><dt>{vi ? "Phí xử lý" : "Processing fee"}</dt><dd>{vi ? "Miễn phí" : "Free"}</dd></div>
             </dl>
             <div className="payment-methods">
-              <button className={method === "bank" ? "active" : ""} onClick={() => setMethod("bank")}><QrCode size={17} /> VietQR</button>
-              <button className={method === "wallet" ? "active" : ""} onClick={() => setMethod("wallet")}><Wallet size={17} /> {vi ? "Ví" : "Wallet"}</button>
-              <button className={method === "usdt" ? "active" : ""} onClick={() => setMethod("usdt")} disabled={!canUseUsdt}><CreditCard size={17} /> USDT</button>
+              <button type="button" className={method === "bank" ? "active" : ""} onClick={() => setMethod("bank")}><QrCode size={17} /> VietQR</button>
+              <button type="button" className={method === "wallet" ? "active" : ""} onClick={() => setMethod("wallet")}><Wallet size={17} /> {vi ? "Ví" : "Wallet"}</button>
+              <button type="button" className={method === "usdt" ? "active" : ""} onClick={() => setMethod("usdt")} disabled={!canUseUsdt}><CreditCard size={17} /> USDT</button>
             </div>
             {method === "wallet" && walletMissing ? (
               <p className="inline-message">{vi ? `Ví còn thiếu ${formatVnd(walletMissing)}.` : `Wallet short ${formatVnd(walletMissing)}.`} <button onClick={onWalletOpen}>{copy.topupTitle}</button></p>
             ) : null}
+            {paymentFeedback ? <p className={`inline-message payment-feedback${paymentFeedbackIsError ? "" : " is-loading"}`}>{paymentFeedback}</p> : null}
             <div className="grand-total">
               <span>{copy.total}</span>
               <b>{checkoutTotalLabel}</b>
@@ -2761,7 +2815,7 @@ function CartCheckoutDialog({
           </aside>
         </div>
         <div className="checkout-sticky-bar">
-          <button className="secondary-button" onClick={onBackToCart}>
+          <button type="button" className="secondary-button" onClick={onBackToCart}>
             <ArrowRight size={16} className="back-arrow" />
             {vi ? "Quay lại giỏ hàng" : "Back to cart"}
           </button>
@@ -2769,7 +2823,7 @@ function CartCheckoutDialog({
             <span>{copy.total}</span>
             <b>{checkoutTotalLabel}</b>
           </div>
-          <button className="primary-button" onClick={pay} disabled={busy || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
+          <button type="button" className="primary-button" onClick={pay} disabled={busy || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
             {busy ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />}
             {vi ? `Thanh toán tất cả` : "Pay all"}
           </button>
