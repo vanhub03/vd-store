@@ -1,4 +1,4 @@
-import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
@@ -255,6 +255,8 @@ type CartFlyItem = {
   height: number;
   dx: number;
   dy: number;
+  shrinkX: number;
+  shrinkY: number;
   earlyX: number;
   earlyY: number;
   midX: number;
@@ -327,6 +329,70 @@ function useReveal() {
       observer.disconnect();
     };
   }, []);
+}
+
+function useHeroOrbit(count: number) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<(HTMLElement | null)[]>([]);
+  const pausedRef = useRef(false);
+
+  const setItemRef = useCallback((node: HTMLElement | null, index: number) => {
+    itemRefs.current[index] = node;
+  }, []);
+
+  const setPaused = useCallback((paused: boolean) => {
+    pausedRef.current = paused;
+    containerRef.current?.classList.toggle("is-orbit-paused", paused);
+  }, []);
+
+  useLayoutEffect(() => {
+    const root = containerRef.current;
+    if (!root || count <= 0) return undefined;
+
+    let frame = 0;
+    let rotation = -Math.PI / 2;
+    let previousTime = performance.now();
+    const fullTurn = Math.PI * 2;
+    const duration = 32000;
+
+    const paint = (time: number) => {
+      const rect = root.getBoundingClientRect();
+      const radiusX = Math.max(132, Math.min(rect.width * 0.37, 270));
+      const radiusY = Math.max(92, Math.min(rect.height * 0.29, 152));
+
+      if (!pausedRef.current) {
+        const delta = Math.min(80, Math.max(0, time - previousTime));
+        rotation = (rotation + (delta / duration) * fullTurn) % fullTurn;
+      }
+      previousTime = time;
+
+      itemRefs.current.slice(0, count).forEach((node, index) => {
+        if (!node) return;
+        const angle = rotation + (index * fullTurn) / count;
+        const x = Math.cos(angle) * radiusX;
+        const y = Math.sin(angle) * radiusY;
+        const depth = (Math.sin(angle) + 1) / 2;
+        const scale = 0.88 + depth * 0.16;
+        const opacity = 0.78 + depth * 0.22;
+
+        node.style.setProperty("--orbit-x", `${x.toFixed(2)}px`);
+        node.style.setProperty("--orbit-y", `${y.toFixed(2)}px`);
+        node.style.setProperty("--orbit-scale", scale.toFixed(3));
+        node.style.setProperty("--orbit-opacity", opacity.toFixed(3));
+        node.style.zIndex = String(10 + Math.round(depth * 30));
+      });
+
+      frame = window.requestAnimationFrame(paint);
+    };
+
+    paint(previousTime);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [count]);
+
+  return { containerRef, setItemRef, setPaused };
 }
 
 function useDialogClose(onClose: () => void) {
@@ -526,14 +592,14 @@ function App() {
     const sourceRect = origin?.getBoundingClientRect();
     if (!targetRect || !sourceRect || sourceRect.width <= 0 || sourceRect.height <= 0) return;
 
-    const width = Math.min(Math.max(sourceRect.width, 92), 280);
-    const height = Math.min(Math.max(sourceRect.height, 72), 240);
+    const width = Math.min(Math.max(sourceRect.width * 0.78, 150), 270);
+    const height = Math.min(Math.max(sourceRect.height * 0.44, 108), 176);
     const left = sourceRect.left + sourceRect.width / 2 - width / 2;
     const top = sourceRect.top + sourceRect.height / 2 - height / 2;
     const dx = targetRect.left + targetRect.width / 2 - left - width / 2;
     const dy = targetRect.top + targetRect.height / 2 - top - height / 2;
     const distance = Math.hypot(dx, dy);
-    const lift = Math.min(280, Math.max(120, distance * 0.28));
+    const lift = Math.min(340, Math.max(150, distance * 0.34));
     const id = Date.now() + Math.random();
 
     setCartFlyItems((current) => [
@@ -550,25 +616,27 @@ function App() {
         height,
         dx,
         dy,
-        earlyX: dx * 0.16,
-        earlyY: dy * 0.1 - lift * 0.68,
-        midX: dx * 0.34,
-        midY: dy * 0.18 - lift,
-        lateX: dx * 0.74,
-        lateY: dy * 0.62 - lift * 0.42
+        shrinkX: dx * 0.03,
+        shrinkY: Math.min(-46, dy * 0.04),
+        earlyX: dx * 0.18,
+        earlyY: dy * 0.1 - lift * 0.82,
+        midX: dx * 0.48,
+        midY: dy * 0.28 - lift,
+        lateX: dx * 0.82,
+        lateY: dy * 0.7 - lift * 0.34
       }
     ]);
 
     const receiveTimer = window.setTimeout(() => {
       setCartPulse(true);
-    }, 1520);
+    }, 2440);
     const clearPulseTimer = window.setTimeout(() => {
       setCartPulse(false);
-    }, 2260);
+    }, 3280);
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
-    }, 1860);
+    }, 2680);
     cartFlyTimersRef.current.push(receiveTimer, clearPulseTimer, timer);
   }
 
@@ -1273,6 +1341,8 @@ function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
               "--fly-height": `${item.height}px`,
               "--fly-dx": `${item.dx}px`,
               "--fly-dy": `${item.dy}px`,
+              "--fly-shrink-x": `${item.shrinkX}px`,
+              "--fly-shrink-y": `${item.shrinkY}px`,
               "--fly-early-x": `${item.earlyX}px`,
               "--fly-early-y": `${item.earlyY}px`,
               "--fly-mid-x": `${item.midX}px`,
@@ -1356,6 +1426,7 @@ function Hero({
   const vi = language === "vi";
   const heroCards = buildHeroCards(products, language);
   const waitingForApi = !heroCards.length && loading !== "" && !error;
+  const orbit = useHeroOrbit(heroCards.length);
 
   return (
     <section className="hero-section">
@@ -1389,12 +1460,21 @@ function Hero({
       <div
         className={`hero-showcase reveal${heroCards.length ? "" : " is-empty"}`}
         style={{ "--d": "110ms" } as React.CSSProperties}
+        ref={orbit.containerRef}
         aria-label={vi ? "Sản phẩm nổi bật" : "Featured products"}
       >
         <span className="energy-line" />
         {heroCards.length ? (
           heroCards.map((card, index) => (
-            <article className={`floating-product-card ${card.tone}`} style={{ "--i": String(index) } as React.CSSProperties} key={card.id}>
+            <article
+              className={`floating-product-card ${card.tone}`}
+              ref={(node) => orbit.setItemRef(node, index)}
+              onPointerEnter={() => orbit.setPaused(true)}
+              onPointerLeave={() => orbit.setPaused(false)}
+              onFocus={() => orbit.setPaused(true)}
+              onBlur={() => orbit.setPaused(false)}
+              key={card.id}
+            >
               <img src={card.image} alt="" loading={index < 2 ? "eager" : "lazy"} />
               <strong>{card.name}</strong>
               <small>{card.meta}</small>
