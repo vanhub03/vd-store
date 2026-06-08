@@ -2385,6 +2385,7 @@ function CheckoutDialog({
   const busy = loading === `wallet:${item.product.id}` || loading === `bank:${item.product.id}` || loading === `usdt:${item.product.id}`;
   const canUseUsdt = Boolean(item.product.usdtPrice);
   const checkoutTotalLabel = method === "usdt" ? formatCheckoutTotal(item.product, item.quantity, "en", amount) : formatVnd(amount);
+  const voucherBlocksPayment = voucherLoading && coupon.trim().toUpperCase() !== "FIRST20";
 
   useEffect(() => {
     const code = coupon.trim();
@@ -2403,7 +2404,7 @@ function CheckoutDialog({
       setCouponMessage(vi ? "Vui lòng nhập email nhận hàng trước khi thanh toán." : "Please enter a delivery email before checkout.");
       return;
     }
-    if (coupon.trim() && !voucherPreview) {
+    if (coupon.trim() && !voucherPreview && coupon.trim().toUpperCase() !== "FIRST20") {
       setCouponMessage(vi ? "Vui lòng áp dụng mã ưu đãi trước khi thanh toán." : "Apply the promo code before checkout.");
       return;
     }
@@ -2598,7 +2599,7 @@ function CheckoutDialog({
             <span>{copy.total}</span>
             <b>{checkoutTotalLabel}</b>
           </div>
-          <button className="primary-button" onClick={pay} disabled={busy || voucherLoading || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
+          <button className="primary-button" onClick={pay} disabled={busy || voucherBlocksPayment || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
             {busy ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />}
             {vi ? `Thanh toán ${checkoutTotalLabel}` : "Pay securely"}
           </button>
@@ -2648,6 +2649,7 @@ function CartCheckoutDialog({
   const canUseUsdt = items.every((item) => Boolean(item.product.usdtPrice));
   const busy = loading === "cart-wallet" || loading === "cart-bank" || loading === "cart-usdt";
   const checkoutTotalLabel = method === "usdt" ? formatCartCheckoutTotal(items, amount) : formatVnd(amount);
+  const voucherBlocksPayment = voucherLoading && coupon.trim().toUpperCase() !== "FIRST20";
 
   useEffect(() => {
     const code = coupon.trim();
@@ -2693,7 +2695,7 @@ function CartCheckoutDialog({
   }
 
   function pay() {
-    if (coupon.trim() && !voucherPreview) {
+    if (coupon.trim() && !voucherPreview && coupon.trim().toUpperCase() !== "FIRST20") {
       setCouponMessage(vi ? "Vui lòng áp dụng mã ưu đãi trước khi thanh toán." : "Apply the promo code before checkout.");
       return;
     }
@@ -2769,7 +2771,7 @@ function CartCheckoutDialog({
             <span>{copy.total}</span>
             <b>{checkoutTotalLabel}</b>
           </div>
-          <button className="primary-button" onClick={pay} disabled={busy || voucherLoading || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
+          <button className="primary-button" onClick={pay} disabled={busy || voucherBlocksPayment || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
             {busy ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />}
             {vi ? `Thanh toán tất cả` : "Pay all"}
           </button>
