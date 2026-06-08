@@ -1654,7 +1654,7 @@ function ProductCard({
 
   function handleAddCart(event: React.MouseEvent<HTMLButtonElement>) {
     const card = event.currentTarget.closest(".product-card");
-    onAddCart(card?.querySelector(".product-image-button") ?? card ?? event.currentTarget);
+    onAddCart(card ?? event.currentTarget);
   }
 
   return (

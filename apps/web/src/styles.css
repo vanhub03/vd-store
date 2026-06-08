@@ -1,28 +1,28 @@
 :root {
   color-scheme: dark;
-  --bg-base: #030712;
-  --bg-deep: #020510;
-  --bg-elevated: rgba(9, 17, 34, 0.88);
-  --bg-panel: rgba(12, 23, 43, 0.86);
-  --bg-card: rgba(15, 27, 50, 0.78);
+  --bg-base: #05080d;
+  --bg-deep: #030609;
+  --bg-elevated: rgba(12, 18, 24, 0.9);
+  --bg-panel: rgba(16, 24, 31, 0.88);
+  --bg-card: rgba(20, 30, 38, 0.82);
   --text: #f7fbff;
-  --text-soft: #d8e6fb;
-  --muted: #91a4bf;
-  --muted-2: #63738b;
-  --cyan: #22d3ee;
-  --blue: #3b82f6;
-  --violet: #8b5cf6;
-  --magenta: #d946ef;
-  --green: #35e3a2;
-  --amber: #ffb84d;
-  --danger: #ff5772;
-  --line: rgba(147, 197, 253, 0.16);
-  --line-strong: rgba(125, 211, 252, 0.38);
+  --text-soft: #d7e0e8;
+  --muted: #8b9aa7;
+  --muted-2: #5f6b75;
+  --cyan: #63d8d4;
+  --blue: #8aa4b8;
+  --violet: #8f988f;
+  --magenta: #b49586;
+  --green: #75c58c;
+  --amber: #d4aa63;
+  --danger: #d87477;
+  --line: rgba(138, 164, 184, 0.18);
+  --line-strong: rgba(99, 216, 212, 0.45);
   --radius-card: 24px;
   --radius-panel: 30px;
   --radius-pill: 999px;
-  --shadow-soft: 0 22px 80px rgba(0, 10, 30, 0.44);
-  --shadow-glow: 0 0 0 1px rgba(34, 211, 238, 0.16), 0 24px 80px rgba(66, 153, 255, 0.22);
+  --shadow-soft: 0 22px 70px rgba(0, 0, 0, 0.42);
+  --shadow-glow: 0 0 0 1px rgba(99, 216, 212, 0.18), 0 24px 70px rgba(0, 0, 0, 0.36);
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-pop: cubic-bezier(0.2, 1, 0.22, 1);
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -48,10 +48,7 @@ body {
   min-width: 320px;
   min-height: 100dvh;
   overflow-x: hidden;
-  background:
-    radial-gradient(circle at 72% 4%, rgba(92, 69, 255, 0.22), transparent 30rem),
-    radial-gradient(circle at 15% 10%, rgba(18, 208, 255, 0.15), transparent 30rem),
-    linear-gradient(180deg, #020714 0%, #030712 46%, #02050d 100%);
+  background: #05080d;
 }
 
 body::before {
@@ -60,11 +57,8 @@ body::before {
   inset: 0;
   z-index: -2;
   pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(82, 141, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(82, 141, 255, 0.08) 1px, transparent 1px);
+  background-color: rgba(138, 164, 184, 0.035);
   background-size: 76px 76px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), transparent 88%);
 }
 
 button,
@@ -147,37 +141,37 @@ textarea {
 
 .aurora-ribbon {
   position: absolute;
-  width: 78vw;
-  height: 220px;
+  width: 58vw;
+  height: 1px;
   border-radius: 999px;
-  filter: blur(18px);
-  opacity: 0.56;
-  transform: rotate(-8deg);
-  animation: auroraDrift 18s var(--ease) infinite alternate;
+  opacity: 0.42;
+  transform: rotate(-10deg);
+  animation: auroraDrift 22s var(--ease) infinite alternate;
 }
 
 .aurora-ribbon-one {
   right: -12vw;
   top: 260px;
-  background: linear-gradient(90deg, transparent, rgba(111, 78, 255, 0.22), rgba(33, 216, 255, 0.38), rgba(217, 70, 239, 0.22), transparent);
+  background: rgba(99, 216, 212, 0.2);
+  box-shadow: 0 0 64px rgba(99, 216, 212, 0.1);
 }
 
 .aurora-ribbon-two {
   left: -24vw;
   top: 410px;
-  height: 170px;
-  opacity: 0.36;
-  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.26), rgba(139, 92, 246, 0.28), transparent);
+  height: 1px;
+  opacity: 0.24;
+  background: rgba(212, 170, 99, 0.22);
+  box-shadow: 0 0 54px rgba(212, 170, 99, 0.08);
   animation-delay: -5s;
 }
 
 .star-field {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle, rgba(125, 211, 252, 0.7) 1px, transparent 1px);
+  background-color: rgba(255, 255, 255, 0.018);
   background-size: 52px 52px;
-  opacity: 0.18;
-  mask-image: radial-gradient(circle at 60% 20%, rgba(0, 0, 0, 0.8), transparent 70%);
+  opacity: 0.3;
 }
 
 .site-top {
@@ -200,9 +194,9 @@ textarea {
   justify-content: flex-end;
   gap: 22px;
   padding: 0 18px;
-  border: 1px solid rgba(125, 211, 252, 0.14);
+  border: 1px solid rgba(138, 164, 184, 0.18);
   border-radius: var(--radius-pill);
-  background: linear-gradient(90deg, rgba(50, 48, 132, 0.72), rgba(5, 18, 36, 0.78));
+  background: rgba(17, 24, 31, 0.88);
   color: var(--text-soft);
   font-size: 13px;
   box-shadow: 0 18px 54px rgba(0, 0, 0, 0.26);
@@ -238,9 +232,9 @@ textarea {
   gap: 14px;
   margin-top: 10px;
   padding: 10px 14px;
-  border: 1px solid rgba(147, 197, 253, 0.18);
+  border: 1px solid rgba(138, 164, 184, 0.2);
   border-radius: 24px;
-  background: rgba(2, 9, 22, 0.78);
+  background: rgba(7, 12, 17, 0.88);
   backdrop-filter: blur(24px) saturate(1.16);
   -webkit-backdrop-filter: blur(24px) saturate(1.16);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -262,7 +256,7 @@ textarea {
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.32), 0 0 32px rgba(124, 58, 237, 0.28);
+  box-shadow: 0 0 0 1px rgba(99, 216, 212, 0.28), 0 16px 30px rgba(0, 0, 0, 0.28);
 }
 
 .brand-lockup b {
@@ -340,9 +334,9 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  border: 1px solid rgba(125, 211, 252, 0.18);
+  border: 1px solid rgba(138, 164, 184, 0.2);
   border-radius: 22px;
-  background: rgba(3, 12, 28, 0.96);
+  background: rgba(8, 14, 20, 0.97);
   box-shadow: var(--shadow-soft);
   opacity: 0;
   visibility: hidden;
@@ -386,10 +380,8 @@ textarea {
   display: grid;
   place-items: center;
   color: #fff;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.28), transparent 38%),
-    linear-gradient(135deg, rgba(34, 211, 238, 0.42), rgba(139, 92, 246, 0.36));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 34px rgba(34, 211, 238, 0.18);
+  background: #163136;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 10px 28px rgba(0, 0, 0, 0.22);
 }
 
 .category-mini {
@@ -400,27 +392,27 @@ textarea {
 
 .category-mini.violet,
 .category-card.violet > span {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.72), rgba(67, 56, 202, 0.36));
+  background: #2a3038;
 }
 
 .category-mini.orange,
 .category-card.orange > span {
-  background: linear-gradient(135deg, rgba(255, 121, 63, 0.74), rgba(245, 158, 11, 0.36));
+  background: #3a2c21;
 }
 
 .category-mini.emerald,
 .category-card.emerald > span {
-  background: linear-gradient(135deg, rgba(52, 211, 153, 0.72), rgba(14, 165, 233, 0.32));
+  background: #1f3528;
 }
 
 .category-mini.pink,
 .category-card.pink > span {
-  background: linear-gradient(135deg, rgba(217, 70, 239, 0.74), rgba(59, 130, 246, 0.36));
+  background: #382a30;
 }
 
 .category-mini.blue,
 .category-card.blue > span {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.78), rgba(34, 211, 238, 0.34));
+  background: #243340;
 }
 
 .header-search {
@@ -489,10 +481,10 @@ textarea {
 
 .topup-button,
 .login-button {
-  border: 0;
-  background: linear-gradient(135deg, #7cf2ff, #5578ff 48%, #865dff);
-  color: #04101f;
-  box-shadow: 0 14px 38px rgba(82, 120, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(99, 216, 212, 0.42);
+  background: #63d8d4;
+  color: #061013;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.46);
 }
 
 .cart-button {
@@ -509,10 +501,10 @@ textarea {
   place-items: center;
   padding: 0 6px;
   border-radius: var(--radius-pill);
-  background: var(--violet);
-  color: #fff;
+  background: #d4aa63;
+  color: #061013;
   font-size: 11px;
-  box-shadow: 0 10px 24px rgba(139, 92, 246, 0.44);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.34);
 }
 
 .cart-fly-layer {
@@ -537,15 +529,13 @@ textarea {
   gap: 12px;
   padding: 12px;
   overflow: hidden;
-  border: 1px solid rgba(125, 211, 252, 0.36);
+  border: 1px solid rgba(99, 216, 212, 0.45);
   border-radius: 20px;
-  background:
-    radial-gradient(circle at 28% 18%, rgba(34, 211, 238, 0.22), transparent 42%),
-    linear-gradient(145deg, rgba(13, 28, 55, 0.98), rgba(6, 13, 29, 0.92));
-  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.42), 0 0 42px rgba(59, 130, 246, 0.28);
+  background: #111a22;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(99, 216, 212, 0.12);
   transform-origin: center;
   will-change: transform, opacity, filter;
-  animation: flyToCart 820ms cubic-bezier(0.2, 0.82, 0.2, 1) forwards;
+  animation: throwToCart 960ms cubic-bezier(0.12, 0.78, 0.16, 1) forwards;
 }
 
 .cart-fly-card img,
@@ -585,7 +575,7 @@ textarea {
 }
 
 .cart-fly-card small {
-  color: #7cf2ff;
+  color: #63d8d4;
   font-weight: 900;
 }
 
@@ -665,10 +655,10 @@ textarea {
 .primary-button {
   min-height: 52px;
   padding: 0 22px;
-  border: 0;
-  background: linear-gradient(135deg, #7bf2ff 0%, #5278ff 50%, #854dff 100%);
-  color: #04101f;
-  box-shadow: 0 18px 44px rgba(82, 120, 255, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(99, 216, 212, 0.46);
+  background: #63d8d4;
+  color: #061013;
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.46);
 }
 
 .secondary-button {
@@ -726,10 +716,7 @@ textarea {
   margin-top: 12px;
   font-size: 42px;
   line-height: 1.16;
-  color: transparent;
-  background: linear-gradient(90deg, #74eaff, #7c7dff 44%, #ec5cff 76%, #fff);
-  -webkit-background-clip: text;
-  background-clip: text;
+  color: #63d8d4;
 }
 
 .hero-copy p {
@@ -781,11 +768,8 @@ textarea {
   position: absolute;
   inset: 8% 5% 4%;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 46%, rgba(34, 211, 238, 0.22), transparent 30%),
-    radial-gradient(circle at 68% 30%, rgba(236, 72, 153, 0.18), transparent 28%),
-    linear-gradient(115deg, rgba(4, 13, 30, 0.18), rgba(30, 64, 175, 0.16));
-  filter: blur(1px);
+  border: 1px solid rgba(99, 216, 212, 0.14);
+  background: rgba(16, 24, 31, 0.22);
   animation: stageGlow 9s var(--ease) infinite alternate;
 }
 
@@ -797,37 +781,46 @@ textarea {
   position: absolute;
   inset: 13% 2% 8%;
   border-radius: 50%;
-  border: 1px solid rgba(34, 211, 238, 0.18);
+  border: 1px solid rgba(99, 216, 212, 0.24);
   transform: rotate(-8deg);
-  box-shadow: 0 0 90px rgba(139, 92, 246, 0.28);
+  box-shadow: 0 0 70px rgba(0, 0, 0, 0.22);
   animation: orbitSpin 18s linear infinite;
 }
 
 .floating-product-card {
   position: absolute;
   z-index: 1;
+  left: 50%;
+  top: 50%;
   width: 230px;
   min-height: 166px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   padding: 18px;
-  border: 1px solid rgba(147, 197, 253, 0.22);
+  border: 1px solid rgba(138, 164, 184, 0.22);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at 30% 14%, rgba(34, 211, 238, 0.2), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(5, 17, 34, 0.9);
-  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  animation: heroCardDrift 6.5s var(--ease) infinite alternate;
-  animation-delay: calc(var(--i) * -520ms);
-  transition: transform 500ms var(--ease), border-color 500ms var(--ease), box-shadow 500ms var(--ease);
+  background: rgba(14, 22, 30, 0.94);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  animation: heroCardOrbit 19s linear infinite;
+  animation-delay: calc(var(--i) * -1.8s);
+  transition: scale 460ms var(--ease), border-color 460ms var(--ease), box-shadow 460ms var(--ease), background 460ms var(--ease), opacity 460ms var(--ease);
+  will-change: transform;
+}
+
+.hero-showcase:has(.floating-product-card:hover) .floating-product-card,
+.hero-showcase:has(.floating-product-card:focus-within) .floating-product-card {
+  animation-play-state: paused;
 }
 
 .floating-product-card:hover {
-  transform: translate3d(0, -10px, 0) rotate(1deg);
-  border-color: rgba(125, 211, 252, 0.6);
-  box-shadow: var(--shadow-glow);
+  z-index: 9;
+  scale: 1.06;
+  border-color: rgba(99, 216, 212, 0.78);
+  background: rgba(18, 30, 38, 0.98);
+  box-shadow: 0 0 0 1px rgba(99, 216, 212, 0.32), 0 28px 78px rgba(0, 0, 0, 0.46);
 }
 
 .floating-product-card img {
@@ -853,73 +846,85 @@ textarea {
 
 .floating-product-card b {
   margin-top: 12px;
-  color: #9df5ff;
+  color: #63d8d4;
 }
 
 .floating-product-card:nth-of-type(1) {
-  left: 30%;
-  top: 2%;
   z-index: 4;
   width: 218px;
   min-height: 176px;
+  --orbit-start: -86deg;
+  --orbit-end: 274deg;
+  --orbit-counter-start: 86deg;
+  --orbit-counter-end: -274deg;
+  --orbit-radius: 154px;
 }
 
 .floating-product-card:nth-of-type(2) {
-  left: 4%;
-  top: 21%;
   z-index: 5;
   width: 250px;
   min-height: 184px;
+  --orbit-start: -152deg;
+  --orbit-end: 208deg;
+  --orbit-counter-start: 152deg;
+  --orbit-counter-end: -208deg;
+  --orbit-radius: 182px;
 }
 
 .floating-product-card:nth-of-type(3) {
-  right: 2%;
-  top: 19%;
   z-index: 5;
   width: 250px;
   min-height: 184px;
+  --orbit-start: -18deg;
+  --orbit-end: 342deg;
+  --orbit-counter-start: 18deg;
+  --orbit-counter-end: -342deg;
+  --orbit-radius: 184px;
 }
 
 .floating-product-card:nth-of-type(4) {
-  left: 14%;
-  bottom: 8%;
   z-index: 3;
   width: 230px;
   min-height: 156px;
+  --orbit-start: 132deg;
+  --orbit-end: 492deg;
+  --orbit-counter-start: -132deg;
+  --orbit-counter-end: -492deg;
+  --orbit-radius: 162px;
 }
 
 .floating-product-card:nth-of-type(5) {
-  left: 45%;
-  bottom: 0;
   z-index: 3;
   width: 220px;
   min-height: 154px;
+  --orbit-start: 78deg;
+  --orbit-end: 438deg;
+  --orbit-counter-start: -78deg;
+  --orbit-counter-end: -438deg;
+  --orbit-radius: 146px;
 }
 
 .floating-product-card:nth-of-type(6) {
-  right: 9%;
-  bottom: 7%;
   z-index: 3;
   width: 210px;
   min-height: 154px;
+  --orbit-start: 34deg;
+  --orbit-end: 394deg;
+  --orbit-counter-start: -34deg;
+  --orbit-counter-end: -394deg;
+  --orbit-radius: 178px;
 }
 
 .floating-product-card.violet {
-  background:
-    radial-gradient(circle at 30% 14%, rgba(139, 92, 246, 0.24), transparent 38%),
-    rgba(8, 14, 35, 0.92);
+  background: rgba(17, 23, 31, 0.94);
 }
 
 .floating-product-card.orange {
-  background:
-    radial-gradient(circle at 30% 14%, rgba(255, 132, 77, 0.22), transparent 38%),
-    rgba(8, 14, 35, 0.92);
+  background: rgba(30, 23, 18, 0.94);
 }
 
 .floating-product-card.red {
-  background:
-    radial-gradient(circle at 30% 14%, rgba(255, 41, 68, 0.24), transparent 38%),
-    rgba(8, 14, 35, 0.92);
+  background: rgba(31, 20, 22, 0.94);
 }
 
 .api-sync-card {
@@ -933,13 +938,10 @@ textarea {
   padding: 24px;
   border: 1px solid rgba(125, 211, 252, 0.22);
   border-radius: 24px;
-  background:
-    linear-gradient(110deg, rgba(255, 255, 255, 0.06) 8%, rgba(125, 211, 252, 0.14) 18%, rgba(255, 255, 255, 0.06) 33%),
-    rgba(5, 17, 34, 0.86);
-  background-size: 220% 100%;
+  background: rgba(14, 22, 30, 0.9);
   color: var(--text-soft);
   transform: translate(-50%, -50%);
-  animation: shimmer 2.4s linear infinite;
+  animation: none;
 }
 
 .api-sync-card strong {
@@ -1007,8 +1009,7 @@ textarea {
 .category-skeleton small {
   display: block;
   color: transparent;
-  background: linear-gradient(100deg, rgba(255, 255, 255, 0.06), rgba(125, 211, 252, 0.14), rgba(255, 255, 255, 0.06));
-  background-size: 220% 100%;
+  background: rgba(138, 164, 184, 0.14);
   animation: shimmer 2.2s linear infinite;
 }
 
@@ -1085,8 +1086,8 @@ textarea {
 }
 
 .filter-pills button.active {
-  border-color: rgba(125, 211, 252, 0.5);
-  background: linear-gradient(135deg, rgba(72, 99, 255, 0.72), rgba(139, 92, 246, 0.72));
+  border-color: rgba(99, 216, 212, 0.58);
+  background: rgba(99, 216, 212, 0.16);
   color: #fff;
 }
 
@@ -1106,19 +1107,17 @@ textarea {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid rgba(147, 197, 253, 0.2);
+  border: 1px solid rgba(138, 164, 184, 0.2);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at var(--mx, 50%) var(--my, 20%), rgba(34, 211, 238, 0.16), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
-    rgba(7, 17, 34, 0.9);
+  background: rgba(13, 21, 28, 0.92);
   box-shadow: var(--shadow-soft);
-  transition: transform 520ms var(--ease), border-color 520ms var(--ease), box-shadow 520ms var(--ease);
+  transition: transform 520ms var(--ease), border-color 520ms var(--ease), box-shadow 520ms var(--ease), background 520ms var(--ease);
 }
 
 .product-card:hover {
   transform: translateY(-8px);
-  border-color: rgba(125, 211, 252, 0.52);
+  border-color: rgba(99, 216, 212, 0.52);
+  background: rgba(16, 26, 34, 0.98);
   box-shadow: var(--shadow-glow);
 }
 
@@ -1147,7 +1146,7 @@ textarea {
 }
 
 .product-badges span {
-  background: linear-gradient(135deg, #ff9c4a, #ff4c7d);
+  background: #9c6a3b;
 }
 
 .product-badges em {
@@ -1162,9 +1161,7 @@ textarea {
   margin: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 20px;
-  background:
-    radial-gradient(circle at 32% 20%, rgba(34, 211, 238, 0.2), transparent 38%),
-    linear-gradient(135deg, #0b1830, #040a16);
+  background: #081018;
   overflow: hidden;
 }
 
@@ -1338,12 +1335,9 @@ textarea {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   margin-top: 26px;
-  border: 1px solid rgba(125, 211, 252, 0.28);
+  border: 1px solid rgba(99, 216, 212, 0.28);
   border-radius: 22px;
-  background:
-    radial-gradient(circle at 0% 0%, rgba(217, 70, 239, 0.17), transparent 40%),
-    radial-gradient(circle at 100% 0%, rgba(34, 211, 238, 0.18), transparent 42%),
-    rgba(15, 27, 50, 0.74);
+  background: rgba(16, 24, 31, 0.78);
   box-shadow: var(--shadow-soft);
 }
 
@@ -1363,10 +1357,10 @@ textarea {
 }
 
 .stats-panel b {
-  color: #5b7cff;
+  color: #63d8d4;
   font-size: 32px;
   letter-spacing: 0;
-  text-shadow: 0 0 34px rgba(91, 124, 255, 0.5);
+  text-shadow: none;
 }
 
 .stats-panel span {
@@ -1438,7 +1432,7 @@ textarea {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.28), rgba(139, 92, 246, 0.28));
+  background: #163136;
   color: #fff;
   font-size: 13px;
   font-weight: 950;
@@ -1697,8 +1691,7 @@ textarea {
 .skeleton-card b,
 .skeleton-card p {
   border-radius: 16px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
-  background-size: 240% 100%;
+  background: rgba(138, 164, 184, 0.14);
   animation: shimmer 1.4s var(--ease) infinite;
 }
 
@@ -1736,9 +1729,7 @@ textarea {
 .checkout-modal,
 .cart-drawer {
   border: 1px solid rgba(147, 197, 253, 0.22);
-  background:
-    radial-gradient(circle at 18% 0%, rgba(34, 211, 238, 0.12), transparent 34%),
-    linear-gradient(180deg, rgba(11, 23, 45, 0.98), rgba(3, 9, 20, 0.98));
+  background: rgba(9, 15, 21, 0.98);
   box-shadow: 0 40px 120px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -1875,10 +1866,7 @@ textarea {
   overflow: hidden;
   border: 1px solid rgba(147, 197, 253, 0.18);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at 50% 34%, rgba(34, 211, 238, 0.22), transparent 36%),
-    radial-gradient(circle at 56% 80%, rgba(139, 92, 246, 0.28), transparent 44%),
-    #050d1c;
+  background: #081018;
 }
 
 .gallery-main img {
@@ -1903,7 +1891,7 @@ textarea {
   align-items: center;
   padding: 0 12px;
   border-radius: var(--radius-pill);
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(59, 130, 246, 0.88));
+  background: #163136;
   color: #fff;
   font-size: 12px;
   font-weight: 900;
@@ -2151,11 +2139,9 @@ textarea {
   display: grid;
   gap: 16px;
   padding: 18px;
-  border: 1px solid rgba(125, 211, 252, 0.34);
+  border: 1px solid rgba(99, 216, 212, 0.34);
   border-radius: 24px;
-  background:
-    radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.18), transparent 42%),
-    rgba(7, 17, 34, 0.92);
+  background: rgba(13, 21, 28, 0.94);
   box-shadow: var(--shadow-glow);
 }
 
@@ -2243,7 +2229,7 @@ textarea {
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.86), rgba(91, 124, 255, 0.9));
+  background: #163136;
   font-weight: 950;
 }
 
@@ -2323,7 +2309,7 @@ textarea {
 
 .checkout-stepper li.done:not(:last-child)::after,
 .checkout-stepper li.active:not(:last-child)::after {
-  background: linear-gradient(90deg, var(--cyan), var(--violet));
+  background: rgba(99, 216, 212, 0.72);
 }
 
 .checkout-stepper span {
@@ -2342,7 +2328,7 @@ textarea {
 .checkout-stepper li.active span {
   color: #fff;
   border-color: var(--cyan);
-  background: linear-gradient(135deg, var(--cyan), var(--violet));
+  background: #163136;
   box-shadow: 0 0 24px rgba(34, 211, 238, 0.35);
 }
 
@@ -2453,7 +2439,7 @@ textarea {
 
 .payment-methods button.active {
   border-color: var(--cyan);
-  background: linear-gradient(135deg, rgba(79, 70, 229, 0.64), rgba(14, 165, 233, 0.28));
+  background: rgba(99, 216, 212, 0.14);
   box-shadow: var(--shadow-glow);
 }
 
@@ -2468,9 +2454,7 @@ textarea {
   overflow: hidden;
   border: 1px solid rgba(125, 211, 252, 0.22);
   border-radius: 22px;
-  background:
-    radial-gradient(circle at 80% 50%, rgba(34, 211, 238, 0.18), transparent 30%),
-    linear-gradient(130deg, rgba(32, 45, 92, 0.58), rgba(5, 14, 31, 0.84));
+  background: rgba(13, 21, 28, 0.92);
 }
 
 .payment-preview.wallet,
@@ -2945,9 +2929,7 @@ textarea {
   min-height: 58px;
   padding: 0 16px;
   border-radius: 17px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
-    rgba(4, 13, 29, 0.82);
+  background: rgba(12, 20, 27, 0.92);
   color: #fff;
   font-size: 15px;
   font-weight: 760;
@@ -2956,9 +2938,7 @@ textarea {
 
 .auth-dialog input:focus {
   border-color: rgba(125, 211, 252, 0.52);
-  background:
-    linear-gradient(180deg, rgba(125, 211, 252, 0.08), rgba(255, 255, 255, 0.02)),
-    rgba(5, 17, 36, 0.94);
+  background: rgba(15, 28, 35, 0.96);
   box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -3038,7 +3018,7 @@ textarea {
   margin: 0 auto 12px;
   border-radius: 50%;
   color: #03101c;
-  background: linear-gradient(135deg, #5fffd2, #5bbcff);
+  background: #63d8d4;
   box-shadow: 0 0 44px rgba(53, 227, 162, 0.34);
 }
 
@@ -3273,9 +3253,9 @@ textarea {
   display: grid;
   place-items: center;
   border-radius: 20px;
-  background: linear-gradient(135deg, #7bf2ff, #5278ff 48%, #854dff);
-  color: #fff;
-  box-shadow: 0 18px 44px rgba(82, 120, 255, 0.42);
+  background: #163136;
+  color: #f7fbff;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
 }
 
 .boot {
@@ -3340,12 +3320,20 @@ textarea {
   }
 }
 
-@keyframes heroCardDrift {
+@keyframes heroCardOrbit {
   from {
-    transform: translate3d(0, 0, 0) rotate(-0.4deg);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--orbit-start, 0deg))
+      translateX(var(--orbit-radius, 160px))
+      rotate(var(--orbit-counter-start, 0deg));
   }
   to {
-    transform: translate3d(0, -18px, 26px) rotate(0.6deg);
+    transform:
+      translate(-50%, -50%)
+      rotate(var(--orbit-end, 360deg))
+      translateX(var(--orbit-radius, 160px))
+      rotate(var(--orbit-counter-end, -360deg));
   }
 }
 
@@ -3404,24 +3392,24 @@ textarea {
   }
 }
 
-@keyframes flyToCart {
+@keyframes throwToCart {
   0% {
     opacity: 0.98;
     filter: saturate(1.18);
-    transform: translate3d(0, 0, 0) scale(1);
+    transform: translate3d(0, 0, 0) scale(1) rotateZ(0deg) rotateY(0deg);
   }
-  38% {
+  26% {
     opacity: 1;
-    transform: translate3d(var(--fly-mid-x), var(--fly-mid-y), 0) scale(0.62) rotate(-4deg);
+    transform: translate3d(var(--fly-mid-x), var(--fly-mid-y), 90px) scale(0.72) rotateZ(-155deg) rotateY(140deg);
   }
-  78% {
+  68% {
     opacity: 0.92;
-    transform: translate3d(var(--fly-late-x), var(--fly-late-y), 0) scale(0.26) rotate(5deg);
+    transform: translate3d(var(--fly-late-x), var(--fly-late-y), 36px) scale(0.34) rotateZ(-420deg) rotateY(320deg);
   }
   100% {
     opacity: 0;
     filter: saturate(1.45);
-    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.12) rotate(8deg);
+    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.08) rotateZ(-720deg) rotateY(540deg);
   }
 }
 
