@@ -150,23 +150,39 @@ export class StoreApi {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      method,
-      cache: method === "GET" ? "no-store" : "default",
-      headers: {
-        "content-type": "application/json",
-        ...(method === "GET" ? { "cache-control": "no-cache" } : {}),
-        ...(this.token ? { authorization: `Bearer ${this.token}` } : {})
-      },
-      body: body === undefined ? undefined : JSON.stringify(body)
-    });
-    const text = await response.text();
-    const data = text ? JSON.parse(text) : null;
-    if (!response.ok) {
-      const message = data?.message ?? data?.error ?? `HTTP ${response.status}`;
-      throw new Error(Array.isArray(message) ? message.join(", ") : message);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}${path}`, {
+        method,
+        cache: method === "GET" ? "no-store" : "default",
+        signal: controller.signal,
+        headers: {
+          "content-type": "application/json",
+          ...(method === "GET" ? { "cache-control": "no-cache" } : {}),
+          ...(this.token ? { authorization: `Bearer ${this.token}` } : {})
+        },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : null;
+      if (!response.ok) {
+        const message = data?.message ?? data?.error ?? `HTTP ${response.status}`;
+        throw new Error(Array.isArray(message) ? message.join(", ") : message);
+      }
+      return data as T;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error(`API request timed out: ${API_BASE_URL}${path}`);
+      }
+      if (error instanceof TypeError) {
+        throw new Error(`Cannot connect to API: ${API_BASE_URL}${path}`);
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeout);
     }
-    return data as T;
   }
 }
 
