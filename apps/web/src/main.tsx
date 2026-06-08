@@ -729,18 +729,18 @@ function App() {
 
     const receiveTimer = window.setTimeout(() => {
       setCartPulse(true);
-    }, 2100);
+    }, 1050);
     const clearPulseTimer = window.setTimeout(() => {
       setCartPulse(false);
-    }, 2740);
+    }, 1370);
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
-    }, 2360);
+    }, 1450);
     const originTimer = window.setTimeout(() => {
       sourceCard.classList.remove("cart-throw-origin");
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== originTimer);
-    }, 660);
+    }, 330);
     cartFlyTimersRef.current.push(receiveTimer, clearPulseTimer, timer, originTimer);
   }
 
@@ -1491,7 +1491,7 @@ function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
                 style={
                   {
                     ...motionStyle,
-                    "--spark-delay": `${index * 80}ms`,
+                    "--spark-delay": `${index * 40}ms`,
                     "--spark-x": `${offset}px`,
                     "--spark-y": `${index % 2 ? -18 : 16}px`,
                     "--spark-size": `${index % 3 === 0 ? 7 : 5}px`
