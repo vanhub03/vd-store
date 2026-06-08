@@ -512,6 +512,7 @@ textarea {
   inset: 0;
   z-index: 70;
   pointer-events: none;
+  perspective: 900px;
 }
 
 .cart-fly-card {
@@ -521,8 +522,8 @@ textarea {
   width: var(--fly-width);
   height: var(--fly-height);
   min-width: 92px;
-  max-width: 230px;
-  max-height: 168px;
+  max-width: 280px;
+  max-height: 240px;
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   align-items: center;
@@ -534,8 +535,9 @@ textarea {
   background: #111a22;
   box-shadow: 0 26px 70px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(99, 216, 212, 0.12);
   transform-origin: center;
+  backface-visibility: hidden;
   will-change: transform, opacity, filter;
-  animation: throwToCart 960ms cubic-bezier(0.12, 0.78, 0.16, 1) forwards;
+  animation: throwToCart 1120ms cubic-bezier(0.11, 0.82, 0.12, 1) forwards;
 }
 
 .cart-fly-card img,
@@ -804,8 +806,10 @@ textarea {
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transform: translate(-50%, -50%);
   transform-origin: center;
-  animation: heroCardOrbit 19s linear infinite;
-  animation-delay: calc(var(--i) * -1.8s);
+  animation-duration: 9s;
+  animation-timing-function: cubic-bezier(0.44, 0, 0.56, 1);
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
   transition: scale 460ms var(--ease), border-color 460ms var(--ease), box-shadow 460ms var(--ease), background 460ms var(--ease), opacity 460ms var(--ease);
   will-change: transform;
 }
@@ -853,66 +857,48 @@ textarea {
   z-index: 4;
   width: 218px;
   min-height: 176px;
-  --orbit-start: -86deg;
-  --orbit-end: 274deg;
-  --orbit-counter-start: 86deg;
-  --orbit-counter-end: -274deg;
-  --orbit-radius: 154px;
+  animation-name: heroCardOrbit1;
+  animation-delay: 0s;
 }
 
 .floating-product-card:nth-of-type(2) {
   z-index: 5;
   width: 250px;
   min-height: 184px;
-  --orbit-start: -152deg;
-  --orbit-end: 208deg;
-  --orbit-counter-start: 152deg;
-  --orbit-counter-end: -208deg;
-  --orbit-radius: 182px;
+  animation-name: heroCardOrbit2;
+  animation-delay: -1.5s;
 }
 
 .floating-product-card:nth-of-type(3) {
   z-index: 5;
   width: 250px;
   min-height: 184px;
-  --orbit-start: -18deg;
-  --orbit-end: 342deg;
-  --orbit-counter-start: 18deg;
-  --orbit-counter-end: -342deg;
-  --orbit-radius: 184px;
+  animation-name: heroCardOrbit3;
+  animation-delay: -3s;
 }
 
 .floating-product-card:nth-of-type(4) {
   z-index: 3;
   width: 230px;
   min-height: 156px;
-  --orbit-start: 132deg;
-  --orbit-end: 492deg;
-  --orbit-counter-start: -132deg;
-  --orbit-counter-end: -492deg;
-  --orbit-radius: 162px;
+  animation-name: heroCardOrbit4;
+  animation-delay: -4.5s;
 }
 
 .floating-product-card:nth-of-type(5) {
   z-index: 3;
   width: 220px;
   min-height: 154px;
-  --orbit-start: 78deg;
-  --orbit-end: 438deg;
-  --orbit-counter-start: -78deg;
-  --orbit-counter-end: -438deg;
-  --orbit-radius: 146px;
+  animation-name: heroCardOrbit5;
+  animation-delay: -6s;
 }
 
 .floating-product-card:nth-of-type(6) {
   z-index: 3;
   width: 210px;
   min-height: 154px;
-  --orbit-start: 34deg;
-  --orbit-end: 394deg;
-  --orbit-counter-start: -34deg;
-  --orbit-counter-end: -394deg;
-  --orbit-radius: 178px;
+  animation-name: heroCardOrbit6;
+  animation-delay: -7.5s;
 }
 
 .floating-product-card.violet {
@@ -3320,21 +3306,52 @@ textarea {
   }
 }
 
-@keyframes heroCardOrbit {
-  from {
-    transform:
-      translate(-50%, -50%)
-      rotate(var(--orbit-start, 0deg))
-      translateX(var(--orbit-radius, 160px))
-      rotate(var(--orbit-counter-start, 0deg));
-  }
-  to {
-    transform:
-      translate(-50%, -50%)
-      rotate(var(--orbit-end, 360deg))
-      translateX(var(--orbit-radius, 160px))
-      rotate(var(--orbit-counter-end, -360deg));
-  }
+@keyframes heroCardOrbit1 {
+  0% { transform: translate(-50%, -50%) rotate(-86deg) translateX(178px) rotate(86deg); }
+  25% { transform: translate(-50%, -50%) rotate(4deg) translateX(178px) rotate(-4deg); }
+  50% { transform: translate(-50%, -50%) rotate(94deg) translateX(178px) rotate(-94deg); }
+  75% { transform: translate(-50%, -50%) rotate(184deg) translateX(178px) rotate(-184deg); }
+  100% { transform: translate(-50%, -50%) rotate(274deg) translateX(178px) rotate(-274deg); }
+}
+
+@keyframes heroCardOrbit2 {
+  0% { transform: translate(-50%, -50%) rotate(-152deg) translateX(218px) rotate(152deg); }
+  25% { transform: translate(-50%, -50%) rotate(-62deg) translateX(218px) rotate(62deg); }
+  50% { transform: translate(-50%, -50%) rotate(28deg) translateX(218px) rotate(-28deg); }
+  75% { transform: translate(-50%, -50%) rotate(118deg) translateX(218px) rotate(-118deg); }
+  100% { transform: translate(-50%, -50%) rotate(208deg) translateX(218px) rotate(-208deg); }
+}
+
+@keyframes heroCardOrbit3 {
+  0% { transform: translate(-50%, -50%) rotate(-18deg) translateX(220px) rotate(18deg); }
+  25% { transform: translate(-50%, -50%) rotate(72deg) translateX(220px) rotate(-72deg); }
+  50% { transform: translate(-50%, -50%) rotate(162deg) translateX(220px) rotate(-162deg); }
+  75% { transform: translate(-50%, -50%) rotate(252deg) translateX(220px) rotate(-252deg); }
+  100% { transform: translate(-50%, -50%) rotate(342deg) translateX(220px) rotate(-342deg); }
+}
+
+@keyframes heroCardOrbit4 {
+  0% { transform: translate(-50%, -50%) rotate(132deg) translateX(196px) rotate(-132deg); }
+  25% { transform: translate(-50%, -50%) rotate(222deg) translateX(196px) rotate(-222deg); }
+  50% { transform: translate(-50%, -50%) rotate(312deg) translateX(196px) rotate(-312deg); }
+  75% { transform: translate(-50%, -50%) rotate(402deg) translateX(196px) rotate(-402deg); }
+  100% { transform: translate(-50%, -50%) rotate(492deg) translateX(196px) rotate(-492deg); }
+}
+
+@keyframes heroCardOrbit5 {
+  0% { transform: translate(-50%, -50%) rotate(78deg) translateX(182px) rotate(-78deg); }
+  25% { transform: translate(-50%, -50%) rotate(168deg) translateX(182px) rotate(-168deg); }
+  50% { transform: translate(-50%, -50%) rotate(258deg) translateX(182px) rotate(-258deg); }
+  75% { transform: translate(-50%, -50%) rotate(348deg) translateX(182px) rotate(-348deg); }
+  100% { transform: translate(-50%, -50%) rotate(438deg) translateX(182px) rotate(-438deg); }
+}
+
+@keyframes heroCardOrbit6 {
+  0% { transform: translate(-50%, -50%) rotate(34deg) translateX(212px) rotate(-34deg); }
+  25% { transform: translate(-50%, -50%) rotate(124deg) translateX(212px) rotate(-124deg); }
+  50% { transform: translate(-50%, -50%) rotate(214deg) translateX(212px) rotate(-214deg); }
+  75% { transform: translate(-50%, -50%) rotate(304deg) translateX(212px) rotate(-304deg); }
+  100% { transform: translate(-50%, -50%) rotate(394deg) translateX(212px) rotate(-394deg); }
 }
 
 @keyframes shimmer {
@@ -3398,18 +3415,22 @@ textarea {
     filter: saturate(1.18);
     transform: translate3d(0, 0, 0) scale(1) rotateZ(0deg) rotateY(0deg);
   }
-  26% {
+  18% {
     opacity: 1;
-    transform: translate3d(var(--fly-mid-x), var(--fly-mid-y), 90px) scale(0.72) rotateZ(-155deg) rotateY(140deg);
+    transform: translate3d(var(--fly-early-x), var(--fly-early-y), 150px) scale(0.86) rotateZ(-135deg) rotateY(120deg);
   }
-  68% {
+  48% {
+    opacity: 0.98;
+    transform: translate3d(var(--fly-mid-x), var(--fly-mid-y), 120px) scale(0.58) rotateZ(-390deg) rotateY(320deg);
+  }
+  76% {
     opacity: 0.92;
-    transform: translate3d(var(--fly-late-x), var(--fly-late-y), 36px) scale(0.34) rotateZ(-420deg) rotateY(320deg);
+    transform: translate3d(var(--fly-late-x), var(--fly-late-y), 38px) scale(0.24) rotateZ(-650deg) rotateY(520deg);
   }
   100% {
     opacity: 0;
     filter: saturate(1.45);
-    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.08) rotateZ(-720deg) rotateY(540deg);
+    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.06) rotateZ(-900deg) rotateY(720deg);
   }
 }
 

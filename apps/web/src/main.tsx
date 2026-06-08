@@ -255,6 +255,8 @@ type CartFlyItem = {
   height: number;
   dx: number;
   dy: number;
+  earlyX: number;
+  earlyY: number;
   midX: number;
   midY: number;
   lateX: number;
@@ -524,14 +526,14 @@ function App() {
     const sourceRect = origin?.getBoundingClientRect();
     if (!targetRect || !sourceRect || sourceRect.width <= 0 || sourceRect.height <= 0) return;
 
-    const width = Math.min(Math.max(sourceRect.width, 92), 230);
-    const height = Math.min(Math.max(sourceRect.height, 72), 168);
+    const width = Math.min(Math.max(sourceRect.width, 92), 280);
+    const height = Math.min(Math.max(sourceRect.height, 72), 240);
     const left = sourceRect.left + sourceRect.width / 2 - width / 2;
     const top = sourceRect.top + sourceRect.height / 2 - height / 2;
     const dx = targetRect.left + targetRect.width / 2 - left - width / 2;
     const dy = targetRect.top + targetRect.height / 2 - top - height / 2;
     const distance = Math.hypot(dx, dy);
-    const lift = Math.min(150, Math.max(66, distance * 0.18));
+    const lift = Math.min(280, Math.max(120, distance * 0.28));
     const id = Date.now() + Math.random();
 
     setCartFlyItems((current) => [
@@ -548,17 +550,19 @@ function App() {
         height,
         dx,
         dy,
-        midX: dx * 0.44,
-        midY: dy * 0.36 - lift,
-        lateX: dx * 0.86,
-        lateY: dy * 0.84 - 22
+        earlyX: dx * 0.16,
+        earlyY: dy * 0.1 - lift * 0.68,
+        midX: dx * 0.34,
+        midY: dy * 0.18 - lift,
+        lateX: dx * 0.74,
+        lateY: dy * 0.62 - lift * 0.42
       }
     ]);
 
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
-    }, 820);
+    }, 1120);
     cartFlyTimersRef.current.push(timer);
   }
 
@@ -1260,6 +1264,8 @@ function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
               "--fly-height": `${item.height}px`,
               "--fly-dx": `${item.dx}px`,
               "--fly-dy": `${item.dy}px`,
+              "--fly-early-x": `${item.earlyX}px`,
+              "--fly-early-y": `${item.earlyY}px`,
               "--fly-mid-x": `${item.midX}px`,
               "--fly-mid-y": `${item.midY}px`,
               "--fly-late-x": `${item.lateX}px`,
