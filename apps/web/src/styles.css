@@ -524,7 +524,7 @@ textarea {
   z-index: 80;
   overflow: visible;
   pointer-events: none;
-  animation: neonTrailScene 2680ms linear both;
+  animation: neonTrailScene 2320ms linear both;
 }
 
 .cart-fly-trail-halo,
@@ -538,13 +538,13 @@ textarea {
 .cart-fly-trail-halo {
   stroke: rgba(99, 216, 212, 0.12);
   stroke-width: 7;
-  animation: neonTrailDraw 2060ms linear 170ms forwards;
+  animation: neonTrailDraw 1760ms linear 150ms forwards;
 }
 
 .cart-fly-trail-line {
   stroke: rgba(99, 216, 212, 0.9);
   stroke-width: 2;
-  animation: neonTrailDraw 1980ms linear 190ms forwards;
+  animation: neonTrailDraw 1680ms linear 170ms forwards;
 }
 
 .cart-fly-ghost {
@@ -561,7 +561,7 @@ textarea {
   will-change: transform, opacity;
   z-index: 81;
   contain: layout paint style;
-  animation: neonGhostTrail 2520ms linear 80ms both;
+  animation: neonGhostTrail 2160ms linear 70ms both;
 }
 
 .cart-fly-spark {
@@ -578,7 +578,7 @@ textarea {
   opacity: 0;
   will-change: transform, opacity;
   contain: layout paint style;
-  animation: neonSparkArc 2100ms linear var(--spark-delay) both;
+  animation: neonSparkArc 1820ms linear var(--spark-delay) both;
 }
 
 .cart-fly-card {
@@ -603,7 +603,7 @@ textarea {
   backface-visibility: hidden;
   will-change: transform, opacity;
   contain: layout paint style;
-  animation: neonThrowToCart 2600ms linear forwards;
+  animation: neonThrowToCart 2240ms linear forwards;
   z-index: 84;
 }
 
@@ -767,7 +767,7 @@ textarea {
   box-shadow: 0 0 0 6px rgba(99, 216, 212, 0.16), 0 18px 34px rgba(0, 0, 0, 0.34);
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.4);
-  animation: cartFlyPop 900ms cubic-bezier(0.18, 0.9, 0.18, 1) 2180ms both;
+  animation: cartFlyPop 820ms cubic-bezier(0.18, 0.9, 0.18, 1) 2040ms both;
 }
 
 .lang-toggle:hover,
@@ -3697,39 +3697,39 @@ textarea {
   }
   8% {
     opacity: 1;
-    transform: translate3d(var(--fly-shrink-x), var(--fly-shrink-y), 0) scale(0.96) rotateZ(-3deg);
+    transform: translate3d(var(--fly-shrink-x), var(--fly-shrink-y), 0) scale(0.96) rotateZ(58deg);
   }
   18% {
     opacity: 1;
-    transform: translate3d(var(--fly-arc1-x), var(--fly-arc1-y), 0) scale(0.88) rotateZ(-9deg);
+    transform: translate3d(var(--fly-arc1-x), var(--fly-arc1-y), 0) scale(0.88) rotateZ(130deg);
   }
   32% {
     opacity: 1;
-    transform: translate3d(var(--fly-arc2-x), var(--fly-arc2-y), 0) scale(0.76) rotateZ(-20deg);
+    transform: translate3d(var(--fly-arc2-x), var(--fly-arc2-y), 0) scale(0.76) rotateZ(230deg);
   }
   46% {
     opacity: 1;
-    transform: translate3d(var(--fly-arc3-x), var(--fly-arc3-y), 0) scale(0.6) rotateZ(-35deg);
+    transform: translate3d(var(--fly-arc3-x), var(--fly-arc3-y), 0) scale(0.6) rotateZ(331deg);
   }
   60% {
     opacity: 1;
-    transform: translate3d(var(--fly-arc4-x), var(--fly-arc4-y), 0) scale(0.44) rotateZ(-54deg);
+    transform: translate3d(var(--fly-arc4-x), var(--fly-arc4-y), 0) scale(0.44) rotateZ(432deg);
   }
   74% {
     opacity: 0.98;
-    transform: translate3d(var(--fly-arc5-x), var(--fly-arc5-y), 0) scale(0.28) rotateZ(-78deg);
+    transform: translate3d(var(--fly-arc5-x), var(--fly-arc5-y), 0) scale(0.28) rotateZ(533deg);
   }
   88% {
     opacity: 0.94;
-    transform: translate3d(var(--fly-arc6-x), var(--fly-arc6-y), 0) scale(0.14) rotateZ(-108deg);
+    transform: translate3d(var(--fly-arc6-x), var(--fly-arc6-y), 0) scale(0.14) rotateZ(634deg);
   }
   96% {
     opacity: 0.84;
-    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.08) rotateZ(-134deg);
+    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.08) rotateZ(700deg);
   }
   100% {
     opacity: 0;
-    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.05) rotateZ(-146deg);
+    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.05) rotateZ(720deg);
   }
 }
 

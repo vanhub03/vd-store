@@ -729,18 +729,18 @@ function App() {
 
     const receiveTimer = window.setTimeout(() => {
       setCartPulse(true);
-    }, 2240);
+    }, 2100);
     const clearPulseTimer = window.setTimeout(() => {
       setCartPulse(false);
-    }, 3040);
+    }, 2740);
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
-    }, 2720);
+    }, 2360);
     const originTimer = window.setTimeout(() => {
       sourceCard.classList.remove("cart-throw-origin");
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== originTimer);
-    }, 760);
+    }, 660);
     cartFlyTimersRef.current.push(receiveTimer, clearPulseTimer, timer, originTimer);
   }
 
