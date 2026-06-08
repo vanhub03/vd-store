@@ -380,6 +380,7 @@ function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartPulse, setCartPulse] = useState(false);
   const [loading, setLoading] = useState("boot");
   const [error, setError] = useState("");
   const [query, setQuery] = useState(new URLSearchParams(window.location.search).get("q") ?? "");
@@ -521,7 +522,6 @@ function App() {
   }
 
   function playCartFlyAnimation(product: Product, origin?: Element | null) {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const targetRect = cartButtonRef.current?.getBoundingClientRect();
     const sourceRect = origin?.getBoundingClientRect();
     if (!targetRect || !sourceRect || sourceRect.width <= 0 || sourceRect.height <= 0) return;
@@ -559,11 +559,17 @@ function App() {
       }
     ]);
 
+    const receiveTimer = window.setTimeout(() => {
+      setCartPulse(true);
+    }, 1520);
+    const clearPulseTimer = window.setTimeout(() => {
+      setCartPulse(false);
+    }, 2260);
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
-    }, 1120);
-    cartFlyTimersRef.current.push(timer);
+    }, 1860);
+    cartFlyTimersRef.current.push(receiveTimer, clearPulseTimer, timer);
   }
 
   function addToCart(product: Product, quantity = 1, origin?: Element | null) {
@@ -892,6 +898,7 @@ function App() {
         }}
         onCartOpen={() => setCartOpen(true)}
         cartButtonRef={cartButtonRef}
+        cartPulse={cartPulse}
         onCommand={() => setCommandOpen(true)}
         onSection={navigateHomeSection}
       />
@@ -1090,6 +1097,7 @@ function Header({
   onWalletOpen,
   onCartOpen,
   cartButtonRef,
+  cartPulse,
   onCommand,
   onSection
 }: {
@@ -1106,6 +1114,7 @@ function Header({
   onWalletOpen: () => void;
   onCartOpen: () => void;
   cartButtonRef: React.RefObject<HTMLButtonElement | null>;
+  cartPulse: boolean;
   onCommand: () => void;
   onSection: (sectionId: string) => void;
 }) {
@@ -1200,7 +1209,7 @@ function Header({
             <Wallet size={16} />
             <span>{copy.topupTitle}</span>
           </button>
-          <button className="cart-button" ref={cartButtonRef} onClick={onCartOpen} aria-label={copy.cart}>
+          <button className={`cart-button${cartPulse ? " cart-arrived" : ""}`} ref={cartButtonRef} onClick={onCartOpen} aria-label={copy.cart}>
             <ShoppingCart size={19} />
             {cartCount ? <b>{cartCount}</b> : null}
           </button>
