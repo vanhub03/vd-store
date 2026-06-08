@@ -249,10 +249,16 @@ type CartFlyItem = {
   price: string;
   image: string | null;
   glyph: string;
+  actionText: string;
+  buyText: string;
   left: number;
   top: number;
   width: number;
   height: number;
+  centerX: number;
+  centerY: number;
+  targetX: number;
+  targetY: number;
   dx: number;
   dy: number;
   shrinkX: number;
@@ -263,6 +269,11 @@ type CartFlyItem = {
   midY: number;
   lateX: number;
   lateY: number;
+  trailLeft: number;
+  trailTop: number;
+  trailWidth: number;
+  trailHeight: number;
+  trailPath: string;
 };
 
 type CategoryTile = {
@@ -592,14 +603,33 @@ function App() {
     const sourceRect = origin?.getBoundingClientRect();
     if (!targetRect || !sourceRect || sourceRect.width <= 0 || sourceRect.height <= 0) return;
 
-    const width = Math.min(Math.max(sourceRect.width * 0.78, 150), 270);
-    const height = Math.min(Math.max(sourceRect.height * 0.44, 108), 176);
-    const left = sourceRect.left + sourceRect.width / 2 - width / 2;
-    const top = sourceRect.top + sourceRect.height / 2 - height / 2;
-    const dx = targetRect.left + targetRect.width / 2 - left - width / 2;
-    const dy = targetRect.top + targetRect.height / 2 - top - height / 2;
+    const compact = window.innerWidth < 640;
+    const width = Math.min(Math.max(sourceRect.width * 0.72, compact ? 148 : 210), compact ? 220 : 270);
+    const height = Math.min(Math.max(sourceRect.height * 0.86, compact ? 178 : 238), compact ? 280 : 336);
+    const rawLeft = sourceRect.left + sourceRect.width / 2 - width / 2;
+    const rawTop = sourceRect.top + sourceRect.height / 2 - height / 2;
+    const minLeft = compact ? 10 : 18;
+    const minTop = compact ? 12 : Math.min(96, window.innerHeight * 0.16);
+    const left = Math.min(Math.max(rawLeft, minLeft), Math.max(minLeft, window.innerWidth - width - minLeft));
+    const top = Math.min(Math.max(rawTop, minTop), Math.max(minTop, window.innerHeight - height - 18));
+    const centerX = left + width / 2;
+    const centerY = top + height / 2;
+    const targetX = targetRect.left + targetRect.width / 2;
+    const targetY = targetRect.top + targetRect.height / 2;
+    const dx = targetX - centerX;
+    const dy = targetY - centerY;
     const distance = Math.hypot(dx, dy);
-    const lift = Math.min(340, Math.max(150, distance * 0.34));
+    const lift = Math.min(290, Math.max(130, distance * 0.26));
+    const controlX = centerX + dx * 0.52;
+    const controlY = Math.min(centerY, targetY) - lift;
+    const trailPad = 88;
+    const trailLeft = Math.floor(Math.min(centerX, controlX, targetX) - trailPad);
+    const trailTop = Math.floor(Math.min(centerY, controlY, targetY) - trailPad);
+    const trailRight = Math.ceil(Math.max(centerX, controlX, targetX) + trailPad);
+    const trailBottom = Math.ceil(Math.max(centerY, controlY, targetY) + trailPad);
+    const trailWidth = Math.max(1, trailRight - trailLeft);
+    const trailHeight = Math.max(1, trailBottom - trailTop);
+    const trailPath = `M ${Math.round(centerX - trailLeft)} ${Math.round(centerY - trailTop)} Q ${Math.round(controlX - trailLeft)} ${Math.round(controlY - trailTop)} ${Math.round(targetX - trailLeft)} ${Math.round(targetY - trailTop)}`;
     const id = Date.now() + Math.random();
 
     setCartFlyItems((current) => [
@@ -610,33 +640,44 @@ function App() {
         price: formatProductPrice(product, language),
         image: productArtUrl(product),
         glyph: brandGlyph(product.name),
+        actionText: TEXT[language].addCart,
+        buyText: TEXT[language].buy,
         left,
         top,
         width,
         height,
+        centerX,
+        centerY,
+        targetX,
+        targetY,
         dx,
         dy,
-        shrinkX: dx * 0.03,
-        shrinkY: Math.min(-46, dy * 0.04),
-        earlyX: dx * 0.18,
-        earlyY: dy * 0.1 - lift * 0.82,
-        midX: dx * 0.48,
-        midY: dy * 0.28 - lift,
-        lateX: dx * 0.82,
-        lateY: dy * 0.7 - lift * 0.34
+        shrinkX: dx * 0.02,
+        shrinkY: Math.min(-34, dy * 0.04),
+        earlyX: dx * 0.2,
+        earlyY: dy * 0.08 - lift * 0.72,
+        midX: dx * 0.52,
+        midY: dy * 0.28 - lift * 0.86,
+        lateX: dx * 0.84,
+        lateY: dy * 0.72 - lift * 0.2,
+        trailLeft,
+        trailTop,
+        trailWidth,
+        trailHeight,
+        trailPath
       }
     ]);
 
     const receiveTimer = window.setTimeout(() => {
       setCartPulse(true);
-    }, 2440);
+    }, 2140);
     const clearPulseTimer = window.setTimeout(() => {
       setCartPulse(false);
-    }, 3280);
+    }, 2980);
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
-    }, 2680);
+    }, 2520);
     cartFlyTimersRef.current.push(receiveTimer, clearPulseTimer, timer);
   }
 
@@ -1329,36 +1370,80 @@ function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
   if (!items.length) return null;
   return (
     <div className="cart-fly-layer" aria-hidden="true">
-      {items.map((item) => (
-        <div
-          className="cart-fly-card"
-          key={item.id}
-          style={
-            {
-              "--fly-left": `${item.left}px`,
-              "--fly-top": `${item.top}px`,
-              "--fly-width": `${item.width}px`,
-              "--fly-height": `${item.height}px`,
-              "--fly-dx": `${item.dx}px`,
-              "--fly-dy": `${item.dy}px`,
-              "--fly-shrink-x": `${item.shrinkX}px`,
-              "--fly-shrink-y": `${item.shrinkY}px`,
-              "--fly-early-x": `${item.earlyX}px`,
-              "--fly-early-y": `${item.earlyY}px`,
-              "--fly-mid-x": `${item.midX}px`,
-              "--fly-mid-y": `${item.midY}px`,
-              "--fly-late-x": `${item.lateX}px`,
-              "--fly-late-y": `${item.lateY}px`
-            } as React.CSSProperties
-          }
-        >
-          {item.image ? <img src={item.image} alt="" /> : <span className="cart-fly-glyph">{item.glyph}</span>}
-          <span>
-            <b>{item.name}</b>
-            <small>{item.price}</small>
-          </span>
-        </div>
-      ))}
+      {items.map((item) => {
+        const motionStyle = {
+          "--fly-left": `${item.left}px`,
+          "--fly-top": `${item.top}px`,
+          "--fly-width": `${item.width}px`,
+          "--fly-height": `${item.height}px`,
+          "--fly-center-x": `${item.centerX}px`,
+          "--fly-center-y": `${item.centerY}px`,
+          "--fly-target-x": `${item.targetX}px`,
+          "--fly-target-y": `${item.targetY}px`,
+          "--fly-dx": `${item.dx}px`,
+          "--fly-dy": `${item.dy}px`,
+          "--fly-shrink-x": `${item.shrinkX}px`,
+          "--fly-shrink-y": `${item.shrinkY}px`,
+          "--fly-early-x": `${item.earlyX}px`,
+          "--fly-early-y": `${item.earlyY}px`,
+          "--fly-mid-x": `${item.midX}px`,
+          "--fly-mid-y": `${item.midY}px`,
+          "--fly-late-x": `${item.lateX}px`,
+          "--fly-late-y": `${item.lateY}px`
+        } as React.CSSProperties;
+
+        return (
+          <React.Fragment key={item.id}>
+            <svg
+              className="cart-fly-trail"
+              style={{
+                left: `${item.trailLeft}px`,
+                top: `${item.trailTop}px`,
+                width: `${item.trailWidth}px`,
+                height: `${item.trailHeight}px`
+              }}
+              viewBox={`0 0 ${item.trailWidth} ${item.trailHeight}`}
+            >
+              <path className="cart-fly-trail-halo" d={item.trailPath} pathLength={1} />
+              <path className="cart-fly-trail-line" d={item.trailPath} pathLength={1} />
+            </svg>
+
+            <div className="cart-fly-ghost cart-fly-ghost-one" style={motionStyle} />
+            <div className="cart-fly-ghost cart-fly-ghost-two" style={motionStyle} />
+            {[-34, -18, 8, 24, 42, 58].map((offset, index) => (
+              <i
+                className="cart-fly-spark"
+                key={`${item.id}-spark-${index}`}
+                style={
+                  {
+                    ...motionStyle,
+                    "--spark-delay": `${index * 70}ms`,
+                    "--spark-x": `${offset}px`,
+                    "--spark-y": `${index % 2 ? -18 : 16}px`,
+                    "--spark-size": `${index % 3 === 0 ? 7 : 5}px`
+                  } as React.CSSProperties
+                }
+              />
+            ))}
+
+            <div className="cart-fly-card" style={motionStyle}>
+              <div className="cart-fly-media">
+                {item.image ? <img src={item.image} alt="" /> : <span className="cart-fly-glyph">{item.glyph}</span>}
+              </div>
+              <span className="cart-fly-copy">
+                <b>{item.name}</b>
+                <small>{item.price}</small>
+              </span>
+              <span className="cart-fly-actions">
+                <i>{item.actionText}</i>
+                <i>{item.buyText}</i>
+              </span>
+            </div>
+
+            <span className="cart-fly-pop" style={motionStyle}>+1</span>
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
