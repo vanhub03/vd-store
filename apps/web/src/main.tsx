@@ -243,6 +243,24 @@ type CartItem = {
   quantity: number;
 };
 
+type CartFlyItem = {
+  id: number;
+  name: string;
+  price: string;
+  image: string | null;
+  glyph: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  dx: number;
+  dy: number;
+  midX: number;
+  midY: number;
+  lateX: number;
+  lateY: number;
+};
+
 type CategoryTile = {
   tone: string;
   icon: React.ReactNode;
@@ -365,6 +383,9 @@ function App() {
   const [query, setQuery] = useState(new URLSearchParams(window.location.search).get("q") ?? "");
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
+  const [cartFlyItems, setCartFlyItems] = useState<CartFlyItem[]>([]);
+  const cartButtonRef = useRef<HTMLButtonElement>(null);
+  const cartFlyTimersRef = useRef<number[]>([]);
 
   useReveal();
 
@@ -437,6 +458,13 @@ function App() {
     return () => window.clearInterval(timer);
   }, [qr, token]);
 
+  useEffect(() => {
+    return () => {
+      cartFlyTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      cartFlyTimersRef.current = [];
+    };
+  }, []);
+
   async function loadPublicData() {
     try {
       const [nextCatalog, nextReviews] = await Promise.all([
@@ -490,7 +518,51 @@ function App() {
     localStorage.setItem(LANGUAGE_KEY, next);
   }
 
-  function addToCart(product: Product, quantity = 1) {
+  function playCartFlyAnimation(product: Product, origin?: Element | null) {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const targetRect = cartButtonRef.current?.getBoundingClientRect();
+    const sourceRect = origin?.getBoundingClientRect();
+    if (!targetRect || !sourceRect || sourceRect.width <= 0 || sourceRect.height <= 0) return;
+
+    const width = Math.min(Math.max(sourceRect.width, 92), 230);
+    const height = Math.min(Math.max(sourceRect.height, 72), 168);
+    const left = sourceRect.left + sourceRect.width / 2 - width / 2;
+    const top = sourceRect.top + sourceRect.height / 2 - height / 2;
+    const dx = targetRect.left + targetRect.width / 2 - left - width / 2;
+    const dy = targetRect.top + targetRect.height / 2 - top - height / 2;
+    const distance = Math.hypot(dx, dy);
+    const lift = Math.min(150, Math.max(66, distance * 0.18));
+    const id = Date.now() + Math.random();
+
+    setCartFlyItems((current) => [
+      ...current,
+      {
+        id,
+        name: localizedName(product, language),
+        price: formatProductPrice(product, language),
+        image: productArtUrl(product),
+        glyph: brandGlyph(product.name),
+        left,
+        top,
+        width,
+        height,
+        dx,
+        dy,
+        midX: dx * 0.44,
+        midY: dy * 0.36 - lift,
+        lateX: dx * 0.86,
+        lateY: dy * 0.84 - 22
+      }
+    ]);
+
+    const timer = window.setTimeout(() => {
+      setCartFlyItems((current) => current.filter((item) => item.id !== id));
+      cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
+    }, 820);
+    cartFlyTimersRef.current.push(timer);
+  }
+
+  function addToCart(product: Product, quantity = 1, origin?: Element | null) {
     const stock = availableQuantity(product);
     const maxQuantity = product.deliveryType === "SHARED_CONTENT" ? 999 : Math.max(0, stock);
     if (maxQuantity <= 0) return;
@@ -505,7 +577,7 @@ function App() {
       }
       return [...current, { product, quantity: Math.min(maxQuantity, Math.max(1, quantity)) }];
     });
-    setCartOpen(true);
+    playCartFlyAnimation(product, origin);
   }
 
   function updateCartQuantity(productId: string, quantity: number) {
@@ -815,9 +887,11 @@ function App() {
           else setAuthOpen(true);
         }}
         onCartOpen={() => setCartOpen(true)}
+        cartButtonRef={cartButtonRef}
         onCommand={() => setCommandOpen(true)}
         onSection={navigateHomeSection}
       />
+      <CartFlyLayer items={cartFlyItems} />
 
       {activeTab === "home" ? (
         <HomeTab
@@ -901,7 +975,7 @@ function App() {
           initialQuantity={selectedQuantity}
           loading={loading}
           onClose={() => setSelectedProduct(null)}
-          onAddCart={(quantity) => addToCart(selectedProduct, quantity)}
+          onAddCart={(quantity, origin) => addToCart(selectedProduct, quantity, origin)}
           onCheckout={(quantity) => checkoutProduct(selectedProduct, quantity)}
           language={language}
         />
@@ -1011,6 +1085,7 @@ function Header({
   onLogout,
   onWalletOpen,
   onCartOpen,
+  cartButtonRef,
   onCommand,
   onSection
 }: {
@@ -1026,6 +1101,7 @@ function Header({
   onLogout: () => void;
   onWalletOpen: () => void;
   onCartOpen: () => void;
+  cartButtonRef: React.RefObject<HTMLButtonElement | null>;
   onCommand: () => void;
   onSection: (sectionId: string) => void;
 }) {
@@ -1120,7 +1196,7 @@ function Header({
             <Wallet size={16} />
             <span>{copy.topupTitle}</span>
           </button>
-          <button className="cart-button" onClick={onCartOpen} aria-label={copy.cart}>
+          <button className="cart-button" ref={cartButtonRef} onClick={onCartOpen} aria-label={copy.cart}>
             <ShoppingCart size={19} />
             {cartCount ? <b>{cartCount}</b> : null}
           </button>
@@ -1168,6 +1244,40 @@ function Header({
   );
 }
 
+function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="cart-fly-layer" aria-hidden="true">
+      {items.map((item) => (
+        <div
+          className="cart-fly-card"
+          key={item.id}
+          style={
+            {
+              "--fly-left": `${item.left}px`,
+              "--fly-top": `${item.top}px`,
+              "--fly-width": `${item.width}px`,
+              "--fly-height": `${item.height}px`,
+              "--fly-dx": `${item.dx}px`,
+              "--fly-dy": `${item.dy}px`,
+              "--fly-mid-x": `${item.midX}px`,
+              "--fly-mid-y": `${item.midY}px`,
+              "--fly-late-x": `${item.lateX}px`,
+              "--fly-late-y": `${item.lateY}px`
+            } as React.CSSProperties
+          }
+        >
+          {item.image ? <img src={item.image} alt="" /> : <span className="cart-fly-glyph">{item.glyph}</span>}
+          <span>
+            <b>{item.name}</b>
+            <small>{item.price}</small>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function HomeTab({
   catalog,
   products,
@@ -1188,7 +1298,7 @@ function HomeTab({
   error: string;
   language: Language;
   onProduct: (product: Product) => void;
-  onAddCart: (product: Product, quantity?: number) => void;
+  onAddCart: (product: Product, quantity?: number, origin?: Element | null) => void;
   onCheckout: (product: Product, quantity?: number) => void;
   onShop: () => void;
   onWallet: () => void;
@@ -1327,7 +1437,7 @@ function FeaturedProducts({
   error: string;
   language: Language;
   onProduct: (product: Product) => void;
-  onAddCart: (product: Product, quantity?: number) => void;
+  onAddCart: (product: Product, quantity?: number, origin?: Element | null) => void;
   onCheckout: (product: Product, quantity?: number) => void;
   onShop: () => void;
 }) {
@@ -1376,7 +1486,7 @@ function FeaturedProducts({
               language={language}
               index={index}
               onView={() => onProduct(product)}
-              onAddCart={() => onAddCart(product)}
+              onAddCart={(origin) => onAddCart(product, 1, origin)}
               onCheckout={() => onCheckout(product, 1)}
             />
           ))
@@ -1415,7 +1525,7 @@ function ProductsTab({
   error: string;
   onQuery: (value: string) => void;
   onView: (product: Product) => void;
-  onAddCart: (product: Product, quantity?: number) => void;
+  onAddCart: (product: Product, quantity?: number, origin?: Element | null) => void;
   onCheckout: (product: Product, quantity?: number) => void;
   language: Language;
 }) {
@@ -1487,7 +1597,7 @@ function ProductsTab({
                 language={language}
                 index={index}
                 onView={() => onView(product)}
-                onAddCart={() => onAddCart(product)}
+                onAddCart={(origin) => onAddCart(product, 1, origin)}
                 onCheckout={() => onCheckout(product, 1)}
               />
             ))}
@@ -1523,7 +1633,7 @@ function ProductCard({
   product: Product;
   loading: string;
   onView: () => void;
-  onAddCart: () => void;
+  onAddCart: (origin?: Element | null) => void;
   onCheckout: () => void;
   language: Language;
   index?: number;
@@ -1540,6 +1650,11 @@ function ProductCard({
     const rect = event.currentTarget.getBoundingClientRect();
     event.currentTarget.style.setProperty("--mx", `${((event.clientX - rect.left) / rect.width) * 100}%`);
     event.currentTarget.style.setProperty("--my", `${((event.clientY - rect.top) / rect.height) * 100}%`);
+  }
+
+  function handleAddCart(event: React.MouseEvent<HTMLButtonElement>) {
+    const card = event.currentTarget.closest(".product-card");
+    onAddCart(card?.querySelector(".product-image-button") ?? card ?? event.currentTarget);
   }
 
   return (
@@ -1565,7 +1680,7 @@ function ProductCard({
         <small>{product.category?.name ?? copy.categoryFallback}</small>
       </div>
       <div className="product-card-actions">
-        <button className="ghost-small" onClick={onAddCart} disabled={disabled || opening || actionLoading}>
+        <button className="ghost-small" onClick={handleAddCart} disabled={disabled || opening || actionLoading}>
           <ShoppingCart size={15} />
           {copy.addCart}
         </button>
@@ -1812,7 +1927,7 @@ function ProductDialog({
   initialQuantity: number;
   loading: string;
   onClose: () => void;
-  onAddCart: (quantity: number) => void;
+  onAddCart: (quantity: number, origin?: Element | null) => void;
   onCheckout: (quantity: number) => void;
   language: Language;
 }) {
@@ -1842,6 +1957,11 @@ function ProductDialog({
   useEffect(() => {
     setQuantity(Math.max(1, Math.min(Math.max(1, maxQuantity), initialQuantity)));
   }, [initialQuantity, maxQuantity, product.id]);
+
+  function handleAddCart(event: React.MouseEvent<HTMLButtonElement>) {
+    const dialog = event.currentTarget.closest(".product-detail-modal");
+    onAddCart(quantity, dialog?.querySelector(".gallery-main") ?? event.currentTarget);
+  }
 
   return (
     <div className={`overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
@@ -1942,7 +2062,7 @@ function ProductDialog({
               <Zap size={17} />
               {copy.buy}
             </button>
-            <button className="secondary-button" onClick={() => onAddCart(quantity)} disabled={invalidQuantity}>
+            <button className="secondary-button" onClick={handleAddCart} disabled={invalidQuantity}>
               <ShoppingCart size={17} />
               {copy.addCart}
             </button>
