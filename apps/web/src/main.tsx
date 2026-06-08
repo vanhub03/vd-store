@@ -273,6 +273,18 @@ type CartFlyItem = {
   midY: number;
   lateX: number;
   lateY: number;
+  arc1X: number;
+  arc1Y: number;
+  arc2X: number;
+  arc2Y: number;
+  arc3X: number;
+  arc3Y: number;
+  arc4X: number;
+  arc4Y: number;
+  arc5X: number;
+  arc5Y: number;
+  arc6X: number;
+  arc6Y: number;
   trailLeft: number;
   trailTop: number;
   trailWidth: number;
@@ -642,6 +654,21 @@ function App() {
       const scaledInset = (height - height * scale) / 2;
       return Math.max(value, minVisibleY - top - scaledInset);
     };
+    const pointOnCurve = (t: number, scale: number) => {
+      const inverse = 1 - t;
+      const x = inverse * inverse * centerX + 2 * inverse * t * controlX + t * t * targetX;
+      const y = inverse * inverse * centerY + 2 * inverse * t * controlY + t * t * targetY;
+      return {
+        x: x - centerX,
+        y: clampFlyY(y - centerY, scale)
+      };
+    };
+    const arc1 = pointOnCurve(0.12, 0.92);
+    const arc2 = pointOnCurve(0.26, 0.78);
+    const arc3 = pointOnCurve(0.42, 0.62);
+    const arc4 = pointOnCurve(0.58, 0.46);
+    const arc5 = pointOnCurve(0.74, 0.3);
+    const arc6 = pointOnCurve(0.9, 0.14);
     const deliveryLabel = postPaymentLabel(product.deliveryType, language);
     const stockLabel =
       product.deliveryType === "SHARED_CONTENT"
@@ -680,6 +707,18 @@ function App() {
         midY: clampFlyY(dy * 0.3 - lift * 0.84, 0.36),
         lateX: dx * 0.83,
         lateY: clampFlyY(dy * 0.73 - lift * 0.2, 0.18),
+        arc1X: arc1.x,
+        arc1Y: arc1.y,
+        arc2X: arc2.x,
+        arc2Y: arc2.y,
+        arc3X: arc3.x,
+        arc3Y: arc3.y,
+        arc4X: arc4.x,
+        arc4Y: arc4.y,
+        arc5X: arc5.x,
+        arc5Y: arc5.y,
+        arc6X: arc6.x,
+        arc6Y: arc6.y,
         trailLeft,
         trailTop,
         trailWidth,
@@ -690,14 +729,14 @@ function App() {
 
     const receiveTimer = window.setTimeout(() => {
       setCartPulse(true);
-    }, 2060);
+    }, 2240);
     const clearPulseTimer = window.setTimeout(() => {
       setCartPulse(false);
-    }, 2860);
+    }, 3040);
     const timer = window.setTimeout(() => {
       setCartFlyItems((current) => current.filter((item) => item.id !== id));
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== timer);
-    }, 2520);
+    }, 2720);
     const originTimer = window.setTimeout(() => {
       sourceCard.classList.remove("cart-throw-origin");
       cartFlyTimersRef.current = cartFlyTimersRef.current.filter((savedTimer) => savedTimer !== originTimer);
@@ -1413,7 +1452,19 @@ function CartFlyLayer({ items }: { items: CartFlyItem[] }) {
           "--fly-mid-x": `${item.midX}px`,
           "--fly-mid-y": `${item.midY}px`,
           "--fly-late-x": `${item.lateX}px`,
-          "--fly-late-y": `${item.lateY}px`
+          "--fly-late-y": `${item.lateY}px`,
+          "--fly-arc1-x": `${item.arc1X}px`,
+          "--fly-arc1-y": `${item.arc1Y}px`,
+          "--fly-arc2-x": `${item.arc2X}px`,
+          "--fly-arc2-y": `${item.arc2Y}px`,
+          "--fly-arc3-x": `${item.arc3X}px`,
+          "--fly-arc3-y": `${item.arc3Y}px`,
+          "--fly-arc4-x": `${item.arc4X}px`,
+          "--fly-arc4-y": `${item.arc4Y}px`,
+          "--fly-arc5-x": `${item.arc5X}px`,
+          "--fly-arc5-y": `${item.arc5Y}px`,
+          "--fly-arc6-x": `${item.arc6X}px`,
+          "--fly-arc6-y": `${item.arc6Y}px`
         } as React.CSSProperties;
 
         return (

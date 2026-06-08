@@ -524,7 +524,7 @@ textarea {
   z-index: 80;
   overflow: visible;
   pointer-events: none;
-  animation: neonTrailScene 2500ms cubic-bezier(0.18, 0.82, 0.12, 1) both;
+  animation: neonTrailScene 2680ms linear both;
 }
 
 .cart-fly-trail-halo,
@@ -538,13 +538,13 @@ textarea {
 .cart-fly-trail-halo {
   stroke: rgba(99, 216, 212, 0.12);
   stroke-width: 7;
-  animation: neonTrailDraw 1760ms cubic-bezier(0.18, 0.82, 0.12, 1) 170ms forwards;
+  animation: neonTrailDraw 2060ms linear 170ms forwards;
 }
 
 .cart-fly-trail-line {
   stroke: rgba(99, 216, 212, 0.9);
   stroke-width: 2;
-  animation: neonTrailDraw 1640ms cubic-bezier(0.18, 0.82, 0.12, 1) 190ms forwards;
+  animation: neonTrailDraw 1980ms linear 190ms forwards;
 }
 
 .cart-fly-ghost {
@@ -561,7 +561,7 @@ textarea {
   will-change: transform, opacity;
   z-index: 81;
   contain: layout paint style;
-  animation: neonGhostTrail 2260ms cubic-bezier(0.18, 0.82, 0.12, 1) 100ms both;
+  animation: neonGhostTrail 2520ms linear 80ms both;
 }
 
 .cart-fly-spark {
@@ -578,7 +578,7 @@ textarea {
   opacity: 0;
   will-change: transform, opacity;
   contain: layout paint style;
-  animation: neonSparkArc 1840ms cubic-bezier(0.16, 0.8, 0.18, 1) var(--spark-delay) both;
+  animation: neonSparkArc 2100ms linear var(--spark-delay) both;
 }
 
 .cart-fly-card {
@@ -603,7 +603,7 @@ textarea {
   backface-visibility: hidden;
   will-change: transform, opacity;
   contain: layout paint style;
-  animation: neonThrowToCart 2460ms cubic-bezier(0.16, 0.78, 0.12, 1) forwards;
+  animation: neonThrowToCart 2600ms linear forwards;
   z-index: 84;
 }
 
@@ -767,7 +767,7 @@ textarea {
   box-shadow: 0 0 0 6px rgba(99, 216, 212, 0.16), 0 18px 34px rgba(0, 0, 0, 0.34);
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.4);
-  animation: cartFlyPop 900ms cubic-bezier(0.18, 0.9, 0.18, 1) 2020ms both;
+  animation: cartFlyPop 900ms cubic-bezier(0.18, 0.9, 0.18, 1) 2180ms both;
 }
 
 .lang-toggle:hover,
@@ -3638,25 +3638,29 @@ textarea {
     opacity: 0;
     transform: translate3d(0, 0, 0) scale(0.98) rotateZ(0deg);
   }
-  12% {
-    opacity: 0.42;
-    transform: translate3d(0, 0, 0) scale(1.01) rotateZ(0deg);
+  14% {
+    opacity: 0.36;
+    transform: translate3d(var(--fly-arc1-x), var(--fly-arc1-y), 0) scale(0.92) rotateZ(-7deg);
   }
   30% {
-    opacity: 0.32;
-    transform: translate3d(var(--fly-shrink-x), var(--fly-shrink-y), 0) scale(0.78) rotateZ(-7deg);
+    opacity: 0.28;
+    transform: translate3d(var(--fly-arc2-x), var(--fly-arc2-y), 0) scale(0.78) rotateZ(-17deg);
   }
-  52% {
-    opacity: 0.22;
-    transform: translate3d(var(--fly-early-x), var(--fly-early-y), 0) scale(0.56) rotateZ(-24deg);
+  48% {
+    opacity: 0.2;
+    transform: translate3d(var(--fly-arc3-x), var(--fly-arc3-y), 0) scale(0.62) rotateZ(-31deg);
   }
-  76% {
+  66% {
     opacity: 0.12;
-    transform: translate3d(var(--fly-mid-x), var(--fly-mid-y), 0) scale(0.34) rotateZ(34deg);
+    transform: translate3d(var(--fly-arc4-x), var(--fly-arc4-y), 0) scale(0.44) rotateZ(-49deg);
+  }
+  84% {
+    opacity: 0.08;
+    transform: translate3d(var(--fly-arc6-x), var(--fly-arc6-y), 0) scale(0.16) rotateZ(-82deg);
   }
   100% {
     opacity: 0;
-    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.1) rotateZ(164deg);
+    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.08) rotateZ(-108deg);
   }
 }
 
@@ -3668,13 +3672,17 @@ textarea {
   12% {
     opacity: 0.98;
   }
-  38% {
+  34% {
     opacity: 0.84;
-    transform: translate3d(calc(var(--fly-early-x) + var(--spark-x)), calc(var(--fly-early-y) + var(--spark-y)), 0) scale(0.92);
+    transform: translate3d(calc(var(--fly-arc2-x) + var(--spark-x)), calc(var(--fly-arc2-y) + var(--spark-y)), 0) scale(0.86);
   }
-  72% {
+  62% {
     opacity: 0.54;
-    transform: translate3d(calc(var(--fly-mid-x) + var(--spark-x)), calc(var(--fly-mid-y) + var(--spark-y)), 0) scale(0.66);
+    transform: translate3d(calc(var(--fly-arc4-x) + var(--spark-x)), calc(var(--fly-arc4-y) + var(--spark-y)), 0) scale(0.6);
+  }
+  84% {
+    opacity: 0.26;
+    transform: translate3d(calc(var(--fly-arc6-x) + var(--spark-x)), calc(var(--fly-arc6-y) + var(--spark-y)), 0) scale(0.38);
   }
   100% {
     opacity: 0;
@@ -3687,33 +3695,41 @@ textarea {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1) rotateZ(0deg);
   }
-  12% {
+  8% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1.01) rotateZ(0deg);
+    transform: translate3d(var(--fly-shrink-x), var(--fly-shrink-y), 0) scale(0.96) rotateZ(-3deg);
   }
-  30% {
+  18% {
     opacity: 1;
-    transform: translate3d(var(--fly-shrink-x), var(--fly-shrink-y), 0) scale(0.78) rotateZ(-8deg);
+    transform: translate3d(var(--fly-arc1-x), var(--fly-arc1-y), 0) scale(0.88) rotateZ(-9deg);
   }
-  48% {
+  32% {
     opacity: 1;
-    transform: translate3d(var(--fly-early-x), var(--fly-early-y), 0) scale(0.58) rotateZ(-34deg);
+    transform: translate3d(var(--fly-arc2-x), var(--fly-arc2-y), 0) scale(0.76) rotateZ(-20deg);
   }
-  68% {
+  46% {
     opacity: 1;
-    transform: translate3d(var(--fly-mid-x), var(--fly-mid-y), 0) scale(0.36) rotateZ(92deg);
+    transform: translate3d(var(--fly-arc3-x), var(--fly-arc3-y), 0) scale(0.6) rotateZ(-35deg);
   }
-  84% {
-    opacity: 0.96;
-    transform: translate3d(var(--fly-late-x), var(--fly-late-y), 0) scale(0.18) rotateZ(190deg);
+  60% {
+    opacity: 1;
+    transform: translate3d(var(--fly-arc4-x), var(--fly-arc4-y), 0) scale(0.44) rotateZ(-54deg);
+  }
+  74% {
+    opacity: 0.98;
+    transform: translate3d(var(--fly-arc5-x), var(--fly-arc5-y), 0) scale(0.28) rotateZ(-78deg);
+  }
+  88% {
+    opacity: 0.94;
+    transform: translate3d(var(--fly-arc6-x), var(--fly-arc6-y), 0) scale(0.14) rotateZ(-108deg);
   }
   96% {
-    opacity: 0.86;
-    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.08) rotateZ(288deg);
+    opacity: 0.84;
+    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.08) rotateZ(-134deg);
   }
   100% {
     opacity: 0;
-    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.05) rotateZ(314deg);
+    transform: translate3d(var(--fly-dx), var(--fly-dy), 0) scale(0.05) rotateZ(-146deg);
   }
 }
 
