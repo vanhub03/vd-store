@@ -1458,8 +1458,7 @@ function Hero({
       </div>
 
       <div
-        className={`hero-showcase reveal${heroCards.length ? "" : " is-empty"}`}
-        style={{ "--d": "110ms" } as React.CSSProperties}
+        className={`hero-showcase${heroCards.length ? "" : " is-empty"}`}
         ref={orbit.containerRef}
         aria-label={vi ? "Sản phẩm nổi bật" : "Featured products"}
       >

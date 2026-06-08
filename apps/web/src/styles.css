@@ -767,6 +767,9 @@ textarea {
   border-radius: 30px;
   isolation: isolate;
   perspective: 1100px;
+  --fallback-orbit-x: min(205px, 30vw);
+  --fallback-orbit-y: min(142px, 19vw);
+  --fallback-orbit-y-half: min(72px, 10vw);
 }
 
 .hero-showcase::before {
@@ -855,31 +858,55 @@ textarea {
 }
 
 .floating-product-card:nth-of-type(1) {
+  --orbit-x: 0px;
+  --orbit-y: calc(0px - var(--fallback-orbit-y));
+  --orbit-scale: 0.9;
+  --orbit-opacity: 0.82;
   width: 176px;
   min-height: 142px;
 }
 
 .floating-product-card:nth-of-type(2) {
+  --orbit-x: var(--fallback-orbit-x);
+  --orbit-y: calc(0px - var(--fallback-orbit-y-half));
+  --orbit-scale: 0.95;
+  --orbit-opacity: 0.9;
   width: 204px;
   min-height: 152px;
 }
 
 .floating-product-card:nth-of-type(3) {
+  --orbit-x: var(--fallback-orbit-x);
+  --orbit-y: var(--fallback-orbit-y-half);
+  --orbit-scale: 1.02;
+  --orbit-opacity: 0.98;
   width: 204px;
   min-height: 152px;
 }
 
 .floating-product-card:nth-of-type(4) {
+  --orbit-x: 0px;
+  --orbit-y: var(--fallback-orbit-y);
+  --orbit-scale: 1.04;
+  --orbit-opacity: 1;
   width: 188px;
   min-height: 138px;
 }
 
 .floating-product-card:nth-of-type(5) {
+  --orbit-x: calc(0px - var(--fallback-orbit-x));
+  --orbit-y: var(--fallback-orbit-y-half);
+  --orbit-scale: 0.98;
+  --orbit-opacity: 0.92;
   width: 180px;
   min-height: 136px;
 }
 
 .floating-product-card:nth-of-type(6) {
+  --orbit-x: calc(0px - var(--fallback-orbit-x));
+  --orbit-y: calc(0px - var(--fallback-orbit-y-half));
+  --orbit-scale: 0.92;
+  --orbit-opacity: 0.84;
   width: 180px;
   min-height: 136px;
 }
