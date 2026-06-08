@@ -1922,6 +1922,10 @@ textarea {
   animation: overlayOut 220ms var(--ease) both;
 }
 
+.auth-overlay {
+  z-index: 95;
+}
+
 .dialog,
 .command-panel,
 .checkout-modal,
