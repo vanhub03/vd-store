@@ -92,24 +92,25 @@ enum PaymentMethod {
 }
 
 model TelegramUser {
-  id           String              @id @default(cuid())
-  telegramId   String              @unique
-  email        String?             @unique
+  id           String   @id @default(cuid())
+  telegramId   String   @unique
+  email        String?  @unique
   passwordHash String?
   displayName  String?
   username     String?
   firstName    String?
   lastName     String?
   languageCode String?
-  isBlocked    Boolean             @default(false)
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  isBlocked    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   orders              Order[]
   payments            Payment[]
   walletEntries       WalletLedgerEntry[]
   broadcastDeliveries BroadcastDelivery[]
   reviews             ProductReview[]
+  voucherRedemptions  VoucherRedemption[]
 }
 
 model Admin {
@@ -123,6 +124,7 @@ model Admin {
 
   auditLogs  AuditLog[]
   broadcasts Broadcast[]
+  vouchers   Voucher[]
 }
 
 model Category {
@@ -205,31 +207,87 @@ model InventoryItem {
 }
 
 model Order {
-  id             String        @id @default(cuid())
-  code           String        @unique
-  userId         String
-  productId      String
-  quantity       Int           @default(1)
-  unitPrice      Int
-  totalAmount    Int
-  status         OrderStatus
-  manualStatus   ManualOrderStatus @default(PENDING)
-  paymentMethod  PaymentMethod
-  deliveryText   String?
-  expiresAt      DateTime?
-  fulfilledAt    DateTime?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id              String            @id @default(cuid())
+  code            String            @unique
+  checkoutGroupId String?
+  userId          String
+  productId       String
+  quantity        Int               @default(1)
+  unitPrice       Int
+  subtotalAmount  Int               @default(0)
+  discountAmount  Int               @default(0)
+  totalAmount     Int
+  status          OrderStatus
+  manualStatus    ManualOrderStatus @default(PENDING)
+  paymentMethod   PaymentMethod
+  voucherCode     String?
+  voucherId       String?
+  deliveryText    String?
+  expiresAt       DateTime?
+  fulfilledAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
-  user            TelegramUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product         Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
-  payments        Payment[]
-  inventoryItems  InventoryItem[]
-  walletEntries   WalletLedgerEntry[]
+  user              TelegramUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product           Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  voucher           Voucher?            @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+  payments          Payment[]
+  inventoryItems    InventoryItem[]
+  walletEntries     WalletLedgerEntry[]
+  voucherRedemption VoucherRedemption?
 
   @@index([userId, createdAt])
   @@index([status, expiresAt])
   @@index([manualStatus, createdAt])
+  @@index([voucherId])
+  @@index([checkoutGroupId])
+}
+
+model Voucher {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  discountPercent   Int
+  maxDiscountAmount Int?
+  maxDiscountUsdt   Decimal? @db.Decimal(18, 8)
+  active            Boolean  @default(true)
+  firstOrderOnly    Boolean  @default(false)
+  maxUses           Int?
+  usedCount         Int      @default(0)
+  startsAt          DateTime @default(now())
+  expiresAt         DateTime
+  createdByAdminId  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  createdBy   Admin?              @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  orders      Order[]
+  redemptions VoucherRedemption[]
+
+  @@index([active, expiresAt])
+  @@index([createdByAdminId])
+}
+
+model VoucherRedemption {
+  id                   String   @id @default(cuid())
+  voucherId            String
+  userId               String
+  orderId              String   @unique
+  subtotalAmount       Int
+  discountAmount       Int
+  totalAmount          Int
+  claimIpHash          String?
+  claimFingerprintHash String?
+  createdAt            DateTime @default(now())
+
+  voucher Voucher      @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  user    TelegramUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order   Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([voucherId, userId])
+  @@unique([voucherId, claimFingerprintHash])
+  @@index([userId, createdAt])
+  @@index([voucherId, createdAt])
+  @@index([voucherId, claimIpHash])
 }
 
 model Payment {
@@ -286,9 +344,9 @@ model WalletLedgerEntry {
 }
 
 model BankTransaction {
-  id                    String   @id @default(cuid())
-  provider              String   @default("sepay")
-  providerTransactionId String   @unique
+  id                    String    @id @default(cuid())
+  provider              String    @default("sepay")
+  providerTransactionId String    @unique
   gateway               String?
   transactionDate       DateTime?
   accountNumber         String?
@@ -301,7 +359,7 @@ model BankTransaction {
   referenceCode         String?
   rawPayload            Json
   paymentId             String?
-  createdAt             DateTime @default(now())
+  createdAt             DateTime  @default(now())
 
   payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
@@ -310,16 +368,16 @@ model BankTransaction {
 }
 
 model Broadcast {
-  id             String          @id @default(cuid())
-  title          String
-  message        String
-  status         BroadcastStatus @default(DRAFT)
-  target         String          @default("all")
-  sentCount      Int             @default(0)
-  failedCount    Int             @default(0)
+  id               String          @id @default(cuid())
+  title            String
+  message          String
+  status           BroadcastStatus @default(DRAFT)
+  target           String          @default("all")
+  sentCount        Int             @default(0)
+  failedCount      Int             @default(0)
   createdByAdminId String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   createdBy  Admin?              @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
   deliveries BroadcastDelivery[]

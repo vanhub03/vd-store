@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
 import { ManualOrderStatus, ProductDeliveryType, ProductStatus } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
 import { ShopService, slugify } from "../domain/shop.service";
@@ -135,6 +135,48 @@ class ManualOrderStatusDto {
   status!: ManualOrderStatus;
 }
 
+class VoucherDto {
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  discountPercent!: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxDiscountAmount?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0.00000001)
+  maxDiscountUsdt?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  firstOrderOnly?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxUses?: number | null;
+
+  @IsOptional()
+  @IsString()
+  startsAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  expiresAt?: string | null;
+}
+
 @Controller("admin")
 @UseGuards(AdminAuthGuard)
 export class AdminController {
@@ -228,6 +270,21 @@ export class AdminController {
   @Get("payments")
   payments() {
     return this.shop.listPayments();
+  }
+
+  @Get("vouchers")
+  vouchers() {
+    return this.shop.listVouchers();
+  }
+
+  @Post("vouchers")
+  createVoucher(@Req() request: AdminRequest, @Body() body: VoucherDto) {
+    return this.shop.createVoucher(body, request.admin!.id);
+  }
+
+  @Put("vouchers/:id")
+  updateVoucher(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: Partial<VoucherDto>) {
+    return this.shop.updateVoucher(id, body, request.admin!.id);
   }
 
   @Get("broadcasts")

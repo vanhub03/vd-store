@@ -403,6 +403,10 @@ button:disabled {
   grid-template-columns: minmax(220px, 1fr) 120px auto;
 }
 
+.formGrid.voucherForm {
+  grid-template-columns: minmax(170px, 1fr) 105px 130px 150px 130px;
+}
+
 .mutedText {
   color: #64748b;
   font-size: 13px;

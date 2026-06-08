@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
 import { OrderStatus, PaymentStatus, ProductStatus } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
-import { ShopService } from "../domain/shop.service";
+import { CartOrderItemInput, ShopService, VoucherClaim } from "../domain/shop.service";
 
 @Injectable()
 export class StoreService {
@@ -177,6 +177,16 @@ export class StoreService {
     const effectiveStatus = await this.resolvePaymentStatus(payment);
     const effectiveOrderStatus =
       effectiveStatus === PaymentStatus.EXPIRED && payment.order?.status === OrderStatus.PENDING_PAYMENT ? OrderStatus.EXPIRED : payment.order?.status;
+    const groupOrders = payment.order?.checkoutGroupId
+      ? await this.prisma.order.findMany({
+          where: { checkoutGroupId: payment.order.checkoutGroupId },
+          orderBy: { createdAt: "asc" },
+          include: { product: { select: { id: true, name: true, deliveryType: true } } }
+        })
+      : payment.order
+        ? [payment.order]
+        : [];
+    const deliveryText = groupOrders.length > 1 ? groupOrders.map((order) => `${order.product.name}\n${order.deliveryText ?? ""}`.trim()).join("\n\n") : payment.order?.deliveryText;
 
     return {
       code: payment.code,
@@ -197,12 +207,13 @@ export class StoreService {
         ? {
             code: payment.order.code,
             status: effectiveOrderStatus,
-            quantity: payment.order.quantity,
-            totalAmount: payment.order.totalAmount,
-            deliveryText: payment.order.deliveryText,
-            product: payment.order.product
+            quantity: groupOrders.reduce((sum, order) => sum + order.quantity, 0),
+            totalAmount: payment.amount,
+            deliveryText,
+            product: groupOrders.length > 1 ? { id: payment.order.id, name: `${groupOrders.length} sản phẩm`, deliveryType: "MANUAL" as const } : payment.order.product
           }
-        : null
+        : null,
+      orders: groupOrders
     };
   }
 
@@ -210,7 +221,7 @@ export class StoreService {
     id: string;
     status: PaymentStatus;
     expiresAt: Date | null;
-    order: { id: string; status: OrderStatus; expiresAt: Date | null } | null;
+    order: { id: string; status: OrderStatus; expiresAt: Date | null; checkoutGroupId: string | null } | null;
   }) {
     if (payment.status !== PaymentStatus.PENDING) return payment.status;
 
@@ -222,10 +233,20 @@ export class StoreService {
       data: { status: PaymentStatus.EXPIRED }
     });
     if (payment.order?.status === OrderStatus.PENDING_PAYMENT) {
-      await this.prisma.order.update({
-        where: { id: payment.order.id },
-        data: { status: OrderStatus.EXPIRED }
-      });
+      if (typeof this.shop.releaseVoucherReservation === "function") {
+        await this.shop.releaseVoucherReservation(payment.order.id);
+      }
+      if (payment.order.checkoutGroupId) {
+        await this.prisma.order.updateMany({
+          where: { checkoutGroupId: payment.order.checkoutGroupId },
+          data: { status: OrderStatus.EXPIRED }
+        });
+      } else {
+        await this.prisma.order.update({
+          where: { id: payment.order.id },
+          data: { status: OrderStatus.EXPIRED }
+        });
+      }
     }
     return PaymentStatus.EXPIRED;
   }
@@ -234,16 +255,36 @@ export class StoreService {
     return this.shop.createTopup(telegramId, amount);
   }
 
-  purchaseWithWallet(telegramId: string, productId: string, quantity: number) {
-    return this.shop.purchaseWithWallet(telegramId, productId, quantity, "web");
+  purchaseWithWallet(telegramId: string, productId: string, quantity: number, voucherCode?: string | null, voucherClaim?: VoucherClaim | null) {
+    return this.shop.purchaseWithWallet(telegramId, productId, quantity, "web", voucherCode, voucherClaim);
   }
 
-  createBankOrder(telegramId: string, productId: string, quantity: number) {
-    return this.shop.createBankOrder(telegramId, productId, quantity, "web");
+  createBankOrder(telegramId: string, productId: string, quantity: number, voucherCode?: string | null, voucherClaim?: VoucherClaim | null) {
+    return this.shop.createBankOrder(telegramId, productId, quantity, "web", voucherCode, voucherClaim);
   }
 
-  createUsdtOrder(telegramId: string, productId: string, quantity: number) {
-    return this.shop.createCryptomusOrder(telegramId, productId, quantity, "web");
+  createUsdtOrder(telegramId: string, productId: string, quantity: number, voucherCode?: string | null, voucherClaim?: VoucherClaim | null) {
+    return this.shop.createCryptomusOrder(telegramId, productId, quantity, "web", voucherCode, voucherClaim);
+  }
+
+  previewVoucher(telegramId: string, productId: string, quantity: number, voucherCode: string, voucherClaim?: VoucherClaim | null) {
+    return this.shop.previewVoucher(telegramId, productId, quantity, voucherCode, "web", voucherClaim);
+  }
+
+  previewCartVoucher(telegramId: string, items: CartOrderItemInput[], voucherCode: string, voucherClaim?: VoucherClaim | null) {
+    return this.shop.previewCartVoucher(telegramId, items, voucherCode, "web", voucherClaim);
+  }
+
+  purchaseCartWithWallet(telegramId: string, items: CartOrderItemInput[], voucherCode?: string | null, voucherClaim?: VoucherClaim | null) {
+    return this.shop.purchaseCartWithWallet(telegramId, items, "web", voucherCode, voucherClaim);
+  }
+
+  createCartBankOrder(telegramId: string, items: CartOrderItemInput[], voucherCode?: string | null, voucherClaim?: VoucherClaim | null) {
+    return this.shop.createCartBankOrder(telegramId, items, "web", voucherCode, voucherClaim);
+  }
+
+  createCartUsdtOrder(telegramId: string, items: CartOrderItemInput[], voucherCode?: string | null, voucherClaim?: VoucherClaim | null) {
+    return this.shop.createCartCryptomusOrder(telegramId, items, "web", voucherCode, voucherClaim);
   }
 
   private session(customer: { id: string; email: string | null; displayName: string | null; telegramId: string }) {

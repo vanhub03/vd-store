@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Ban, Bell, Boxes, CheckCircle2, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, Trash2, Users, Wallet, X } from "lucide-react";
+import { Ban, Bell, Boxes, CheckCircle2, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, Users, Wallet, X } from "lucide-react";
 import { AdminSession, Api, formatVnd } from "./api";
 
-type Tab = "overview" | "products" | "users" | "orders" | "broadcasts";
+type Tab = "overview" | "products" | "users" | "orders" | "vouchers" | "broadcasts";
 
 type RevenuePoint = { key: string; label: string; revenue: number; orders: number };
 type Dashboard = {
@@ -71,6 +71,21 @@ type Payment = {
   order?: { product?: Product };
 };
 type Broadcast = { id: string; title: string; message: string; status: string; sentCount: number; failedCount: number; createdAt: string };
+type Voucher = {
+  id: string;
+  code: string;
+  discountPercent: number;
+  maxDiscountAmount?: number | null;
+  maxDiscountUsdt?: number | string | null;
+  active: boolean;
+  firstOrderOnly: boolean;
+  maxUses?: number | null;
+  usedCount: number;
+  startsAt: string;
+  expiresAt: string;
+  createdAt: string;
+  _count?: { redemptions: number };
+};
 type ProductForm = {
   name: string;
   nameEn: string;
@@ -168,6 +183,9 @@ export function App() {
           <NavButton active={tab === "orders"} onClick={() => setTab("orders")} icon={<Wallet />}>
             Đơn & tiền
           </NavButton>
+          <NavButton active={tab === "vouchers"} onClick={() => setTab("vouchers")} icon={<TicketPercent />}>
+            Voucher
+          </NavButton>
           <NavButton active={tab === "broadcasts"} onClick={() => setTab("broadcasts")} icon={<Bell />}>
             Thông báo
           </NavButton>
@@ -199,6 +217,7 @@ export function App() {
         {tab === "products" && <Products api={api} onError={setError} />}
         {tab === "users" && <UsersView api={api} onError={setError} />}
         {tab === "orders" && <OrdersView api={api} onError={setError} />}
+        {tab === "vouchers" && <Vouchers api={api} onError={setError} />}
         {tab === "broadcasts" && <Broadcasts api={api} onError={setError} />}
       </main>
     </div>
@@ -943,6 +962,164 @@ function ManualOrderAlerts({
   );
 }
 
+function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [form, setForm] = useState(() => ({
+    code: generateVoucherCode(20),
+    discountPercent: 20,
+    maxDiscountAmount: "50000",
+    maxDiscountUsdt: "2",
+    maxUses: "",
+    expiresAt: defaultVoucherDate(),
+    active: true,
+    firstOrderOnly: false
+  }));
+
+  async function load() {
+    setLoading(true);
+    try {
+      setVouchers(await api.get<Voucher[]>("/admin/vouchers"));
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    setCreating(true);
+    try {
+      await api.post("/admin/vouchers", {
+        code: form.code,
+        discountPercent: Number(form.discountPercent),
+        maxDiscountAmount: form.maxDiscountAmount ? Number(form.maxDiscountAmount) : null,
+        maxDiscountUsdt: form.maxDiscountUsdt ? Number(form.maxDiscountUsdt) : null,
+        maxUses: form.maxUses ? Number(form.maxUses) : null,
+        expiresAt: form.expiresAt || null,
+        active: form.active,
+        firstOrderOnly: form.firstOrderOnly
+      });
+      setForm({
+        code: generateVoucherCode(form.discountPercent),
+        discountPercent: form.discountPercent,
+        maxDiscountAmount: form.maxDiscountAmount,
+        maxDiscountUsdt: form.maxDiscountUsdt,
+        maxUses: "",
+        expiresAt: defaultVoucherDate(),
+        active: true,
+        firstOrderOnly: false
+      });
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function toggle(voucher: Voucher) {
+    setUpdatingId(voucher.id);
+    try {
+      await api.put(`/admin/vouchers/${voucher.id}`, { active: !voucher.active });
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  return (
+    <div className="stack">
+      {loading && <LoadingBlock label="Đang tải voucher..." />}
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>Tạo voucher</h2>
+          <span className="mutedText">Mặc định hết hạn sau 1 tháng</span>
+        </div>
+        <form className="formGrid compactForm voucherForm" onSubmit={create}>
+          <label>
+            Mã
+            <input value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase() })} required />
+          </label>
+          <label>
+            Giảm %
+            <input
+              type="number"
+              value={form.discountPercent}
+              min={1}
+              max={90}
+              onChange={(event) => setForm({ ...form, discountPercent: Number(event.target.value) })}
+            />
+          </label>
+          <label>
+            Số lượt
+            <input value={form.maxUses} onChange={(event) => setForm({ ...form, maxUses: event.target.value })} inputMode="numeric" placeholder="Không giới hạn" />
+          </label>
+          <label>
+            Giảm tối đa VND
+            <input value={form.maxDiscountAmount} onChange={(event) => setForm({ ...form, maxDiscountAmount: event.target.value })} inputMode="numeric" placeholder="Không giới hạn" />
+          </label>
+          <label>
+            Giảm tối đa USDT
+            <input value={form.maxDiscountUsdt} onChange={(event) => setForm({ ...form, maxDiscountUsdt: event.target.value })} inputMode="decimal" placeholder="Không giới hạn" />
+          </label>
+          <label>
+            Hết hạn
+            <input type="date" value={form.expiresAt} onChange={(event) => setForm({ ...form, expiresAt: event.target.value })} />
+          </label>
+          <div className="checkboxGroup wide">
+            <label className="checkboxLabel">
+              <input type="checkbox" checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} />
+              Đang bật
+            </label>
+            <label className="checkboxLabel">
+              <input type="checkbox" checked={form.firstOrderOnly} onChange={(event) => setForm({ ...form, firstOrderOnly: event.target.checked })} />
+              Chỉ đơn đầu
+            </label>
+          </div>
+          <div className="rowActions wide">
+            <button className="smallButton secondaryButton" type="button" onClick={() => setForm({ ...form, code: generateVoucherCode(form.discountPercent) })}>
+              <TicketPercent size={14} /> Generate
+            </button>
+            <button className="primaryButton" disabled={creating}>
+              {creating ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {creating ? "Đang tạo..." : "Tạo voucher"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <DataTable
+        title="Danh sách voucher"
+        columns={["Mã", "Giảm", "Trần VND / USDT", "Đã dùng", "Giới hạn", "Hết hạn", "Loại", "Trạng thái", ""]}
+        rows={vouchers.map((voucher) => [
+          <strong>{voucher.code}</strong>,
+          `${voucher.discountPercent}%`,
+          `${voucher.maxDiscountAmount ? formatVnd(voucher.maxDiscountAmount) : "∞"} / ${voucher.maxDiscountUsdt ? `${voucher.maxDiscountUsdt} USDT` : "∞"}`,
+          voucher.usedCount ?? voucher._count?.redemptions ?? 0,
+          voucher.maxUses ?? "Không giới hạn",
+          new Date(voucher.expiresAt).toLocaleDateString("vi-VN"),
+          voucher.firstOrderOnly ? "Đơn đầu" : "Thường",
+          voucher.active ? "Đang bật" : "Đã tắt",
+          <button className={voucher.active ? "smallButton dangerButton" : "smallButton successButton"} onClick={() => toggle(voucher)} disabled={updatingId === voucher.id}>
+            {updatingId === voucher.id ? <RefreshCw className="spin" size={14} /> : voucher.active ? <X size={14} /> : <CheckCircle2 size={14} />}
+            {voucher.active ? "Tắt" : "Bật"}
+          </button>
+        ])}
+      />
+    </div>
+  );
+}
+
 function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [title, setTitle] = useState("");
@@ -1120,6 +1297,17 @@ function formatCompactVnd(amount: number) {
   return String(amount);
 }
 
+function defaultVoucherDate() {
+  const date = new Date();
+  date.setMonth(date.getMonth() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function generateVoucherCode(percent: number) {
+  const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `VD${Math.max(1, Math.min(90, Math.round(percent || 20)))}-${suffix}`;
+}
+
 function NavButton({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <button className={active ? "navButton active" : "navButton"} onClick={onClick}>
@@ -1158,12 +1346,12 @@ function DataTable({ title, columns, rows }: { title?: string; columns: string[]
 }
 
 function tabTitle(tab: Tab) {
-  const titles: Record<Tab, string> = {
+  const titles: Record<string, string> = {
     overview: "Tổng quan",
     products: "Sản phẩm",
     users: "User Telegram",
     orders: "Đơn hàng & thanh toán",
     broadcasts: "Thông báo bot"
   };
-  return titles[tab];
+  return titles[tab] ?? "Voucher";
 }

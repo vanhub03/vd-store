@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Header, Param, Post, Req, UseGuards } from "@nestjs/common";
-import { IsEmail, IsInt, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsEmail, IsInt, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+import crypto from "node:crypto";
 import { CustomerAuthGuard, CustomerRequest } from "../common/customer-auth.guard";
 import { StoreService } from "./store.service";
 
@@ -39,6 +40,34 @@ class OrderDto {
   @IsInt()
   @Min(1)
   quantity?: number;
+
+  @IsOptional()
+  @IsString()
+  voucherCode?: string;
+}
+
+class VoucherPreviewDto {
+  @IsString()
+  productId!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  quantity?: number;
+
+  @IsString()
+  voucherCode!: string;
+}
+
+class CartOrderDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  items!: Array<{ productId: string; quantity: number }>;
+
+  @IsOptional()
+  @IsString()
+  voucherCode?: string;
 }
 
 class ReviewDto {
@@ -124,19 +153,49 @@ export class StoreController {
   @Post("orders/wallet")
   @UseGuards(CustomerAuthGuard)
   buyWithWallet(@Req() request: CustomerRequest, @Body() body: OrderDto) {
-    return this.store.purchaseWithWallet(request.customer!.telegramId, body.productId, body.quantity ?? 1);
+    return this.store.purchaseWithWallet(request.customer!.telegramId, body.productId, body.quantity ?? 1, body.voucherCode, voucherClaimFromRequest(request));
   }
 
   @Post("orders/bank")
   @UseGuards(CustomerAuthGuard)
   buyWithBank(@Req() request: CustomerRequest, @Body() body: OrderDto) {
-    return this.store.createBankOrder(request.customer!.telegramId, body.productId, body.quantity ?? 1);
+    return this.store.createBankOrder(request.customer!.telegramId, body.productId, body.quantity ?? 1, body.voucherCode, voucherClaimFromRequest(request));
   }
 
   @Post("orders/usdt")
   @UseGuards(CustomerAuthGuard)
   buyWithUsdt(@Req() request: CustomerRequest, @Body() body: OrderDto) {
-    return this.store.createUsdtOrder(request.customer!.telegramId, body.productId, body.quantity ?? 1);
+    return this.store.createUsdtOrder(request.customer!.telegramId, body.productId, body.quantity ?? 1, body.voucherCode, voucherClaimFromRequest(request));
+  }
+
+  @Post("vouchers/preview")
+  @UseGuards(CustomerAuthGuard)
+  previewVoucher(@Req() request: CustomerRequest, @Body() body: VoucherPreviewDto) {
+    return this.store.previewVoucher(request.customer!.telegramId, body.productId, body.quantity ?? 1, body.voucherCode, voucherClaimFromRequest(request));
+  }
+
+  @Post("cart/orders/wallet")
+  @UseGuards(CustomerAuthGuard)
+  buyCartWithWallet(@Req() request: CustomerRequest, @Body() body: CartOrderDto) {
+    return this.store.purchaseCartWithWallet(request.customer!.telegramId, body.items, body.voucherCode, voucherClaimFromRequest(request));
+  }
+
+  @Post("cart/orders/bank")
+  @UseGuards(CustomerAuthGuard)
+  buyCartWithBank(@Req() request: CustomerRequest, @Body() body: CartOrderDto) {
+    return this.store.createCartBankOrder(request.customer!.telegramId, body.items, body.voucherCode, voucherClaimFromRequest(request));
+  }
+
+  @Post("cart/orders/usdt")
+  @UseGuards(CustomerAuthGuard)
+  buyCartWithUsdt(@Req() request: CustomerRequest, @Body() body: CartOrderDto) {
+    return this.store.createCartUsdtOrder(request.customer!.telegramId, body.items, body.voucherCode, voucherClaimFromRequest(request));
+  }
+
+  @Post("cart/vouchers/preview")
+  @UseGuards(CustomerAuthGuard)
+  previewCartVoucher(@Req() request: CustomerRequest, @Body() body: CartOrderDto & { voucherCode: string }) {
+    return this.store.previewCartVoucher(request.customer!.telegramId, body.items, body.voucherCode, voucherClaimFromRequest(request));
   }
 
   @Post("reviews")
@@ -144,4 +203,31 @@ export class StoreController {
   createReview(@Req() request: CustomerRequest, @Body() body: ReviewDto) {
     return this.store.createReview(request.customer!.id, body);
   }
+}
+
+function voucherClaimFromRequest(request: CustomerRequest) {
+  const ip = normalizeIp(firstHeader(request.headers["cf-connecting-ip"]) ?? firstHeader(request.headers["x-real-ip"]) ?? firstForwardedIp(request) ?? request.ip ?? request.socket.remoteAddress);
+  const userAgent = firstHeader(request.headers["user-agent"])?.slice(0, 240) ?? "unknown";
+  const fingerprintSource = `${ip ?? "unknown-ip"}|${userAgent}`;
+  return {
+    ipHash: ip ? hashVoucherClaim(ip) : null,
+    fingerprintHash: hashVoucherClaim(fingerprintSource)
+  };
+}
+
+function firstForwardedIp(request: CustomerRequest) {
+  return firstHeader(request.headers["x-forwarded-for"])?.split(",")[0]?.trim();
+}
+
+function firstHeader(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeIp(value?: string | null) {
+  return value?.trim().replace(/^::ffff:/, "") || null;
+}
+
+function hashVoucherClaim(value: string) {
+  const secret = process.env.VOUCHER_FINGERPRINT_SECRET ?? process.env.JWT_SECRET ?? "dev-secret";
+  return crypto.createHmac("sha256", secret).update(value).digest("hex");
 }

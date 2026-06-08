@@ -144,7 +144,12 @@ export class PaymentService {
       const result = await this.shop.fulfillDirectOrder(payment.id);
       await this.deletePendingPaymentMessage(payment.id, payment);
       if (result.outcome === "fulfilled" && "deliveryText" in result) {
-        await this.shop.notifyManualOrderIfNeeded(result.order.id);
+        const orders = Array.isArray((result as { orders?: Array<{ id: string }> }).orders)
+          ? (result as { orders: Array<{ id: string }> }).orders
+          : [result.order];
+        for (const order of orders) {
+          await this.shop.notifyManualOrderIfNeeded(order.id);
+        }
       }
       const telegramId = result.user?.telegramId;
       if (canNotifyTelegramUser(telegramId)) {
@@ -210,7 +215,12 @@ export class PaymentService {
       const result = await this.shop.fulfillDirectOrder(payment.id);
       await this.deletePendingPaymentMessage(payment.id, payment);
       if (result.outcome === "fulfilled" && "deliveryText" in result) {
-        await this.shop.notifyManualOrderIfNeeded(result.order.id);
+        const orders = Array.isArray((result as { orders?: Array<{ id: string }> }).orders)
+          ? (result as { orders: Array<{ id: string }> }).orders
+          : [result.order];
+        for (const order of orders) {
+          await this.shop.notifyManualOrderIfNeeded(order.id);
+        }
       }
       const telegramId = result.user?.telegramId;
       if (canNotifyTelegramUser(telegramId)) {

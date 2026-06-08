@@ -49,12 +49,53 @@ export type ProductInput = {
   manualStock?: number;
 };
 
+export type VoucherInput = {
+  code?: string;
+  discountPercent: number;
+  maxDiscountAmount?: number | null;
+  maxDiscountUsdt?: number | string | null;
+  active?: boolean;
+  firstOrderOnly?: boolean;
+  maxUses?: number | null;
+  startsAt?: string | Date | null;
+  expiresAt?: string | Date | null;
+};
+
+export type VoucherClaim = {
+  ipHash: string | null;
+  fingerprintHash: string | null;
+};
+
+export type CartOrderItemInput = {
+  productId: string;
+  quantity: number;
+};
+
 type SalesChannel = "bot" | "web";
+type VoucherQuote = {
+  code: string | null;
+  voucherId: string | null;
+  discountPercent: number;
+  subtotalAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  firstOrderOnly: boolean;
+  expiresAt: Date | null;
+  maxUses: number | null;
+  maxDiscountAmount: number | null;
+  maxDiscountUsdt: number | null;
+  claimIpHash: string | null;
+  claimFingerprintHash: string | null;
+};
+
 const ORDER_TRANSACTION_OPTIONS = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
   maxWait: 10_000,
   timeout: 30_000
 };
+const FIRST_ORDER_VOUCHER_CODE = "FIRST20";
+const FIRST_ORDER_VOUCHER_DAYS = 30;
+const VOUCHER_CODE_PATTERN = /^[A-Z0-9_-]{3,32}$/;
 
 @Injectable()
 export class ShopService {
@@ -87,7 +128,7 @@ export class ShopService {
   }
 
   async getCatalog(channel: SalesChannel = "bot") {
-    return this.prisma.withConnectionRetry(async () => {
+    const loadCatalog = async () => {
       const categories = await this.prisma.category.findMany({
         where: { active: true },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -125,7 +166,8 @@ export class ShopService {
         })),
         uncategorized: uncategorized.map((product) => applyChannelPrice(product, channel))
       };
-    }, `getCatalog:${channel}`);
+    };
+    return typeof this.prisma.withConnectionRetry === "function" ? this.prisma.withConnectionRetry(loadCatalog, `getCatalog:${channel}`) : loadCatalog();
   }
 
   async getProduct(productId: string, channel: SalesChannel = "bot") {
@@ -184,105 +226,185 @@ export class ShopService {
     return { payment, code, amount, expiresAt, qrImageUrl };
   }
 
-  async createBankOrder(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
+  async previewVoucher(telegramId: string, productId: string, quantity = 1, voucherCode?: string | null, channel: SalesChannel = "web", voucherClaim?: VoucherClaim | null) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw new BadRequestException("Số lượng không hợp lệ.");
+    }
+    const user = await this.requireTelegramUser(telegramId);
+    const product = await this.getActiveProduct(productId, channel);
+    await this.ensurePurchasable(product, quantity);
+    const quote = await this.quoteVoucher(this.prisma, user, product.price * quantity, voucherCode, voucherClaim);
+    return publicVoucherQuote(quote);
+  }
+
+  async previewCartVoucher(telegramId: string, items: CartOrderItemInput[], voucherCode?: string | null, channel: SalesChannel = "web", voucherClaim?: VoucherClaim | null) {
+    const cartItems = normalizeCartItems(items);
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
+      if (!user) throw new NotFoundException("User chưa đăng ký.");
+      const lines = await this.prepareCartLines(tx, cartItems, channel);
+      const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+      return publicVoucherQuote(quote);
+    }, ORDER_TRANSACTION_OPTIONS);
+  }
+
+  async createBankOrder(
+    telegramId: string,
+    productId: string,
+    quantity = 1,
+    channel: SalesChannel = "bot",
+    voucherCode?: string | null,
+    voucherClaim?: VoucherClaim | null
+  ) {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException("Số lượng không hợp lệ.");
     }
 
-    const user = await this.requireTelegramUser(telegramId);
-    const product = await this.getActiveProduct(productId, channel);
-    await this.ensurePurchasable(product, quantity);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
+        if (!user) throw new NotFoundException("User chÆ°a Ä‘Äƒng kÃ½ bot.");
 
-    const code = await this.createUniqueCode(DIRECT_ORDER_PREFIX);
-    const totalAmount = product.price * quantity;
-    const expiresAt = minutesFromNow(10);
-    const qrImageUrl = this.buildVietQrImageUrl(totalAmount, code);
-
-    const order = await this.prisma.order.create({
-      data: {
-        code,
-        userId: user.id,
-        productId: product.id,
-        quantity,
-        unitPrice: product.price,
-        totalAmount,
-        status: OrderStatus.PENDING_PAYMENT,
-        paymentMethod: PaymentMethod.BANK_TRANSFER,
-        expiresAt,
-        payments: {
-          create: {
-            code,
-            kind: PaymentKind.DIRECT_ORDER,
-            status: PaymentStatus.PENDING,
-            amount: totalAmount,
-            expectedAmount: totalAmount,
-            userId: user.id,
-            expiresAt,
-            qrImageUrl,
-            qrPayload: code
-          }
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product || !isVisibleForChannel(product, channel)) {
+          throw new NotFoundException("KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m.");
         }
-      },
-      include: { payments: true, product: true }
-    });
+        await this.ensurePurchasable(product, quantity, tx);
 
-    return { order, payment: order.payments[0], code, amount: totalAmount, expiresAt, qrImageUrl };
+        const unitPrice = channelPrice(product, channel);
+        const quote = await this.quoteVoucher(tx, user, unitPrice * quantity, voucherCode, voucherClaim);
+        const code = await this.createUniqueCode(DIRECT_ORDER_PREFIX, tx);
+        const expiresAt = minutesFromNow(10);
+        const qrImageUrl = this.buildVietQrImageUrl(quote.totalAmount, code);
+
+        const order = await tx.order.create({
+          data: {
+            code,
+            userId: user.id,
+            productId: product.id,
+            quantity,
+            unitPrice,
+            subtotalAmount: quote.subtotalAmount,
+            discountAmount: quote.discountAmount,
+            totalAmount: quote.totalAmount,
+            voucherId: quote.voucherId,
+            voucherCode: quote.code,
+            status: OrderStatus.PENDING_PAYMENT,
+            paymentMethod: PaymentMethod.BANK_TRANSFER,
+            expiresAt,
+            payments: {
+              create: {
+                code,
+                kind: PaymentKind.DIRECT_ORDER,
+                status: PaymentStatus.PENDING,
+                amount: quote.totalAmount,
+                expectedAmount: quote.totalAmount,
+                userId: user.id,
+                expiresAt,
+                qrImageUrl,
+                qrPayload: code
+              }
+            }
+          },
+          include: { payments: true, product: true }
+        });
+
+        await this.redeemVoucher(tx, quote, user.id, order.id);
+        return { order, payment: order.payments[0], code, amount: quote.totalAmount, expiresAt, qrImageUrl, voucher: publicVoucherQuote(quote) };
+      },
+      ORDER_TRANSACTION_OPTIONS
+    );
   }
 
-  async createCryptomusOrder(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
+  async createCryptomusOrder(
+    telegramId: string,
+    productId: string,
+    quantity = 1,
+    channel: SalesChannel = "bot",
+    voucherCode?: string | null,
+    voucherClaim?: VoucherClaim | null
+  ) {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException("So luong khong hop le.");
     }
 
-    const user = await this.requireTelegramUser(telegramId);
-    const product = await this.getActiveProduct(productId, channel);
-    await this.ensurePurchasable(product, quantity);
-    const unitCryptoAmount = decimalNumber(product.usdtPrice);
-    if (!unitCryptoAmount || unitCryptoAmount <= 0) {
-      throw new BadRequestException("San pham chua cau hinh gia USDT.");
-    }
+    const created = await this.prisma.$transaction(
+      async (tx) => {
+        const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
+        if (!user) throw new NotFoundException("User chÆ°a Ä‘Äƒng kÃ½ bot.");
 
-    const code = await this.createUniqueCode("USDT");
-    const totalAmount = product.price * quantity;
-    const cryptoAmount = roundUsdt(unitCryptoAmount * quantity);
-    const expiresAt = minutesFromNow(10);
-    const order = await this.prisma.order.create({
-      data: {
-        code,
-        userId: user.id,
-        productId: product.id,
-        quantity,
-        unitPrice: product.price,
-        totalAmount,
-        status: OrderStatus.PENDING_PAYMENT,
-        paymentMethod: PaymentMethod.CRYPTOMUS,
-        expiresAt,
-        payments: {
-          create: {
-            code,
-            kind: PaymentKind.DIRECT_ORDER,
-            status: PaymentStatus.PENDING,
-            amount: totalAmount,
-            expectedAmount: totalAmount,
-            userId: user.id,
-            expiresAt,
-            qrPayload: code,
-            provider: "cryptomus",
-            cryptoCurrency: "USDT",
-            cryptoAmount: new Prisma.Decimal(cryptoAmount)
-          }
+        const product = await tx.product.findUnique({ where: { id: productId } });
+        if (!product || !isVisibleForChannel(product, channel)) {
+          throw new NotFoundException("KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m.");
         }
-      },
-      include: { payments: true, product: true }
-    });
+        await this.ensurePurchasable(product, quantity, tx);
+        const unitCryptoAmount = decimalNumber(product.usdtPrice);
+        if (!unitCryptoAmount || unitCryptoAmount <= 0) {
+          throw new BadRequestException("San pham chua cau hinh gia USDT.");
+        }
 
-    const payment = order.payments[0];
-    const cryptomus = await this.createCryptomusInvoice({
-      code,
-      productName: product.nameEn?.trim() || product.name,
-      amount: cryptoAmount,
-      expiresAt
-    });
+        const unitPrice = channelPrice(product, channel);
+        const quote = await this.quoteVoucher(tx, user, unitPrice * quantity, voucherCode, voucherClaim);
+        const code = await this.createUniqueCode("USDT", tx);
+        const cryptoAmount = discountedCryptoAmount(unitCryptoAmount * quantity, quote);
+        const expiresAt = minutesFromNow(10);
+        const order = await tx.order.create({
+          data: {
+            code,
+            userId: user.id,
+            productId: product.id,
+            quantity,
+            unitPrice,
+            subtotalAmount: quote.subtotalAmount,
+            discountAmount: quote.discountAmount,
+            totalAmount: quote.totalAmount,
+            voucherId: quote.voucherId,
+            voucherCode: quote.code,
+            status: OrderStatus.PENDING_PAYMENT,
+            paymentMethod: PaymentMethod.CRYPTOMUS,
+            expiresAt,
+            payments: {
+              create: {
+                code,
+                kind: PaymentKind.DIRECT_ORDER,
+                status: PaymentStatus.PENDING,
+                amount: quote.totalAmount,
+                expectedAmount: quote.totalAmount,
+                userId: user.id,
+                expiresAt,
+                qrPayload: code,
+                provider: "cryptomus",
+                cryptoCurrency: "USDT",
+                cryptoAmount: new Prisma.Decimal(cryptoAmount)
+              }
+            }
+          },
+          include: { payments: true, product: true }
+        });
+
+        await this.redeemVoucher(tx, quote, user.id, order.id);
+        return { order, payment: order.payments[0], code, amount: quote.totalAmount, cryptoAmount, expiresAt, product, voucher: publicVoucherQuote(quote) };
+      },
+      ORDER_TRANSACTION_OPTIONS
+    );
+
+    const payment = created.payment;
+    let cryptomus: Awaited<ReturnType<ShopService["createCryptomusInvoice"]>>;
+    try {
+      cryptomus = await this.createCryptomusInvoice({
+        code: created.code,
+        productName: created.product.nameEn?.trim() || created.product.name,
+        amount: created.cryptoAmount,
+        expiresAt: created.expiresAt
+      });
+    } catch (error) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.releaseVoucherForOrder(tx, created.order.id);
+        await tx.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.FAILED } });
+        await tx.order.update({ where: { id: created.order.id }, data: { status: OrderStatus.CANCELLED } });
+      });
+      throw error;
+    }
 
     const updatedPayment = await this.prisma.payment.update({
       where: { id: payment.id },
@@ -291,28 +413,36 @@ export class ShopService {
         checkoutUrl: cryptomus.checkoutUrl,
         deeplink: cryptomus.deeplink,
         qrImageUrl: cryptomus.qrImageUrl,
-        qrPayload: cryptomus.address ?? cryptomus.checkoutUrl ?? code,
+        qrPayload: cryptomus.address ?? cryptomus.checkoutUrl ?? created.code,
         providerPayload: cryptomus.rawPayload as Prisma.InputJsonValue
       }
     });
 
     return {
-      order,
+      order: created.order,
       payment: updatedPayment,
-      code,
-      amount: totalAmount,
+      code: created.code,
+      amount: created.amount,
       cryptoCurrency: "USDT",
-      cryptoAmount,
-      expiresAt,
+      cryptoAmount: created.cryptoAmount,
+      expiresAt: created.expiresAt,
       qrImageUrl: updatedPayment.qrImageUrl,
       checkoutUrl: updatedPayment.checkoutUrl,
       deeplink: updatedPayment.deeplink,
       network: cryptomus.network,
-      address: cryptomus.address
+      address: cryptomus.address,
+      voucher: created.voucher
     };
   }
 
-  async purchaseWithWallet(telegramId: string, productId: string, quantity = 1, channel: SalesChannel = "bot") {
+  async purchaseWithWallet(
+    telegramId: string,
+    productId: string,
+    quantity = 1,
+    channel: SalesChannel = "bot",
+    voucherCode?: string | null,
+    voucherClaim?: VoucherClaim | null
+  ) {
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new BadRequestException("Số lượng không hợp lệ.");
     }
@@ -329,9 +459,9 @@ export class ShopService {
         await this.ensurePurchasable(product, quantity, tx);
 
         const unitPrice = channelPrice(product, channel);
-        const totalAmount = unitPrice * quantity;
+        const quote = await this.quoteVoucher(tx, user, unitPrice * quantity, voucherCode, voucherClaim);
         const balance = await this.getWalletBalance(user.id, tx);
-        if (balance < totalAmount) {
+        if (balance < quote.totalAmount) {
           throw new BadRequestException("Số dư không đủ.");
         }
 
@@ -343,7 +473,11 @@ export class ShopService {
             productId: product.id,
             quantity,
             unitPrice,
-            totalAmount,
+            subtotalAmount: quote.subtotalAmount,
+            discountAmount: quote.discountAmount,
+            totalAmount: quote.totalAmount,
+            voucherId: quote.voucherId,
+            voucherCode: quote.code,
             status: OrderStatus.PAID,
             paymentMethod: PaymentMethod.WALLET
           }
@@ -354,17 +488,18 @@ export class ShopService {
             code,
             kind: PaymentKind.WALLET_PURCHASE,
             status: PaymentStatus.SUCCEEDED,
-            amount: totalAmount,
-            expectedAmount: totalAmount,
+            amount: quote.totalAmount,
+            expectedAmount: quote.totalAmount,
             userId: user.id,
             orderId: order.id
           }
         });
+        await this.redeemVoucher(tx, quote, user.id, order.id);
 
         await tx.walletLedgerEntry.create({
           data: {
             userId: user.id,
-            amount: -totalAmount,
+            amount: -quote.totalAmount,
             type: WalletEntryType.PURCHASE,
             referencePaymentId: payment.id,
             referenceOrderId: order.id,
@@ -382,12 +517,280 @@ export class ShopService {
           }
         });
 
-        return { order: fulfilledOrder, payment, deliveryText, balanceAfter: balance - totalAmount };
+        return { order: fulfilledOrder, payment, deliveryText, balanceAfter: balance - quote.totalAmount, voucher: publicVoucherQuote(quote) };
       },
       ORDER_TRANSACTION_OPTIONS
     );
     await this.notifyManualOrderIfNeeded(result.order.id);
     return result;
+  }
+
+  async purchaseCartWithWallet(
+    telegramId: string,
+    items: CartOrderItemInput[],
+    channel: SalesChannel = "web",
+    voucherCode?: string | null,
+    voucherClaim?: VoucherClaim | null
+  ) {
+    const cartItems = normalizeCartItems(items);
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
+        if (!user) throw new NotFoundException("User chưa đăng ký.");
+        const lines = await this.prepareCartLines(tx, cartItems, channel);
+        const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+        const pricedLines = allocateCartQuote(lines, quote);
+        const balance = await this.getWalletBalance(user.id, tx);
+        if (balance < quote.totalAmount) throw new BadRequestException("Số dư không đủ.");
+
+        const checkoutGroupId = crypto.randomUUID();
+        const paymentCode = await this.createUniqueCode("VI", tx);
+        const orders = [];
+        for (let index = 0; index < pricedLines.length; index += 1) {
+          const line = pricedLines[index];
+          const order = await tx.order.create({
+            data: {
+              code: index === 0 ? paymentCode : await this.createUniqueCode("VI", tx),
+              checkoutGroupId,
+              userId: user.id,
+              productId: line.product.id,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+              subtotalAmount: line.subtotalAmount,
+              discountAmount: line.discountAmount,
+              totalAmount: line.totalAmount,
+              voucherId: index === 0 ? quote.voucherId : null,
+              voucherCode: index === 0 ? quote.code : null,
+              status: OrderStatus.PAID,
+              paymentMethod: PaymentMethod.WALLET
+            }
+          });
+          orders.push({ order, line });
+        }
+
+        const firstOrder = orders[0].order;
+        const payment = await tx.payment.create({
+          data: {
+            code: paymentCode,
+            kind: PaymentKind.WALLET_PURCHASE,
+            status: PaymentStatus.SUCCEEDED,
+            amount: quote.totalAmount,
+            expectedAmount: quote.totalAmount,
+            userId: user.id,
+            orderId: firstOrder.id
+          }
+        });
+        await this.redeemVoucher(tx, quote, user.id, firstOrder.id);
+        await tx.walletLedgerEntry.create({
+          data: {
+            userId: user.id,
+            amount: -quote.totalAmount,
+            type: WalletEntryType.PURCHASE,
+            referencePaymentId: payment.id,
+            referenceOrderId: firstOrder.id,
+            note: `Mua ${orders.length} sản phẩm trong giỏ hàng`
+          }
+        });
+
+        const fulfilledOrders = [];
+        for (const entry of orders) {
+          const deliveryText = await this.fulfillOrderItems(tx, entry.order.id, entry.line.product, entry.line.quantity);
+          fulfilledOrders.push(
+            await tx.order.update({
+              where: { id: entry.order.id },
+              data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() },
+              include: { product: true }
+            })
+          );
+        }
+        return {
+          order: fulfilledOrders[0],
+          orders: fulfilledOrders,
+          payment,
+          deliveryText: formatCartDelivery(fulfilledOrders),
+          balanceAfter: balance - quote.totalAmount,
+          voucher: publicVoucherQuote(quote)
+        };
+      },
+      ORDER_TRANSACTION_OPTIONS
+    );
+    await Promise.all(result.orders.map((order) => this.notifyManualOrderIfNeeded(order.id)));
+    return result;
+  }
+
+  async createCartBankOrder(
+    telegramId: string,
+    items: CartOrderItemInput[],
+    channel: SalesChannel = "web",
+    voucherCode?: string | null,
+    voucherClaim?: VoucherClaim | null
+  ) {
+    const cartItems = normalizeCartItems(items);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
+        if (!user) throw new NotFoundException("User chưa đăng ký.");
+        const lines = await this.prepareCartLines(tx, cartItems, channel);
+        const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+        const pricedLines = allocateCartQuote(lines, quote);
+        const checkoutGroupId = crypto.randomUUID();
+        const code = await this.createUniqueCode(DIRECT_ORDER_PREFIX, tx);
+        const expiresAt = minutesFromNow(10);
+        const qrImageUrl = this.buildVietQrImageUrl(quote.totalAmount, code);
+        const orders = [];
+        for (let index = 0; index < pricedLines.length; index += 1) {
+          const line = pricedLines[index];
+          orders.push(
+            await tx.order.create({
+              data: {
+                code: index === 0 ? code : await this.createUniqueCode(DIRECT_ORDER_PREFIX, tx),
+                checkoutGroupId,
+                userId: user.id,
+                productId: line.product.id,
+                quantity: line.quantity,
+                unitPrice: line.unitPrice,
+                subtotalAmount: line.subtotalAmount,
+                discountAmount: line.discountAmount,
+                totalAmount: line.totalAmount,
+                voucherId: index === 0 ? quote.voucherId : null,
+                voucherCode: index === 0 ? quote.code : null,
+                status: OrderStatus.PENDING_PAYMENT,
+                paymentMethod: PaymentMethod.BANK_TRANSFER,
+                expiresAt
+              },
+              include: { product: true }
+            })
+          );
+        }
+        const payment = await tx.payment.create({
+          data: {
+            code,
+            kind: PaymentKind.DIRECT_ORDER,
+            status: PaymentStatus.PENDING,
+            amount: quote.totalAmount,
+            expectedAmount: quote.totalAmount,
+            userId: user.id,
+            orderId: orders[0].id,
+            expiresAt,
+            qrImageUrl,
+            qrPayload: code
+          }
+        });
+        await this.redeemVoucher(tx, quote, user.id, orders[0].id);
+        return { orders, order: orders[0], payment, code, amount: quote.totalAmount, expiresAt, qrImageUrl, voucher: publicVoucherQuote(quote) };
+      },
+      ORDER_TRANSACTION_OPTIONS
+    );
+  }
+
+  async createCartCryptomusOrder(
+    telegramId: string,
+    items: CartOrderItemInput[],
+    channel: SalesChannel = "web",
+    voucherCode?: string | null,
+    voucherClaim?: VoucherClaim | null
+  ) {
+    const cartItems = normalizeCartItems(items);
+    const created = await this.prisma.$transaction(
+      async (tx) => {
+        const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
+        if (!user) throw new NotFoundException("User chưa đăng ký.");
+        const lines = await this.prepareCartLines(tx, cartItems, channel);
+        for (const line of lines) {
+          if (!decimalNumber(line.product.usdtPrice)) throw new BadRequestException(`${line.product.name} chưa có giá USDT.`);
+        }
+        const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+        const pricedLines = allocateCartQuote(lines, quote);
+        const checkoutGroupId = crypto.randomUUID();
+        const code = await this.createUniqueCode("USDT", tx);
+        const expiresAt = minutesFromNow(10);
+        const rawCryptoAmount = lines.reduce((sum, line) => sum + Number(line.product.usdtPrice) * line.quantity, 0);
+        const cryptoAmount = discountedCryptoAmount(rawCryptoAmount, quote);
+        const orders = [];
+        for (let index = 0; index < pricedLines.length; index += 1) {
+          const line = pricedLines[index];
+          orders.push(
+            await tx.order.create({
+              data: {
+                code: index === 0 ? code : await this.createUniqueCode("USDT", tx),
+                checkoutGroupId,
+                userId: user.id,
+                productId: line.product.id,
+                quantity: line.quantity,
+                unitPrice: line.unitPrice,
+                subtotalAmount: line.subtotalAmount,
+                discountAmount: line.discountAmount,
+                totalAmount: line.totalAmount,
+                voucherId: index === 0 ? quote.voucherId : null,
+                voucherCode: index === 0 ? quote.code : null,
+                status: OrderStatus.PENDING_PAYMENT,
+                paymentMethod: PaymentMethod.CRYPTOMUS,
+                expiresAt
+              },
+              include: { product: true }
+            })
+          );
+        }
+        const payment = await tx.payment.create({
+          data: {
+            code,
+            kind: PaymentKind.DIRECT_ORDER,
+            status: PaymentStatus.PENDING,
+            amount: quote.totalAmount,
+            expectedAmount: quote.totalAmount,
+            userId: user.id,
+            orderId: orders[0].id,
+            expiresAt,
+            qrPayload: code,
+            provider: "cryptomus",
+            cryptoCurrency: "USDT",
+            cryptoAmount: new Prisma.Decimal(cryptoAmount)
+          }
+        });
+        await this.redeemVoucher(tx, quote, user.id, orders[0].id);
+        return { orders, order: orders[0], payment, code, amount: quote.totalAmount, cryptoAmount, expiresAt, voucher: publicVoucherQuote(quote) };
+      },
+      ORDER_TRANSACTION_OPTIONS
+    );
+
+    let cryptomus: Awaited<ReturnType<ShopService["createCryptomusInvoice"]>>;
+    try {
+      cryptomus = await this.createCryptomusInvoice({
+        code: created.code,
+        productName: `${created.orders.length} products`,
+        amount: created.cryptoAmount,
+        expiresAt: created.expiresAt
+      });
+    } catch (error) {
+      await this.prisma.$transaction(async (tx) => {
+        await this.releaseVoucherForOrder(tx, created.order.id);
+        await tx.payment.update({ where: { id: created.payment.id }, data: { status: PaymentStatus.FAILED } });
+        await tx.order.updateMany({ where: { checkoutGroupId: created.order.checkoutGroupId }, data: { status: OrderStatus.CANCELLED } });
+      });
+      throw error;
+    }
+
+    const payment = await this.prisma.payment.update({
+      where: { id: created.payment.id },
+      data: {
+        providerPaymentId: cryptomus.providerPaymentId,
+        checkoutUrl: cryptomus.checkoutUrl,
+        deeplink: cryptomus.deeplink,
+        qrImageUrl: cryptomus.qrImageUrl,
+        qrPayload: cryptomus.address ?? cryptomus.checkoutUrl ?? created.code,
+        providerPayload: cryptomus.rawPayload as Prisma.InputJsonValue
+      }
+    });
+    return {
+      ...created,
+      payment,
+      cryptoCurrency: "USDT",
+      qrImageUrl: payment.qrImageUrl,
+      checkoutUrl: payment.checkoutUrl,
+      deeplink: payment.deeplink,
+      network: cryptomus.network,
+      address: cryptomus.address
+    };
   }
 
   async fulfillDirectOrder(paymentId: string) {
@@ -409,6 +812,15 @@ export class ShopService {
           return { outcome: "already_processed" as const, payment };
         }
 
+        const groupOrders = payment.order.checkoutGroupId
+          ? await tx.order.findMany({
+              where: { checkoutGroupId: payment.order.checkoutGroupId },
+              orderBy: { createdAt: "asc" },
+              include: { product: true, user: true }
+            })
+          : [payment.order];
+        const groupOrderIds = groupOrders.map((order) => order.id);
+
         const now = new Date();
         if ((payment.expiresAt && payment.expiresAt < now) || (payment.order.expiresAt && payment.order.expiresAt < now)) {
           await this.creditPaymentToWallet(
@@ -423,29 +835,48 @@ export class ShopService {
             where: { id: payment.id },
             data: { status: PaymentStatus.CREDITED_TO_WALLET }
           });
-          await tx.order.update({
-            where: { id: payment.order.id },
-            data: { status: OrderStatus.CREDITED_TO_WALLET }
-          });
+          await this.releaseVoucherForOrder(tx, payment.order.id);
+          if (groupOrderIds.length === 1) {
+            await tx.order.update({ where: { id: payment.order.id }, data: { status: OrderStatus.CREDITED_TO_WALLET } });
+          } else {
+            await tx.order.updateMany({ where: { id: { in: groupOrderIds } }, data: { status: OrderStatus.CREDITED_TO_WALLET } });
+          }
           return { outcome: "credited_late_payment" as const, payment: updatedPayment, user: payment.order.user };
         }
 
         try {
-          await this.ensurePurchasable(payment.order.product, payment.order.quantity, tx);
-          const deliveryText = await this.fulfillOrderItems(tx, payment.order.id, payment.order.product, payment.order.quantity);
+          for (const order of groupOrders) {
+            await this.ensurePurchasable(order.product, order.quantity, tx);
+          }
+          if (groupOrders.length === 1) {
+            const deliveryText = await this.fulfillOrderItems(tx, payment.order.id, payment.order.product, payment.order.quantity);
+            const updatedPayment = await tx.payment.update({
+              where: { id: payment.id },
+              data: { status: PaymentStatus.SUCCEEDED }
+            });
+            const order = await tx.order.update({
+              where: { id: payment.order.id },
+              data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() }
+            });
+            return { outcome: "fulfilled" as const, payment: updatedPayment, order, orders: [{ ...order, product: payment.order.product }], deliveryText, user: payment.order.user };
+          }
           const updatedPayment = await tx.payment.update({
             where: { id: payment.id },
             data: { status: PaymentStatus.SUCCEEDED }
           });
-          const order = await tx.order.update({
-            where: { id: payment.order.id },
-            data: {
-              status: OrderStatus.FULFILLED,
-              deliveryText,
-              fulfilledAt: new Date()
-            }
-          });
-          return { outcome: "fulfilled" as const, payment: updatedPayment, order, deliveryText, user: payment.order.user };
+          const fulfilledOrders = [];
+          for (const order of groupOrders) {
+            const deliveryText = await this.fulfillOrderItems(tx, order.id, order.product, order.quantity);
+            fulfilledOrders.push(
+              await tx.order.update({
+                where: { id: order.id },
+                data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() },
+                include: { product: true }
+              })
+            );
+          }
+          const deliveryText = formatCartDelivery(fulfilledOrders);
+          return { outcome: "fulfilled" as const, payment: updatedPayment, order: fulfilledOrders[0], orders: fulfilledOrders, deliveryText, user: payment.order.user };
         } catch (error) {
           await this.creditPaymentToWallet(
             tx,
@@ -459,10 +890,12 @@ export class ShopService {
             where: { id: payment.id },
             data: { status: PaymentStatus.CREDITED_TO_WALLET }
           });
-          await tx.order.update({
-            where: { id: payment.order.id },
-            data: { status: OrderStatus.CREDITED_TO_WALLET }
-          });
+          await this.releaseVoucherForOrder(tx, payment.order.id);
+          if (groupOrderIds.length === 1) {
+            await tx.order.update({ where: { id: payment.order.id }, data: { status: OrderStatus.CREDITED_TO_WALLET } });
+          } else {
+            await tx.order.updateMany({ where: { id: { in: groupOrderIds } }, data: { status: OrderStatus.CREDITED_TO_WALLET } });
+          }
           return { outcome: "credited_out_of_stock" as const, payment: updatedPayment, user: payment.order.user, error };
         }
       },
@@ -500,8 +933,9 @@ export class ShopService {
       data: { status: PaymentStatus.MANUAL_REVIEW }
     });
     if (payment.orderId) {
-      await this.prisma.order.update({
-        where: { id: payment.orderId },
+      const order = await this.prisma.order.findUnique({ where: { id: payment.orderId }, select: { checkoutGroupId: true } });
+      await this.prisma.order.updateMany({
+        where: order?.checkoutGroupId ? { checkoutGroupId: order.checkoutGroupId } : { id: payment.orderId },
         data: { status: OrderStatus.MANUAL_REVIEW }
       });
     }
@@ -697,11 +1131,58 @@ export class ShopService {
     return result;
   }
 
+  async listVouchers() {
+    return this.prisma.voucher.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: {
+        createdBy: { select: { id: true, email: true, name: true } },
+        _count: { select: { redemptions: true } }
+      }
+    });
+  }
+
+  async createVoucher(input: VoucherInput, adminId: string) {
+    const data = normalizeVoucherInput(input, false);
+    const voucher = await this.prisma.voucher.create({
+      data: {
+        ...data,
+        code: data.code!,
+        discountPercent: data.discountPercent!,
+        expiresAt: data.expiresAt!,
+        createdByAdminId: adminId
+      }
+    });
+    await this.audit(adminId, "VOUCHER_CREATE", "Voucher", voucher.id, {
+      code: voucher.code,
+      discountPercent: voucher.discountPercent,
+      expiresAt: voucher.expiresAt
+    });
+    return voucher;
+  }
+
+  async updateVoucher(voucherId: string, input: Partial<VoucherInput>, adminId: string) {
+    const previous = await this.prisma.voucher.findUnique({ where: { id: voucherId } });
+    if (!previous) throw new NotFoundException("Không tìm thấy mã ưu đãi.");
+    const data = normalizeVoucherInput(input, true);
+    const voucher = await this.prisma.voucher.update({
+      where: { id: voucherId },
+      data
+    });
+    await this.audit(adminId, "VOUCHER_UPDATE", "Voucher", voucher.id, {
+      code: voucher.code,
+      discountPercent: voucher.discountPercent,
+      active: voucher.active,
+      expiresAt: voucher.expiresAt
+    });
+    return voucher;
+  }
+
   async listOrders() {
     return this.prisma.order.findMany({
       orderBy: { createdAt: "desc" },
       take: 200,
-      include: { user: true, product: true, payments: true }
+      include: { user: true, product: true, payments: true, voucher: true }
     });
   }
 
@@ -873,18 +1354,222 @@ export class ShopService {
     });
 
     for (const payment of pending) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.EXPIRED }
-      });
-      if (payment.order?.status === OrderStatus.PENDING_PAYMENT) {
-        await this.prisma.order.update({
-          where: { id: payment.order.id },
-          data: { status: OrderStatus.EXPIRED }
+      await this.prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { status: PaymentStatus.EXPIRED }
         });
-      }
+        if (payment.order?.status === OrderStatus.PENDING_PAYMENT) {
+          await this.releaseVoucherForOrder(tx, payment.order.id);
+          await tx.order.updateMany({
+            where: payment.order.checkoutGroupId ? { checkoutGroupId: payment.order.checkoutGroupId } : { id: payment.order.id },
+            data: { status: OrderStatus.EXPIRED }
+          });
+        }
+      });
     }
     return pending;
+  }
+
+  async releaseVoucherReservation(orderId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      await this.releaseVoucherForOrder(tx, orderId);
+    });
+  }
+
+  private async prepareCartLines(tx: Prisma.TransactionClient, items: CartOrderItemInput[], channel: SalesChannel) {
+    const products = await tx.product.findMany({
+      where: { id: { in: items.map((item) => item.productId) } }
+    });
+    if (products.length !== items.length) throw new NotFoundException("Một sản phẩm trong giỏ không còn tồn tại.");
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    const lines = [];
+    for (const item of items) {
+      const product = productMap.get(item.productId);
+      if (!product || !isVisibleForChannel(product, channel)) {
+        throw new NotFoundException("Một sản phẩm trong giỏ không còn được bán.");
+      }
+      await this.ensurePurchasable(product, item.quantity, tx);
+      const unitPrice = channelPrice(product, channel);
+      lines.push({ product, quantity: item.quantity, unitPrice, subtotalAmount: unitPrice * item.quantity });
+    }
+    return lines;
+  }
+
+  private async quoteVoucher(
+    tx: Prisma.TransactionClient | PrismaService,
+    user: { id: string; createdAt: Date },
+    subtotalAmount: number,
+    voucherCode?: string | null,
+    voucherClaim?: VoucherClaim | null
+  ): Promise<VoucherQuote> {
+    const cleanCode = normalizeVoucherCode(voucherCode);
+    if (!cleanCode) {
+      return {
+        code: null,
+        voucherId: null,
+        discountPercent: 0,
+        subtotalAmount,
+        discountAmount: 0,
+        totalAmount: subtotalAmount,
+        firstOrderOnly: false,
+        expiresAt: null,
+        maxUses: null,
+        maxDiscountAmount: null,
+        maxDiscountUsdt: null,
+        claimIpHash: null,
+        claimFingerprintHash: null
+      };
+    }
+
+    const voucher = cleanCode === FIRST_ORDER_VOUCHER_CODE ? await this.ensureFirstOrderVoucher(tx) : await tx.voucher.findUnique({ where: { code: cleanCode } });
+    if (!voucher || !voucher.active) {
+      throw new BadRequestException("Mã ưu đãi không hợp lệ.");
+    }
+
+    const now = new Date();
+    if (voucher.startsAt > now) {
+      throw new BadRequestException("Mã ưu đãi chưa đến thời gian sử dụng.");
+    }
+    if (voucher.expiresAt < now) {
+      throw new BadRequestException("Mã ưu đãi đã hết hạn.");
+    }
+    if (voucher.maxUses !== null && voucher.usedCount >= voucher.maxUses) {
+      throw new BadRequestException("Mã ưu đãi đã hết lượt sử dụng.");
+    }
+
+    const existingRedemption = await tx.voucherRedemption.findFirst({
+      where: { voucherId: voucher.id, userId: user.id },
+      select: { id: true }
+    });
+    if (existingRedemption) {
+      throw new BadRequestException("Bạn đã dùng mã ưu đãi này rồi.");
+    }
+
+    if (voucher.firstOrderOnly) {
+      if (!voucherClaim?.fingerprintHash && !voucherClaim?.ipHash) {
+        throw new BadRequestException("Không xác thực được phiên ưu đãi. Vui lòng thử lại.");
+      }
+      const reuseFilters: Prisma.VoucherRedemptionWhereInput[] = [];
+      if (voucherClaim.fingerprintHash) reuseFilters.push({ claimFingerprintHash: voucherClaim.fingerprintHash });
+      if (voucherClaim.ipHash) reuseFilters.push({ claimIpHash: voucherClaim.ipHash });
+      const existingClaim = await tx.voucherRedemption.findFirst({
+        where: {
+          userId: { not: user.id },
+          voucher: { firstOrderOnly: true },
+          OR: reuseFilters
+        },
+        select: { id: true }
+      });
+      if (existingClaim) {
+        throw new BadRequestException("Mã ưu đãi đơn đầu đã được dùng trên thiết bị hoặc mạng này.");
+      }
+
+      const customerVoucherExpiresAt = new Date(user.createdAt.getTime() + FIRST_ORDER_VOUCHER_DAYS * 24 * 60 * 60 * 1000);
+      if (customerVoucherExpiresAt < now) {
+        throw new BadRequestException("Mã ưu đãi đơn đầu đã hết hạn.");
+      }
+      const existingOrder = await tx.order.findFirst({
+        where: {
+          userId: user.id,
+          status: { notIn: [OrderStatus.EXPIRED, OrderStatus.CANCELLED, OrderStatus.CREDITED_TO_WALLET] }
+        },
+        select: { id: true }
+      });
+      if (existingOrder) {
+        throw new BadRequestException("Mã ưu đãi này chỉ dành cho đơn hàng đầu tiên.");
+      }
+    }
+
+    const percentageDiscount = Math.floor((subtotalAmount * voucher.discountPercent) / 100);
+    const discountAmount = voucher.maxDiscountAmount === null ? percentageDiscount : Math.min(percentageDiscount, voucher.maxDiscountAmount);
+    const totalAmount = Math.max(0, subtotalAmount - discountAmount);
+    if (totalAmount <= 0) {
+      throw new BadRequestException("Mã ưu đãi vượt quá giá trị đơn hàng.");
+    }
+
+    return {
+      code: voucher.code,
+      voucherId: voucher.id,
+      discountPercent: voucher.discountPercent,
+      subtotalAmount,
+      discountAmount,
+      totalAmount,
+      firstOrderOnly: voucher.firstOrderOnly,
+      expiresAt: voucher.firstOrderOnly ? new Date(user.createdAt.getTime() + FIRST_ORDER_VOUCHER_DAYS * 24 * 60 * 60 * 1000) : voucher.expiresAt,
+      maxUses: voucher.maxUses,
+      maxDiscountAmount: voucher.maxDiscountAmount,
+      maxDiscountUsdt: decimalNumber(voucher.maxDiscountUsdt),
+      claimIpHash: voucher.firstOrderOnly ? voucherClaim?.ipHash ?? null : null,
+      claimFingerprintHash: voucher.firstOrderOnly ? voucherClaim?.fingerprintHash ?? null : null
+    };
+  }
+
+  private async redeemVoucher(tx: Prisma.TransactionClient, quote: VoucherQuote, userId: string, orderId: string) {
+    if (!quote.voucherId || !quote.code || quote.discountAmount <= 0) return;
+    const now = new Date();
+    const updateWhere =
+      quote.maxUses === null
+        ? { id: quote.voucherId, active: true, startsAt: { lte: now }, expiresAt: { gte: now } }
+        : { id: quote.voucherId, active: true, startsAt: { lte: now }, expiresAt: { gte: now }, usedCount: { lt: quote.maxUses } };
+    const updated = await tx.voucher.updateMany({
+      where: updateWhere,
+      data: { usedCount: { increment: 1 } }
+    });
+    if (updated.count !== 1) {
+      throw new BadRequestException("Mã ưu đãi vừa hết lượt sử dụng.");
+    }
+    await tx.voucherRedemption.create({
+      data: {
+        voucherId: quote.voucherId,
+        userId,
+        orderId,
+        subtotalAmount: quote.subtotalAmount,
+        discountAmount: quote.discountAmount,
+        totalAmount: quote.totalAmount,
+        claimIpHash: quote.claimIpHash,
+        claimFingerprintHash: quote.claimFingerprintHash
+      }
+    });
+  }
+
+  private async releaseVoucherForOrder(tx: Prisma.TransactionClient, orderId: string) {
+    if (!tx.voucherRedemption || !tx.voucher) return;
+    const redemption = await tx.voucherRedemption.findUnique({
+      where: { orderId },
+      select: { id: true, voucherId: true }
+    });
+    if (!redemption) return;
+    await tx.voucherRedemption.delete({ where: { id: redemption.id } });
+    await tx.voucher.updateMany({
+      where: { id: redemption.voucherId, usedCount: { gt: 0 } },
+      data: { usedCount: { decrement: 1 } }
+    });
+  }
+
+  private async ensureFirstOrderVoucher(tx: Prisma.TransactionClient | PrismaService) {
+    return tx.voucher.upsert({
+      where: { code: FIRST_ORDER_VOUCHER_CODE },
+      update: {
+        discountPercent: 20,
+        active: true,
+        firstOrderOnly: true,
+        maxDiscountAmount: 50_000,
+        maxDiscountUsdt: new Prisma.Decimal(2),
+        maxUses: null,
+        expiresAt: new Date("2100-01-01T00:00:00.000Z")
+      },
+      create: {
+        code: FIRST_ORDER_VOUCHER_CODE,
+        discountPercent: 20,
+        active: true,
+        firstOrderOnly: true,
+        maxDiscountAmount: 50_000,
+        maxDiscountUsdt: new Prisma.Decimal(2),
+        maxUses: null,
+        expiresAt: new Date("2100-01-01T00:00:00.000Z")
+      }
+    });
   }
 
   private async requireTelegramUser(telegramId: string) {
@@ -1202,6 +1887,166 @@ export class ShopService {
 
 function minutesFromNow(minutes: number) {
   return new Date(Date.now() + minutes * 60_000);
+}
+
+function monthFromNow() {
+  const date = new Date();
+  date.setMonth(date.getMonth() + 1);
+  return date;
+}
+
+function normalizeVoucherCode(input?: string | null) {
+  const code = input?.trim().toUpperCase().replace(/\s+/g, "") ?? "";
+  if (!code) return null;
+  if (!VOUCHER_CODE_PATTERN.test(code)) {
+    throw new BadRequestException("Mã ưu đãi chỉ gồm chữ, số, gạch ngang hoặc gạch dưới, từ 3 đến 32 ký tự.");
+  }
+  return code;
+}
+
+function normalizeVoucherInput(input: Partial<VoucherInput>, partial: boolean) {
+  const data: {
+    code?: string;
+    discountPercent?: number;
+    maxDiscountAmount?: number | null;
+    maxDiscountUsdt?: Prisma.Decimal | null;
+    active?: boolean;
+    firstOrderOnly?: boolean;
+    maxUses?: number | null;
+    startsAt?: Date;
+    expiresAt?: Date;
+  } = {};
+
+  const hasDiscount = input.discountPercent !== undefined;
+  if (hasDiscount || !partial) {
+    const percent = Number(input.discountPercent);
+    if (!Number.isInteger(percent) || percent < 1 || percent > 90) {
+      throw new BadRequestException("Phần trăm giảm phải từ 1 đến 90.");
+    }
+    data.discountPercent = percent;
+    if (!partial) {
+      data.code = normalizeVoucherCode(input.code) ?? `VD${percent}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+    }
+  }
+
+  if (input.code !== undefined && partial) {
+    const code = normalizeVoucherCode(input.code);
+    if (!code) throw new BadRequestException("Mã ưu đãi không được để trống.");
+    data.code = code;
+  }
+
+  if (input.active !== undefined) data.active = Boolean(input.active);
+  if (input.firstOrderOnly !== undefined) data.firstOrderOnly = Boolean(input.firstOrderOnly);
+  if (input.maxUses !== undefined) {
+    if (input.maxUses === null) {
+      data.maxUses = null;
+    } else {
+      const maxUses = Number(input.maxUses);
+      if (!Number.isInteger(maxUses) || maxUses < 1) {
+        throw new BadRequestException("Số lượt dùng phải là số nguyên lớn hơn 0.");
+      }
+      data.maxUses = maxUses;
+    }
+  }
+
+  if (input.maxDiscountAmount !== undefined) {
+    if (input.maxDiscountAmount === null) {
+      data.maxDiscountAmount = null;
+    } else {
+      const maxDiscountAmount = Number(input.maxDiscountAmount);
+      if (!Number.isInteger(maxDiscountAmount) || maxDiscountAmount < 1) {
+        throw new BadRequestException("Số tiền giảm tối đa phải là số nguyên lớn hơn 0.");
+      }
+      data.maxDiscountAmount = maxDiscountAmount;
+    }
+  }
+
+  if (input.maxDiscountUsdt !== undefined) {
+    data.maxDiscountUsdt = input.maxDiscountUsdt === null ? null : normalizeUsdtPrice(input.maxDiscountUsdt);
+  }
+
+  if (input.startsAt !== undefined && input.startsAt !== null) {
+    data.startsAt = parseVoucherDate(input.startsAt, "Ngày bắt đầu không hợp lệ.");
+  } else if (!partial) {
+    data.startsAt = new Date();
+  }
+
+  if (input.expiresAt !== undefined && input.expiresAt !== null) {
+    data.expiresAt = parseVoucherDate(input.expiresAt, "Ngày hết hạn không hợp lệ.");
+  } else if (!partial) {
+    data.expiresAt = monthFromNow();
+  }
+
+  if (data.startsAt && data.expiresAt && data.expiresAt <= data.startsAt) {
+    throw new BadRequestException("Ngày hết hạn phải sau ngày bắt đầu.");
+  }
+
+  return data;
+}
+
+function parseVoucherDate(value: string | Date, message: string) {
+  const date = value instanceof Date ? value : new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T23:59:59+07:00` : value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestException(message);
+  }
+  return date;
+}
+
+function publicVoucherQuote(quote: VoucherQuote) {
+  return {
+    code: quote.code,
+    discountPercent: quote.discountPercent,
+    subtotalAmount: quote.subtotalAmount,
+    discountAmount: quote.discountAmount,
+    totalAmount: quote.totalAmount,
+    maxDiscountAmount: quote.maxDiscountAmount,
+    maxDiscountUsdt: quote.maxDiscountUsdt,
+    firstOrderOnly: quote.firstOrderOnly,
+    expiresAt: quote.expiresAt
+  };
+}
+
+function normalizeCartItems(items: CartOrderItemInput[]) {
+  if (!Array.isArray(items) || items.length < 1 || items.length > 20) {
+    throw new BadRequestException("Giỏ hàng phải có từ 1 đến 20 sản phẩm.");
+  }
+  const quantities = new Map<string, number>();
+  for (const item of items) {
+    const productId = item?.productId?.trim();
+    const quantity = Number(item?.quantity);
+    if (!productId || !Number.isInteger(quantity) || quantity < 1 || quantity > 999) {
+      throw new BadRequestException("Sản phẩm hoặc số lượng trong giỏ không hợp lệ.");
+    }
+    quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
+  }
+  return [...quantities.entries()].map(([productId, quantity]) => ({ productId, quantity }));
+}
+
+function allocateCartQuote<T extends { subtotalAmount: number }>(lines: T[], quote: VoucherQuote) {
+  let allocatedDiscount = 0;
+  return lines.map((line, index) => {
+    const discountAmount =
+      index === lines.length - 1
+        ? quote.discountAmount - allocatedDiscount
+        : Math.min(line.subtotalAmount, Math.floor((line.subtotalAmount / quote.subtotalAmount) * quote.discountAmount));
+    allocatedDiscount += discountAmount;
+    return {
+      ...line,
+      discountAmount,
+      totalAmount: line.subtotalAmount - discountAmount
+    };
+  });
+}
+
+function discountedCryptoAmount(rawAmount: number, quote: VoucherQuote) {
+  const percentageDiscount = (rawAmount * quote.discountPercent) / 100;
+  const discount = quote.maxDiscountUsdt === null ? percentageDiscount : Math.min(percentageDiscount, quote.maxDiscountUsdt);
+  return roundUsdt(Math.max(0.00000001, rawAmount - discount));
+}
+
+function formatCartDelivery(orders: Array<{ product: { name: string }; deliveryText?: string | null }>) {
+  if (orders.length === 1) return orders[0].deliveryText ?? "";
+  return orders.map((order) => `${order.product.name}\n${order.deliveryText ?? ""}`.trim()).join("\n\n");
 }
 
 function assertNonNegativeStock(value?: number) {

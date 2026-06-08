@@ -76,19 +76,48 @@ export type PaymentResult = {
   address?: string | null;
   network?: string | null;
   expiresAt: string;
+  voucher?: VoucherPreview | null;
+};
+
+export type VoucherPreview = {
+  code: string | null;
+  discountPercent: number;
+  subtotalAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  maxDiscountAmount?: number | null;
+  maxDiscountUsdt?: number | null;
+  firstOrderOnly: boolean;
+  expiresAt?: string | null;
 };
 
 export type WalletPurchaseResult = {
   deliveryText: string;
   balanceAfter: number;
+  voucher?: VoucherPreview | null;
   order?: {
     code: string;
     status?: string;
     quantity: number;
+    subtotalAmount?: number;
+    discountAmount?: number;
     totalAmount: number;
     deliveryText?: string | null;
     product?: { id?: string; name: string; deliveryType?: Product["deliveryType"] };
   };
+};
+
+export type CartPurchaseResult = WalletPurchaseResult & {
+  orders: Array<{
+    code: string;
+    status?: string;
+    quantity: number;
+    subtotalAmount?: number;
+    discountAmount?: number;
+    totalAmount: number;
+    deliveryText?: string | null;
+    product: { id?: string; name: string; deliveryType?: Product["deliveryType"] };
+  }>;
 };
 
 export type PaymentStatusResult = {
@@ -110,6 +139,8 @@ export type PaymentStatusResult = {
     code: string;
     status: string;
     quantity: number;
+    subtotalAmount?: number;
+    discountAmount?: number;
     totalAmount: number;
     deliveryText?: string | null;
     product: { id: string; name: string; deliveryType: Product["deliveryType"] };
@@ -119,6 +150,8 @@ export type PaymentStatusResult = {
 export type History = {
   orders: Array<{
     code: string;
+    subtotalAmount?: number;
+    discountAmount?: number;
     totalAmount: number;
     status: string;
     createdAt: string;

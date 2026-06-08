@@ -41,6 +41,7 @@ import {
 import {
   availableQuantity,
   Catalog,
+  CartPurchaseResult,
   flattenCatalog,
   formatUsdt,
   formatVnd,
@@ -52,6 +53,7 @@ import {
   ReviewsResponse,
   Session,
   StoreApi,
+  VoucherPreview,
   WalletPurchaseResult
 } from "./api";
 import "./styles.css";
@@ -222,6 +224,8 @@ type DeliveryNotice = {
     code: string;
     status?: string;
     quantity: number;
+    subtotalAmount?: number;
+    discountAmount?: number;
     totalAmount: number;
     deliveryText?: string | null;
     product?: { name: string; deliveryType?: Product["deliveryType"] };
@@ -347,6 +351,7 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [checkoutItem, setCheckoutItem] = useState<CartItem | null>(null);
+  const [checkoutCartItems, setCheckoutCartItems] = useState<CartItem[] | null>(null);
   const [qr, setQr] = useState<PaymentResult | null>(null);
   const [qrStatus, setQrStatus] = useState<PaymentStatusResult | null>(null);
   const [delivery, setDelivery] = useState<DeliveryNotice | null>(null);
@@ -527,17 +532,28 @@ function App() {
   function removeFromCart(productId: string) {
     setCartItems((current) => current.filter((item) => item.product.id !== productId));
     setCheckoutItem((current) => (current?.product.id === productId ? null : current));
+    setCheckoutCartItems((current) => current?.filter((item) => item.product.id !== productId) ?? null);
   }
 
   function checkoutCartItem(item: CartItem) {
     setCartOpen(false);
     setSelectedProduct(null);
+    setCheckoutCartItems(null);
     setCheckoutItem(item);
+  }
+
+  function checkoutCartAll() {
+    if (!cartItems.length) return;
+    setCartOpen(false);
+    setSelectedProduct(null);
+    setCheckoutItem(null);
+    setCheckoutCartItems(cartItems);
   }
 
   function checkoutProduct(product: Product, quantity = 1) {
     setSelectedProduct(null);
     setCartOpen(false);
+    setCheckoutCartItems(null);
     setCheckoutItem({ product, quantity });
   }
 
@@ -551,10 +567,10 @@ function App() {
     });
   }
 
-  async function buyWithWallet(product: Product, quantity = 1) {
+  async function buyWithWallet(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
     await runAction(`wallet:${product.id}`, async () => {
-      const result = await api.post<WalletPurchaseResult>("/store/orders/wallet", { productId: product.id, quantity });
+      const result = await api.post<WalletPurchaseResult>("/store/orders/wallet", { productId: product.id, quantity, voucherCode });
       setDelivery({
         title: language === "vi" ? "Mua hàng thành công" : "Purchase completed",
         deliveryText: result.deliveryText,
@@ -563,7 +579,9 @@ function App() {
           code: result.order?.code ?? "",
           status: result.order?.status,
           quantity,
-          totalAmount: product.price * quantity,
+          subtotalAmount: result.order?.subtotalAmount,
+          discountAmount: result.order?.discountAmount,
+          totalAmount: result.order?.totalAmount ?? product.price * quantity,
           deliveryText: result.deliveryText,
           product: { name: product.name, deliveryType: product.deliveryType }
         }
@@ -577,10 +595,10 @@ function App() {
     });
   }
 
-  async function buyWithBank(product: Product, quantity = 1) {
+  async function buyWithBank(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
     await runAction(`bank:${product.id}`, async () => {
-      setQr(await api.post<PaymentResult>("/store/orders/bank", { productId: product.id, quantity }));
+      setQr(await api.post<PaymentResult>("/store/orders/bank", { productId: product.id, quantity, voucherCode }));
       setQrStatus(null);
       setDelivery(null);
       setSelectedProduct(null);
@@ -589,15 +607,65 @@ function App() {
     });
   }
 
-  async function buyWithUsdt(product: Product, quantity = 1) {
+  async function buyWithUsdt(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
     await runAction(`usdt:${product.id}`, async () => {
-      setQr(await api.post<PaymentResult>("/store/orders/usdt", { productId: product.id, quantity }));
+      setQr(await api.post<PaymentResult>("/store/orders/usdt", { productId: product.id, quantity, voucherCode }));
       setQrStatus(null);
       setDelivery(null);
       setSelectedProduct(null);
       setCheckoutItem(null);
       removeFromCart(product.id);
+    });
+  }
+
+  async function buyCartWithWallet(items: CartItem[], voucherCode?: string | null) {
+    if (!requireLogin()) return;
+    const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
+    await runAction("cart-wallet", async () => {
+      const result = await api.post<CartPurchaseResult>("/store/cart/orders/wallet", { items: payloadItems, voucherCode });
+      setDelivery({
+        title: language === "vi" ? "Mua giỏ hàng thành công" : "Cart purchase completed",
+        deliveryText: result.deliveryText,
+        balanceAfter: result.balanceAfter,
+        order: {
+          code: result.order?.code ?? "",
+          status: result.order?.status,
+          quantity: result.orders.reduce((sum, order) => sum + order.quantity, 0),
+          totalAmount: result.voucher?.totalAmount ?? result.orders.reduce((sum, order) => sum + order.totalAmount, 0),
+          deliveryText: result.deliveryText,
+          product: { name: language === "vi" ? `${result.orders.length} sản phẩm` : `${result.orders.length} products`, deliveryType: "MANUAL" }
+        }
+      });
+      setQr(null);
+      setQrStatus(null);
+      setCheckoutCartItems(null);
+      setCartItems([]);
+      await loadPrivateData(false);
+    });
+  }
+
+  async function buyCartWithBank(items: CartItem[], voucherCode?: string | null) {
+    if (!requireLogin()) return;
+    const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
+    await runAction("cart-bank", async () => {
+      setQr(await api.post<PaymentResult>("/store/cart/orders/bank", { items: payloadItems, voucherCode }));
+      setQrStatus(null);
+      setDelivery(null);
+      setCheckoutCartItems(null);
+      setCartItems([]);
+    });
+  }
+
+  async function buyCartWithUsdt(items: CartItem[], voucherCode?: string | null) {
+    if (!requireLogin()) return;
+    const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
+    await runAction("cart-usdt", async () => {
+      setQr(await api.post<PaymentResult>("/store/cart/orders/usdt", { items: payloadItems, voucherCode }));
+      setQrStatus(null);
+      setDelivery(null);
+      setCheckoutCartItems(null);
+      setCartItems([]);
     });
   }
 
@@ -847,9 +915,9 @@ function App() {
           language={language}
           onClose={() => setCheckoutItem(null)}
           onQuantity={updateCheckoutQuantity}
-          onWallet={(quantity) => buyWithWallet(checkoutItem.product, quantity)}
-          onBank={(quantity) => buyWithBank(checkoutItem.product, quantity)}
-          onUsdt={(quantity) => buyWithUsdt(checkoutItem.product, quantity)}
+          onWallet={(quantity, voucherCode) => buyWithWallet(checkoutItem.product, quantity, voucherCode)}
+          onBank={(quantity, voucherCode) => buyWithBank(checkoutItem.product, quantity, voucherCode)}
+          onUsdt={(quantity, voucherCode) => buyWithUsdt(checkoutItem.product, quantity, voucherCode)}
           onWalletOpen={() => {
             setCheckoutItem(null);
             if (token) setWalletOpen(true);
@@ -857,6 +925,28 @@ function App() {
           }}
           onBackToCart={() => {
             setCheckoutItem(null);
+            setCartOpen(true);
+          }}
+        />
+      ) : null}
+      {checkoutCartItems ? (
+        <CartCheckoutDialog
+          items={checkoutCartItems}
+          customer={customer}
+          balance={balance}
+          loading={loading}
+          language={language}
+          onClose={() => setCheckoutCartItems(null)}
+          onWallet={(voucherCode) => buyCartWithWallet(checkoutCartItems, voucherCode)}
+          onBank={(voucherCode) => buyCartWithBank(checkoutCartItems, voucherCode)}
+          onUsdt={(voucherCode) => buyCartWithUsdt(checkoutCartItems, voucherCode)}
+          onWalletOpen={() => {
+            setCheckoutCartItems(null);
+            if (token) setWalletOpen(true);
+            else setAuthOpen(true);
+          }}
+          onBackToCart={() => {
+            setCheckoutCartItems(null);
             setCartOpen(true);
           }}
         />
@@ -870,6 +960,7 @@ function App() {
           onQuantity={updateCartQuantity}
           onRemove={removeFromCart}
           onCheckout={checkoutCartItem}
+          onCheckoutAll={checkoutCartAll}
           onShop={() => {
             setCartOpen(false);
             navigateTab("products");
@@ -1886,9 +1977,9 @@ function CheckoutDialog({
   language: Language;
   onClose: () => void;
   onQuantity: (quantity: number) => void;
-  onWallet: (quantity: number) => void;
-  onBank: (quantity: number) => void;
-  onUsdt: (quantity: number) => void;
+  onWallet: (quantity: number, voucherCode?: string | null) => void;
+  onBank: (quantity: number, voucherCode?: string | null) => void;
+  onUsdt: (quantity: number, voucherCode?: string | null) => void;
   onWalletOpen: () => void;
   onBackToCart: () => void;
 }) {
@@ -1896,39 +1987,92 @@ function CheckoutDialog({
   const vi = language === "vi";
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [method, setMethod] = useState<PayMethod>(language === "en" && item.product.usdtPrice ? "usdt" : "bank");
-  const [coupon, setCoupon] = useState("");
+  const [coupon, setCoupon] = useState(customer ? "FIRST20" : "");
   const [couponMessage, setCouponMessage] = useState("");
+  const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
   const [contact, setContact] = useState({
     name: customer?.displayName ?? "",
     email: customer?.email ?? "",
     phone: ""
   });
-  const amount = item.product.price * item.quantity;
+  const subtotal = item.product.price * item.quantity;
+  const discountAmount = voucherPreview?.discountAmount ?? 0;
+  const amount = voucherPreview?.totalAmount ?? subtotal;
   const walletMissing = Math.max(0, amount - balance);
   const busy = loading === `wallet:${item.product.id}` || loading === `bank:${item.product.id}` || loading === `usdt:${item.product.id}`;
   const canUseUsdt = Boolean(item.product.usdtPrice);
+  const checkoutTotalLabel = method === "usdt" ? formatCheckoutTotal(item.product, item.quantity, "en", amount) : formatVnd(amount);
+
+  useEffect(() => {
+    const code = coupon.trim();
+    setVoucherPreview(null);
+    if (customer && code) void validateCoupon(code, true);
+  }, [customer?.id, item.product.id, item.quantity]);
+
+  useEffect(() => {
+    if (voucherPreview?.code && coupon.trim().toUpperCase() !== voucherPreview.code) {
+      setVoucherPreview(null);
+    }
+  }, [coupon, voucherPreview?.code]);
 
   function pay() {
     if (!contact.email.trim()) {
       setCouponMessage(vi ? "Vui lòng nhập email nhận hàng trước khi thanh toán." : "Please enter a delivery email before checkout.");
       return;
     }
-    if (method === "wallet") onWallet(item.quantity);
-    if (method === "bank") onBank(item.quantity);
-    if (method === "usdt") onUsdt(item.quantity);
+    if (coupon.trim() && !voucherPreview) {
+      setCouponMessage(vi ? "Vui lòng áp dụng mã ưu đãi trước khi thanh toán." : "Apply the promo code before checkout.");
+      return;
+    }
+    const voucherCode = voucherPreview?.code ?? undefined;
+    if (method === "wallet") onWallet(item.quantity, voucherCode);
+    if (method === "bank") onBank(item.quantity, voucherCode);
+    if (method === "usdt") onUsdt(item.quantity, voucherCode);
+  }
+
+  async function validateCoupon(code = coupon, silent = false) {
+    const cleanCode = code.trim();
+    if (!cleanCode) {
+      setVoucherPreview(null);
+      setCouponMessage(vi ? "Nhập mã ưu đãi để áp dụng." : "Enter a promo code to apply.");
+      return;
+    }
+    if (!customer) {
+      setVoucherPreview(null);
+      setCouponMessage(vi ? "Đăng nhập để dùng mã ưu đãi." : "Sign in to use promo codes.");
+      return;
+    }
+    setVoucherLoading(true);
+    try {
+      const preview = await api.post<VoucherPreview>("/store/vouchers/preview", {
+        productId: item.product.id,
+        quantity: item.quantity,
+        voucherCode: cleanCode
+      });
+      setVoucherPreview(preview);
+      setCoupon(preview.code ?? cleanCode.toUpperCase());
+      setCouponMessage(
+        vi
+          ? `Đã áp dụng mã ${preview.code}: giảm ${formatVnd(preview.discountAmount)}.`
+          : `${preview.code} applied: ${formatVnd(preview.discountAmount)} off.`
+      );
+    } catch (err) {
+      setVoucherPreview(null);
+      if (silent) {
+        if (cleanCode.toUpperCase() === "FIRST20") setCoupon("");
+        setCouponMessage("");
+      } else {
+        setCouponMessage((err as Error).message);
+      }
+    } finally {
+      setVoucherLoading(false);
+    }
   }
 
   function applyCoupon(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setCouponMessage(
-      coupon.trim()
-        ? vi
-          ? "Mã ưu đãi đã được ghi nhận. Tổng thanh toán vẫn theo giá backend để đối soát chính xác."
-          : "Promo code noted. The payable total remains backend-priced for accurate reconciliation."
-        : vi
-          ? "Nhập mã ưu đãi để áp dụng."
-          : "Enter a promo code to apply."
-    );
+    void validateCoupon();
   }
 
   return (
@@ -1957,8 +2101,16 @@ function CheckoutDialog({
                 <strong>{formatProductTotal(item.product, item.quantity, language)}</strong>
               </article>
               <form className="coupon-row" onSubmit={applyCoupon}>
-                <input value={coupon} onChange={(event) => setCoupon(event.target.value)} placeholder={vi ? "Nhập mã giảm giá" : "Promo code"} />
-                <button>{vi ? "Áp dụng" : "Apply"}</button>
+                <input
+                  value={coupon}
+                  onChange={(event) => {
+                    setCoupon(event.target.value);
+                    setVoucherPreview(null);
+                    setCouponMessage("");
+                  }}
+                  placeholder={vi ? "Nhập mã giảm giá" : "Promo code"}
+                />
+                <button disabled={voucherLoading}>{voucherLoading ? <Loader2 className="spin" size={15} /> : vi ? "Áp dụng" : "Apply"}</button>
               </form>
               {couponMessage ? <p className="inline-message">{couponMessage}</p> : null}
             </section>
@@ -2021,7 +2173,7 @@ function CheckoutDialog({
                 {method === "usdt" ? (
                   <div>
                     <span>{vi ? "Thanh toán USDT" : "USDT checkout"}</span>
-                    <b>{formatProductTotal(item.product, item.quantity, "en")}</b>
+                    <b>{formatCheckoutTotal(item.product, item.quantity, "en", amount)}</b>
                     <p>{vi ? "Invoice Cryptomus sẽ mở sau khi bấm thanh toán." : "A Cryptomus invoice opens after checkout."}</p>
                   </div>
                 ) : null}
@@ -2033,13 +2185,13 @@ function CheckoutDialog({
             <section className="order-summary-card">
               <h3>{vi ? "Tóm tắt đơn hàng" : "Order summary"}</h3>
               <dl>
-                <div><dt>{vi ? "Tạm tính" : "Subtotal"}</dt><dd>{formatVnd(amount)}</dd></div>
-                <div><dt>{vi ? "Giảm giá" : "Discount"}</dt><dd>0đ</dd></div>
+                <div><dt>{vi ? "Tạm tính" : "Subtotal"}</dt><dd>{formatVnd(subtotal)}</dd></div>
+                <div><dt>{vi ? "Giảm giá" : "Discount"}</dt><dd>{discountAmount > 0 ? `-${formatVnd(discountAmount)}` : formatVnd(0)}</dd></div>
                 <div><dt>{vi ? "Phí xử lý" : "Processing fee"}</dt><dd>{vi ? "Miễn phí" : "Free"}</dd></div>
               </dl>
               <div className="grand-total">
                 <span>{copy.total}</span>
-                <b>{method === "usdt" ? formatProductTotal(item.product, item.quantity, "en") : formatVnd(amount)}</b>
+                <b>{checkoutTotalLabel}</b>
               </div>
               <ul>
                 <li><ShieldCheck size={16} /> {vi ? "Sản phẩm chính hãng 100%" : "Verified product"}</li>
@@ -2062,11 +2214,182 @@ function CheckoutDialog({
           </button>
           <div>
             <span>{copy.total}</span>
-            <b>{method === "usdt" ? formatProductTotal(item.product, item.quantity, "en") : formatVnd(amount)}</b>
+            <b>{checkoutTotalLabel}</b>
           </div>
-          <button className="primary-button" onClick={pay} disabled={busy || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
+          <button className="primary-button" onClick={pay} disabled={busy || voucherLoading || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
             {busy ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />}
-            {vi ? `Thanh toán ${method === "usdt" ? formatProductTotal(item.product, item.quantity, "en") : formatVnd(amount)}` : "Pay securely"}
+            {vi ? `Thanh toán ${checkoutTotalLabel}` : "Pay securely"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CartCheckoutDialog({
+  items,
+  customer,
+  balance,
+  loading,
+  language,
+  onClose,
+  onWallet,
+  onBank,
+  onUsdt,
+  onWalletOpen,
+  onBackToCart
+}: {
+  items: CartItem[];
+  customer: Session["customer"] | null;
+  balance: number;
+  loading: string;
+  language: Language;
+  onClose: () => void;
+  onWallet: (voucherCode?: string | null) => void;
+  onBank: (voucherCode?: string | null) => void;
+  onUsdt: (voucherCode?: string | null) => void;
+  onWalletOpen: () => void;
+  onBackToCart: () => void;
+}) {
+  const vi = language === "vi";
+  const copy = TEXT[language];
+  const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
+  const [method, setMethod] = useState<PayMethod>("bank");
+  const [coupon, setCoupon] = useState(customer ? "FIRST20" : "");
+  const [couponMessage, setCouponMessage] = useState("");
+  const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const discountAmount = voucherPreview?.discountAmount ?? 0;
+  const amount = voucherPreview?.totalAmount ?? subtotal;
+  const walletMissing = Math.max(0, amount - balance);
+  const canUseUsdt = items.every((item) => Boolean(item.product.usdtPrice));
+  const busy = loading === "cart-wallet" || loading === "cart-bank" || loading === "cart-usdt";
+  const checkoutTotalLabel = method === "usdt" ? formatCartCheckoutTotal(items, amount) : formatVnd(amount);
+
+  useEffect(() => {
+    const code = coupon.trim();
+    setVoucherPreview(null);
+    if (customer && code) void validateCoupon(code, true);
+  }, [customer?.id, items.map((item) => `${item.product.id}:${item.quantity}`).join("|")]);
+
+  async function validateCoupon(code = coupon, silent = false) {
+    const cleanCode = code.trim();
+    if (!cleanCode) {
+      setCouponMessage(vi ? "Nhập mã ưu đãi để áp dụng." : "Enter a promo code to apply.");
+      return;
+    }
+    if (!customer) {
+      setCouponMessage(vi ? "Đăng nhập để dùng mã ưu đãi." : "Sign in to use promo codes.");
+      return;
+    }
+    setVoucherLoading(true);
+    try {
+      const preview = await api.post<VoucherPreview>("/store/cart/vouchers/preview", {
+        items: items.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
+        voucherCode: cleanCode
+      });
+      setVoucherPreview(preview);
+      setCoupon(preview.code ?? cleanCode.toUpperCase());
+      setCouponMessage(vi ? `Đã áp dụng mã ${preview.code}: giảm ${formatVnd(preview.discountAmount)}.` : `${preview.code} applied.`);
+    } catch (err) {
+      setVoucherPreview(null);
+      if (silent) {
+        if (cleanCode.toUpperCase() === "FIRST20") setCoupon("");
+        setCouponMessage("");
+      } else {
+        setCouponMessage((err as Error).message);
+      }
+    } finally {
+      setVoucherLoading(false);
+    }
+  }
+
+  function applyCoupon(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void validateCoupon();
+  }
+
+  function pay() {
+    if (coupon.trim() && !voucherPreview) {
+      setCouponMessage(vi ? "Vui lòng áp dụng mã ưu đãi trước khi thanh toán." : "Apply the promo code before checkout.");
+      return;
+    }
+    const voucherCode = voucherPreview?.code ?? undefined;
+    if (method === "wallet") onWallet(voucherCode);
+    if (method === "bank") onBank(voucherCode);
+    if (method === "usdt") onUsdt(voucherCode);
+  }
+
+  return (
+    <div className={`overlay checkout-overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
+      <section className="cart-checkout-modal" role="dialog" aria-modal="true" aria-label={copy.checkout}>
+        <button className="close-button" onClick={requestClose} aria-label="Close"><X size={18} /></button>
+        <div className="checkout-head">
+          <div>
+            <h2>{vi ? "Thanh toán giỏ hàng" : "Cart checkout"}</h2>
+            <p>{vi ? `${items.length} sản phẩm sẽ được gom vào một mã thanh toán.` : `${items.length} items will use one payment code.`}</p>
+          </div>
+        </div>
+        <div className="cart-checkout-grid">
+          <section className="checkout-card cart-batch-list">
+            {items.map((item) => (
+              <article className="cart-batch-item" key={item.product.id}>
+                <img src={productArtUrl(item.product)} alt="" />
+                <div>
+                  <b>{localizedName(item.product, language)}</b>
+                  <span>{item.quantity} × {formatProductPrice(item.product, language)}</span>
+                </div>
+                <strong>{formatVnd(item.product.price * item.quantity)}</strong>
+              </article>
+            ))}
+            <form className="coupon-row" onSubmit={applyCoupon}>
+              <input
+                value={coupon}
+                onChange={(event) => {
+                  setCoupon(event.target.value);
+                  setVoucherPreview(null);
+                  setCouponMessage("");
+                }}
+                placeholder={vi ? "Nhập mã giảm giá" : "Promo code"}
+              />
+              <button disabled={voucherLoading}>{voucherLoading ? <Loader2 className="spin" size={15} /> : vi ? "Áp dụng" : "Apply"}</button>
+            </form>
+            {couponMessage ? <p className="inline-message">{couponMessage}</p> : null}
+          </section>
+          <aside className="checkout-card cart-batch-summary">
+            <h3>{vi ? "Tổng thanh toán" : "Summary"}</h3>
+            <dl>
+              <div><dt>{vi ? "Tạm tính" : "Subtotal"}</dt><dd>{formatVnd(subtotal)}</dd></div>
+              <div><dt>{vi ? "Giảm giá" : "Discount"}</dt><dd>{discountAmount > 0 ? `-${formatVnd(discountAmount)}` : formatVnd(0)}</dd></div>
+              <div><dt>{vi ? "Phí xử lý" : "Processing fee"}</dt><dd>{vi ? "Miễn phí" : "Free"}</dd></div>
+            </dl>
+            <div className="payment-methods">
+              <button className={method === "bank" ? "active" : ""} onClick={() => setMethod("bank")}><QrCode size={17} /> VietQR</button>
+              <button className={method === "wallet" ? "active" : ""} onClick={() => setMethod("wallet")}><Wallet size={17} /> {vi ? "Ví" : "Wallet"}</button>
+              <button className={method === "usdt" ? "active" : ""} onClick={() => setMethod("usdt")} disabled={!canUseUsdt}><CreditCard size={17} /> USDT</button>
+            </div>
+            {method === "wallet" && walletMissing ? (
+              <p className="inline-message">{vi ? `Ví còn thiếu ${formatVnd(walletMissing)}.` : `Wallet short ${formatVnd(walletMissing)}.`} <button onClick={onWalletOpen}>{copy.topupTitle}</button></p>
+            ) : null}
+            <div className="grand-total">
+              <span>{copy.total}</span>
+              <b>{checkoutTotalLabel}</b>
+            </div>
+          </aside>
+        </div>
+        <div className="checkout-sticky-bar">
+          <button className="secondary-button" onClick={onBackToCart}>
+            <ArrowRight size={16} className="back-arrow" />
+            {vi ? "Quay lại giỏ hàng" : "Back to cart"}
+          </button>
+          <div>
+            <span>{copy.total}</span>
+            <b>{checkoutTotalLabel}</b>
+          </div>
+          <button className="primary-button" onClick={pay} disabled={busy || voucherLoading || (method === "wallet" && walletMissing > 0) || (method === "usdt" && !canUseUsdt)}>
+            {busy ? <Loader2 className="spin" size={17} /> : <ShieldCheck size={17} />}
+            {vi ? `Thanh toán tất cả` : "Pay all"}
           </button>
         </div>
       </section>
@@ -2149,6 +2472,7 @@ function CartDialog({
   onQuantity,
   onRemove,
   onCheckout,
+  onCheckoutAll,
   onShop
 }: {
   items: CartItem[];
@@ -2158,6 +2482,7 @@ function CartDialog({
   onQuantity: (productId: string, quantity: number) => void;
   onRemove: (productId: string) => void;
   onCheckout: (item: CartItem) => void;
+  onCheckoutAll: () => void;
   onShop: () => void;
 }) {
   const copy = TEXT[language];
@@ -2170,7 +2495,7 @@ function CartDialog({
         <div className="cart-head">
           <span><ShoppingCart size={18} /> {copy.cart}</span>
           <h2>{language === "vi" ? "Giỏ hàng của bạn" : "Your cart"}</h2>
-          <p>{copy.cartHint}</p>
+          <p>{items.length ? (language === "vi" ? `${items.length} sản phẩm sẵn sàng thanh toán cùng một lần.` : `${items.length} items ready for one checkout.`) : copy.cartHint}</p>
         </div>
 
         {items.length ? (
@@ -2185,14 +2510,14 @@ function CartDialog({
                     <p>{formatProductPrice(item.product, language)} · {postPaymentLabel(item.product.deliveryType, language)}</p>
                     <div className="cart-line-actions">
                       <QuantityControl value={item.quantity} max={maxQuantity} label={copy.quantity} compact onChange={(quantity) => onQuantity(item.product.id, quantity)} />
-                      <button className="danger-link" onClick={() => onRemove(item.product.id)}>
-                        <Trash2 size={14} /> {copy.remove}
-                      </button>
+                      <div className="cart-line-buttons">
+                        <button className="ghost-line-button" onClick={() => onCheckout(item)}>{copy.checkout}</button>
+                        <button className="danger-link" onClick={() => onRemove(item.product.id)} aria-label={copy.remove}>
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <button className="primary-button cart-checkout" onClick={() => onCheckout(item)}>
-                    {copy.checkout}
-                  </button>
                 </article>
               );
             })}
@@ -2202,8 +2527,14 @@ function CartDialog({
         )}
 
         <div className="cart-summary">
-          <span>{language === "vi" ? "Tạm tính" : "Subtotal"}</span>
-          <b>{formatVnd(total)}</b>
+          <div>
+            <span>{language === "vi" ? "Tạm tính" : "Subtotal"}</span>
+            <b>{formatVnd(total)}</b>
+          </div>
+          <button className="primary-button cart-checkout-all" onClick={onCheckoutAll} disabled={!items.length}>
+            <ShieldCheck size={17} />
+            {language === "vi" ? "Thanh toán tất cả" : "Checkout all"}
+          </button>
         </div>
       </aside>
     </div>
@@ -2814,6 +3145,20 @@ function formatProductPrice(product: Product, language: Language) {
 
 function formatProductTotal(product: Product, quantity: number, language: Language) {
   return language === "en" && product.usdtPrice ? formatUsdt(Number(product.usdtPrice) * quantity) : formatVnd(product.price * quantity);
+}
+
+function formatCheckoutTotal(product: Product, quantity: number, language: Language, payableAmount: number) {
+  if (language !== "en" || !product.usdtPrice) return formatVnd(payableAmount);
+  const subtotal = product.price * quantity;
+  const ratio = subtotal > 0 ? payableAmount / subtotal : 1;
+  return formatUsdt(Number(product.usdtPrice) * quantity * ratio);
+}
+
+function formatCartCheckoutTotal(items: CartItem[], payableAmount: number) {
+  const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const rawUsdt = items.reduce((sum, item) => sum + Number(item.product.usdtPrice ?? 0) * item.quantity, 0);
+  const ratio = subtotal > 0 ? payableAmount / subtotal : 1;
+  return formatUsdt(rawUsdt * ratio);
 }
 
 function friendlyCatalogMessage(error: string, language: Language) {
