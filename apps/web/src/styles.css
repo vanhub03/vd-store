@@ -3415,6 +3415,69 @@ textarea {
   font-weight: 900;
 }
 
+.voucher-panel {
+  padding: 26px;
+}
+
+.voucher-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 14px;
+}
+
+.voucher-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(147, 197, 253, 0.15);
+  border-radius: 20px;
+  background: rgba(4, 13, 29, 0.66);
+}
+
+.voucher-card.is-available {
+  border-color: rgba(94, 234, 212, 0.34);
+  background: rgba(12, 34, 45, 0.72);
+}
+
+.voucher-code {
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: var(--radius-pill);
+  background: rgba(94, 234, 212, 0.12);
+  color: #b9fff5;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.voucher-card h3 {
+  color: #fff;
+  font-size: 36px;
+}
+
+.voucher-card p,
+.voucher-card dt {
+  color: var(--muted);
+}
+
+.voucher-card dl {
+  display: grid;
+  gap: 8px;
+}
+
+.voucher-card dl div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voucher-card dd {
+  color: var(--text);
+  font-weight: 850;
+  text-align: right;
+}
+
 .site-footer {
   position: relative;
   width: min(1360px, calc(100% - 48px));

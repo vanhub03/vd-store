@@ -31,6 +31,7 @@ import {
   ShoppingCart,
   Sparkles,
   Star,
+  TicketPercent,
   TimerReset,
   Trash2,
   UserRound,
@@ -46,6 +47,8 @@ import {
   formatUsdt,
   formatVnd,
   History as StoreHistory,
+  MyVoucher,
+  MyVouchersResponse,
   PaymentResult,
   PaymentStatusResult,
   Product,
@@ -63,7 +66,7 @@ const LANGUAGE_KEY = "vd_store_language";
 const savedToken = readStoredToken();
 const api = new StoreApi(savedToken);
 
-type Tab = "home" | "products" | "reviews" | "history";
+type Tab = "home" | "products" | "reviews" | "history" | "vouchers";
 type Language = "vi" | "en";
 type PayMethod = "bank" | "wallet" | "usdt";
 
@@ -74,6 +77,7 @@ const TEXT = {
     navHome: "Trang chủ",
     navProducts: "Sản phẩm",
     navReviews: "Đánh giá",
+    navVouchers: "Voucher của tôi",
     navHistory: "Kiểm tra đơn",
     login: "Đăng nhập",
     logout: "Đăng xuất",
@@ -146,6 +150,7 @@ const TEXT = {
     navHome: "Home",
     navProducts: "Products",
     navReviews: "Reviews",
+    navVouchers: "My vouchers",
     navHistory: "Track order",
     login: "Sign in",
     logout: "Sign out",
@@ -480,6 +485,7 @@ function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [history, setHistory] = useState<StoreHistory | null>(null);
+  const [myVouchers, setMyVouchers] = useState<MyVoucher[]>([]);
   const [balance, setBalance] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
@@ -494,6 +500,7 @@ function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [pendingPayments, setPendingPayments] = useState<PendingCheckoutPayment[]>([]);
+  const [selectedVoucherCode, setSelectedVoucherCode] = useState("");
   const [cartPulse, setCartPulse] = useState(false);
   const [loading, setLoading] = useState("boot");
   const [error, setError] = useState("");
@@ -600,10 +607,14 @@ function App() {
     try {
       if (showLoading) setLoading("profile");
       const profile = await api.get<{ customer: Session["customer"]; wallet: { balance: number } }>("/store/me");
-      const nextHistory = await api.get<StoreHistory>("/store/history");
+      const [nextHistory, nextVouchers] = await Promise.all([
+        api.get<StoreHistory>("/store/history"),
+        api.get<MyVouchersResponse>("/store/my-vouchers")
+      ]);
       setCustomer(profile.customer);
       setBalance(profile.wallet.balance);
       setHistory(nextHistory);
+      setMyVouchers(nextVouchers.vouchers);
       setError("");
     } catch (err) {
       logout();
@@ -627,6 +638,7 @@ function App() {
     setToken(null);
     setCustomer(null);
     setHistory(null);
+    setMyVouchers([]);
     setBalance(0);
     setCatalog(null);
   }
@@ -1277,6 +1289,31 @@ function App() {
         </section>
       ) : null}
 
+      {activeTab === "vouchers" ? (
+        <section className="shell tab-shell">
+          <VoucherTab
+            language={language}
+            customer={customer}
+            vouchers={myVouchers}
+            loading={loading === "profile"}
+            onRefresh={() => {
+              if (token) void loadPrivateData();
+              else setAuthOpen(true);
+            }}
+            onUse={(code) => {
+              setSelectedVoucherCode(code);
+              if (cartItems.length) {
+                setCheckoutCartItems(cartItems);
+                setCartOpen(false);
+              } else {
+                navigateTab("products");
+              }
+            }}
+            onLogin={() => setAuthOpen(true)}
+          />
+        </section>
+      ) : null}
+
       <Footer language={language} onTab={navigateTab} onSection={navigateHomeSection} />
 
       {commandOpen ? (
@@ -1310,6 +1347,7 @@ function App() {
           loading={loading}
           actionError={error}
           language={language}
+          initialVoucherCode={selectedVoucherCode}
           onClose={() => closeCheckoutItemToCart(false)}
           onQuantity={updateCheckoutQuantity}
           onWallet={(quantity, voucherCode) => buyWithWallet(checkoutItem.product, quantity, voucherCode)}
@@ -1331,6 +1369,7 @@ function App() {
           loading={loading}
           actionError={error}
           language={language}
+          initialVoucherCode={selectedVoucherCode}
           onClose={() => setCheckoutCartItems(null)}
           onWallet={(voucherCode) => buyCartWithWallet(checkoutCartItems, voucherCode)}
           onBank={(voucherCode) => buyCartWithBank(checkoutCartItems, voucherCode)}
@@ -1443,6 +1482,7 @@ function Header({
     { tab: "home", label: copy.navHome },
     { tab: "products", label: copy.navProducts },
     { tab: "reviews", label: copy.navReviews },
+    ...(customer ? [{ tab: "vouchers" as const, label: copy.navVouchers }] : []),
     { tab: "history", label: copy.navHistory }
   ];
 
@@ -1501,6 +1541,7 @@ function Header({
             </div>
           </div>
           <button onClick={() => onSection("featured-products")}>{language === "vi" ? "Khuyến mãi" : "Deals"}</button>
+          {customer ? <button className={activeTab === "vouchers" ? "active" : ""} onClick={() => goTab("vouchers")}>{copy.navVouchers}</button> : null}
           <button onClick={() => onSection("faq")}>{language === "vi" ? "Hỗ trợ" : "Support"}</button>
         </nav>
 
@@ -2503,6 +2544,7 @@ function CheckoutDialog({
   loading,
   actionError,
   language,
+  initialVoucherCode,
   onClose,
   onQuantity,
   onWallet,
@@ -2517,6 +2559,7 @@ function CheckoutDialog({
   loading: string;
   actionError: string;
   language: Language;
+  initialVoucherCode: string;
   onClose: () => void;
   onQuantity: (quantity: number) => void;
   onWallet: (quantity: number, voucherCode?: string | null) => Promise<void> | void;
@@ -2529,7 +2572,7 @@ function CheckoutDialog({
   const vi = language === "vi";
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [method, setMethod] = useState<PayMethod>(language === "en" && item.product.usdtPrice ? "usdt" : "bank");
-  const [coupon, setCoupon] = useState(customer?.role === "CUSTOMER" ? "FIRST20" : "");
+  const [coupon, setCoupon] = useState(initialVoucherCode || (customer?.role === "CUSTOMER" ? "FIRST20" : ""));
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
@@ -2802,6 +2845,7 @@ function CartCheckoutDialog({
   loading,
   actionError,
   language,
+  initialVoucherCode,
   onClose,
   onWallet,
   onBank,
@@ -2815,6 +2859,7 @@ function CartCheckoutDialog({
   loading: string;
   actionError: string;
   language: Language;
+  initialVoucherCode: string;
   onClose: () => void;
   onWallet: (voucherCode?: string | null) => Promise<void> | void;
   onBank: (voucherCode?: string | null) => Promise<void> | void;
@@ -2826,7 +2871,7 @@ function CartCheckoutDialog({
   const copy = TEXT[language];
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [method, setMethod] = useState<PayMethod>("bank");
-  const [coupon, setCoupon] = useState(customer?.role === "CUSTOMER" ? "FIRST20" : "");
+  const [coupon, setCoupon] = useState(initialVoucherCode || (customer?.role === "CUSTOMER" ? "FIRST20" : ""));
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
@@ -3572,6 +3617,73 @@ function HistoryPanel({ language, history, onRefresh, loading }: { language: Lan
   );
 }
 
+function VoucherTab({
+  language,
+  customer,
+  vouchers,
+  loading,
+  onRefresh,
+  onUse,
+  onLogin
+}: {
+  language: Language;
+  customer: Session["customer"] | null;
+  vouchers: MyVoucher[];
+  loading: boolean;
+  onRefresh: () => void;
+  onUse: (code: string) => void;
+  onLogin: () => void;
+}) {
+  const vi = language === "vi";
+  return (
+    <section className="voucher-panel reveal">
+      <div className="history-head">
+        <div>
+          <p className="section-kicker"><TicketPercent size={16} /> {vi ? "Voucher của tôi" : "My vouchers"}</p>
+          <h1>{vi ? "Ưu đãi dành riêng cho tài khoản của bạn" : "Offers assigned to your account"}</h1>
+          <p>{vi ? "Chọn voucher để tự điền vào màn hình thanh toán. Bạn vẫn có thể đổi hoặc xóa mã trước khi trả tiền." : "Choose a voucher to prefill checkout. You can still change or remove it before paying."}</p>
+        </div>
+        <button className="secondary-button" onClick={customer ? onRefresh : onLogin} disabled={loading}>
+          <RefreshCw className={loading ? "spin" : ""} size={17} />
+          {customer ? (vi ? "Làm mới" : "Refresh") : TEXT[language].login}
+        </button>
+      </div>
+      {customer ? (
+        vouchers.length ? (
+          <div className="voucher-grid">
+            {vouchers.map((voucher) => {
+              const available = voucher.status === "AVAILABLE";
+              return (
+                <article className={`voucher-card ${available ? "is-available" : ""}`} key={`${voucher.id}:${voucher.code}`}>
+                  <span className="voucher-code">{voucher.code}</span>
+                  <h3>{voucher.discountPercent}%</h3>
+                  <p>
+                    {voucher.maxDiscountAmount ? `${vi ? "Tối đa" : "Up to"} ${formatVnd(voucher.maxDiscountAmount)}` : vi ? "Không giới hạn VND" : "No VND cap"}
+                    {voucher.maxDiscountUsdt ? ` · ${voucher.maxDiscountUsdt} USDT` : ""}
+                  </p>
+                  <dl>
+                    <div><dt>{vi ? "Hạn dùng" : "Expires"}</dt><dd>{new Date(voucher.expiresAt).toLocaleDateString(vi ? "vi-VN" : "en-US")}</dd></div>
+                    <div><dt>CTV</dt><dd>{voucher.allowCollaboratorStacking ? (vi ? "Cộng dồn" : "Stackable") : (vi ? "Không cộng dồn" : "Not stackable")}</dd></div>
+                    <div><dt>{vi ? "Trạng thái" : "Status"}</dt><dd>{voucherStatusLabel(voucher.status, language)}</dd></div>
+                  </dl>
+                  <button className="primary-button" disabled={!available} onClick={() => onUse(voucher.code)}>
+                    <TicketPercent size={17} />
+                    {vi ? "Dùng voucher" : "Use voucher"}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState icon={<TicketPercent size={30} />} title={vi ? "Chưa có voucher khả dụng" : "No vouchers yet"} text={vi ? "Voucher được cấp riêng sẽ xuất hiện tại đây." : "Assigned vouchers will appear here."} />
+        )
+      ) : (
+        <EmptyState icon={<TicketPercent size={30} />} title={vi ? "Đăng nhập để xem voucher" : "Sign in to view vouchers"} text={vi ? "Voucher riêng gắn với tài khoản của bạn." : "Private vouchers are linked to your account."} actionLabel={TEXT[language].login} onAction={onLogin} />
+      )}
+    </section>
+  );
+}
+
 function Footer({ language, onTab, onSection }: { language: Language; onTab: (tab: Tab) => void; onSection: (sectionId: string) => void }) {
   const vi = language === "vi";
   return (
@@ -3728,6 +3840,26 @@ function statusLabel(status: PaymentStatusResult["status"], language: Language =
   return labels[status];
 }
 
+function voucherStatusLabel(status: MyVoucher["status"], language: Language) {
+  const labels: Record<MyVoucher["status"], string> =
+    language === "en"
+      ? {
+          AVAILABLE: "Available",
+          UPCOMING: "Upcoming",
+          USED: "Used",
+          EXPIRED: "Expired",
+          EXHAUSTED: "Fully used"
+        }
+      : {
+          AVAILABLE: "Có thể dùng",
+          UPCOMING: "Chưa đến hạn",
+          USED: "Đã dùng",
+          EXPIRED: "Hết hạn",
+          EXHAUSTED: "Hết lượt"
+        };
+  return labels[status];
+}
+
 function buildOrderCopyText(order: {
   code: string;
   status?: string;
@@ -3754,7 +3886,7 @@ function readStoredToken() {
 
 function readInitialTab(): Tab {
   const tab = new URLSearchParams(window.location.search).get("tab");
-  return tab === "products" || tab === "reviews" || tab === "history" ? tab : "home";
+  return tab === "products" || tab === "reviews" || tab === "history" || tab === "vouchers" ? tab : "home";
 }
 
 function readStoredLanguage(): Language {

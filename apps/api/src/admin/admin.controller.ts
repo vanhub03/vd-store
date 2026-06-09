@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
 import { CustomerRole, ManualOrderStatus, ProductDeliveryType, ProductStatus } from "@prisma/client";
-import { IsBoolean, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
+import { ArrayMinSize, IsArray, IsBoolean, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
 import { ShopService, slugify } from "../domain/shop.service";
@@ -187,6 +187,13 @@ class VoucherDto {
   expiresAt?: string | null;
 }
 
+class VoucherAssignmentDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsString({ each: true })
+  userIds!: string[];
+}
+
 class CreateCollaboratorDto {
   @IsEmail()
   email!: string;
@@ -352,6 +359,21 @@ export class AdminController {
   @Put("vouchers/:id")
   updateVoucher(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: Partial<VoucherDto>) {
     return this.shop.updateVoucher(id, body, request.admin!.id);
+  }
+
+  @Get("vouchers/:id/assignments")
+  voucherAssignments(@Param("id") id: string) {
+    return this.shop.listVoucherAssignments(id);
+  }
+
+  @Post("vouchers/:id/assignments")
+  assignVoucher(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: VoucherAssignmentDto) {
+    return this.shop.assignVoucherToUsers(request.admin!.id, id, body.userIds);
+  }
+
+  @Delete("vouchers/:id/assignments/:assignmentId")
+  revokeVoucherAssignment(@Req() request: AdminRequest, @Param("id") id: string, @Param("assignmentId") assignmentId: string) {
+    return this.shop.revokeVoucherAssignment(request.admin!.id, id, assignmentId);
   }
 
   @Get("broadcasts")

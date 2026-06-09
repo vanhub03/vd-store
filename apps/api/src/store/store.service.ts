@@ -163,6 +163,10 @@ export class StoreService {
     return this.shop.getHistory(telegramId);
   }
 
+  myVouchers(customerId: string) {
+    return this.shop.listCustomerVouchers(customerId);
+  }
+
   async paymentStatus(customerId: string, code: string) {
     const payment = await this.prisma.payment.findFirst({
       where: {

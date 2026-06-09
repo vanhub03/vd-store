@@ -103,7 +103,17 @@ type Voucher = {
   startsAt: string;
   expiresAt: string;
   createdAt: string;
-  _count?: { redemptions: number };
+  _count?: { redemptions: number; assignments: number };
+};
+type VoucherAssignment = {
+  id: string;
+  voucherId: string;
+  userId: string;
+  revokedAt?: string | null;
+  usedAt?: string | null;
+  createdAt: string;
+  user: User;
+  assignedByAdmin?: { id: string; email: string; name?: string | null } | null;
 };
 type ProductForm = {
   name: string;
@@ -1240,6 +1250,14 @@ function ManualOrderAlerts({
 
 function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [assignments, setAssignments] = useState<VoucherAssignment[]>([]);
+  const [selectedVoucherId, setSelectedVoucherId] = useState("");
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [assignmentSearch, setAssignmentSearch] = useState("");
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -1258,7 +1276,13 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
   async function load() {
     setLoading(true);
     try {
-      setVouchers(await api.get<Voucher[]>("/admin/vouchers"));
+      const [nextVouchers, nextUsers] = await Promise.all([
+        api.get<Voucher[]>("/admin/vouchers"),
+        api.get<User[]>("/admin/users")
+      ]);
+      setVouchers(nextVouchers);
+      setUsers(nextUsers);
+      if (!selectedVoucherId && nextVouchers[0]) setSelectedVoucherId(nextVouchers[0].id);
       onError(null);
     } catch (err) {
       onError((err as Error).message);
@@ -1270,6 +1294,52 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    if (selectedVoucherId) void loadAssignments(selectedVoucherId);
+  }, [selectedVoucherId]);
+
+  async function loadAssignments(voucherId = selectedVoucherId) {
+    if (!voucherId) return;
+    setAssignmentLoading(true);
+    try {
+      setAssignments(await api.get<VoucherAssignment[]>(`/admin/vouchers/${voucherId}/assignments`));
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setAssignmentLoading(false);
+    }
+  }
+
+  async function assign(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedVoucherId || !selectedUserIds.length) return;
+    setAssigning(true);
+    try {
+      setAssignments(await api.post<VoucherAssignment[]>(`/admin/vouchers/${selectedVoucherId}/assignments`, { userIds: selectedUserIds }));
+      setSelectedUserIds([]);
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function revoke(assignment: VoucherAssignment) {
+    if (!confirm(`Thu hồi voucher của ${assignment.user.email ?? displayUser(assignment.user)}?`)) return;
+    setRevokingId(assignment.id);
+    try {
+      await api.delete(`/admin/vouchers/${assignment.voucherId}/assignments/${assignment.id}`);
+      await loadAssignments(assignment.voucherId);
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setRevokingId(null);
+    }
+  }
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -1316,6 +1386,17 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
       setUpdatingId(null);
     }
   }
+
+  const selectedVoucher = vouchers.find((voucher) => voucher.id === selectedVoucherId);
+  const assignedUserIds = new Set(assignments.filter((assignment) => !assignment.revokedAt).map((assignment) => assignment.userId));
+  const normalizedAssignmentSearch = assignmentSearch.trim().toLowerCase();
+  const assignableUsers = users
+    .filter((user) => !assignedUserIds.has(user.id))
+    .filter((user) => {
+      if (!normalizedAssignmentSearch) return true;
+      return `${user.email ?? ""} ${user.displayName ?? ""} ${user.username ?? ""} ${user.firstName ?? ""}`.toLowerCase().includes(normalizedAssignmentSearch);
+    })
+    .slice(0, 30);
 
   return (
     <div className="stack">
@@ -1385,14 +1466,88 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
         </form>
       </section>
 
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>Cấp voucher cho account</h2>
+          <span className="mutedText">Voucher đã cấp riêng chỉ account được chọn mới dùng được.</span>
+        </div>
+        <form className="formGrid compactForm voucherAssignForm" onSubmit={assign}>
+          <label>
+            Voucher
+            <select value={selectedVoucherId} onChange={(event) => setSelectedVoucherId(event.target.value)}>
+              {vouchers.map((voucher) => (
+                <option key={voucher.id} value={voucher.id}>
+                  {voucher.code} - {voucher.discountPercent}%
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tìm account
+            <input value={assignmentSearch} onChange={(event) => setAssignmentSearch(event.target.value)} placeholder="Email, tên hiển thị, username" />
+          </label>
+          <div className="checkboxGroup wide userPickList">
+            {assignableUsers.map((user) => (
+              <label className="checkboxLabel" key={user.id}>
+                <input
+                  type="checkbox"
+                  checked={selectedUserIds.includes(user.id)}
+                  onChange={(event) =>
+                    setSelectedUserIds((current) =>
+                      event.target.checked ? [...current, user.id] : current.filter((id) => id !== user.id)
+                    )
+                  }
+                />
+                {user.email ?? displayUser(user)} <span className="mutedText">({user.role === "COLLABORATOR" ? "CTV" : "Khách"})</span>
+              </label>
+            ))}
+            {!assignableUsers.length ? <span className="mutedText">Không còn account phù hợp để cấp.</span> : null}
+          </div>
+          <div className="rowActions wide">
+            <button className="smallButton secondaryButton" type="button" onClick={() => void loadAssignments()}>
+              <RefreshCw size={14} /> Tải lại danh sách cấp
+            </button>
+            <button className="primaryButton" disabled={assigning || !selectedVoucherId || !selectedUserIds.length}>
+              {assigning ? <RefreshCw className="spin" size={16} /> : <UserPlus size={16} />}
+              {assigning ? "Đang cấp..." : `Cấp cho ${selectedUserIds.length || 0} account`}
+            </button>
+          </div>
+        </form>
+
+        <DataTable
+          title={selectedVoucher ? `Account đã cấp: ${selectedVoucher.code}` : "Account đã cấp"}
+          columns={["Account", "Role", "Trạng thái", "Ngày cấp", "Người cấp", ""]}
+          rows={assignments.map((assignment) => {
+            const status = assignment.revokedAt ? "Đã thu hồi" : assignment.usedAt ? "Đã dùng" : "Chưa dùng";
+            return [
+              assignment.user.email ?? displayUser(assignment.user),
+              assignment.user.role === "COLLABORATOR" ? "CTV" : "Khách",
+              status,
+              new Date(assignment.createdAt).toLocaleDateString("vi-VN"),
+              assignment.assignedByAdmin?.email ?? "-",
+              assignment.usedAt || assignment.revokedAt ? (
+                <span className="mutedText">-</span>
+              ) : (
+                <button className="smallButton dangerButton" onClick={() => revoke(assignment)} disabled={revokingId === assignment.id}>
+                  {revokingId === assignment.id ? <RefreshCw className="spin" size={14} /> : <X size={14} />}
+                  Thu hồi
+                </button>
+              )
+            ];
+          })}
+        />
+        {assignmentLoading ? <LoadingBlock label="Đang tải account đã cấp..." /> : null}
+      </section>
+
       <DataTable
         title="Danh sách voucher"
-        columns={["Mã", "Giảm", "Trần VND / USDT", "Đã dùng", "Giới hạn", "Hết hạn", "CTV", "Loại", "Trạng thái", ""]}
+        columns={["Mã", "Giảm", "Trần VND / USDT", "Đã dùng", "Đã cấp", "Giới hạn", "Hết hạn", "CTV", "Loại", "Trạng thái", ""]}
         rows={vouchers.map((voucher) => [
           <strong>{voucher.code}</strong>,
           `${voucher.discountPercent}%`,
           `${voucher.maxDiscountAmount ? formatVnd(voucher.maxDiscountAmount) : "∞"} / ${voucher.maxDiscountUsdt ? `${voucher.maxDiscountUsdt} USDT` : "∞"}`,
           voucher.usedCount ?? voucher._count?.redemptions ?? 0,
+          voucher._count?.assignments ?? 0,
           voucher.maxUses ?? "Không giới hạn",
           new Date(voucher.expiresAt).toLocaleDateString("vi-VN"),
           voucher.allowCollaboratorStacking ? "Được cộng dồn" : "Không cộng dồn",

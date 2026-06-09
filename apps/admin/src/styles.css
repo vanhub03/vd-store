@@ -407,6 +407,10 @@ button:disabled {
   grid-template-columns: minmax(170px, 1fr) 105px 130px 150px 130px;
 }
 
+.formGrid.voucherAssignForm {
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.2fr);
+}
+
 .mutedText {
   color: #64748b;
   font-size: 13px;
@@ -456,6 +460,13 @@ label.wide {
 
 .checkboxGroup.wide {
   grid-column: 1 / -1;
+}
+
+.checkboxGroup.userPickList {
+  align-content: start;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .checkboxLabel {

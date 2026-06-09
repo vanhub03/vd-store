@@ -117,6 +117,7 @@ model TelegramUser {
   broadcastDeliveries BroadcastDelivery[]
   reviews             ProductReview[]
   voucherRedemptions  VoucherRedemption[]
+  voucherAssignments  VoucherAssignment[]
 
   @@index([role, isBlocked])
 }
@@ -133,6 +134,7 @@ model Admin {
   auditLogs  AuditLog[]
   broadcasts Broadcast[]
   vouchers   Voucher[]
+  voucherAssignments VoucherAssignment[]
 }
 
 model Category {
@@ -277,9 +279,29 @@ model Voucher {
   createdBy   Admin?              @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
   orders      Order[]
   redemptions VoucherRedemption[]
+  assignments VoucherAssignment[]
 
   @@index([active, expiresAt])
   @@index([createdByAdminId])
+}
+
+model VoucherAssignment {
+  id                String    @id @default(cuid())
+  voucherId         String
+  userId            String
+  assignedByAdminId String?
+  revokedAt         DateTime?
+  usedAt            DateTime?
+  createdAt         DateTime  @default(now())
+
+  voucher         Voucher      @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  user            TelegramUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedByAdmin Admin?       @relation(fields: [assignedByAdminId], references: [id], onDelete: SetNull)
+
+  @@unique([voucherId, userId])
+  @@index([userId, createdAt])
+  @@index([voucherId, createdAt])
+  @@index([voucherId, revokedAt, usedAt])
 }
 
 model VoucherRedemption {

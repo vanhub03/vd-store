@@ -152,6 +152,12 @@ export class StoreController {
     return this.store.history(request.customer!.telegramId);
   }
 
+  @Get("my-vouchers")
+  @UseGuards(CustomerAuthGuard)
+  myVouchers(@Req() request: CustomerRequest) {
+    return this.store.myVouchers(request.customer!.id);
+  }
+
   @Get("payments/:code")
   @UseGuards(CustomerAuthGuard)
   paymentStatus(@Req() request: CustomerRequest, @Param("code") code: string) {

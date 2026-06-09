@@ -79,6 +79,7 @@ type SalesChannel = "bot" | "web";
 type VoucherQuote = {
   code: string | null;
   voucherId: string | null;
+  assignmentId: string | null;
   discountPercent: number;
   subtotalAmount: number;
   collaboratorDiscountAmount: number;
@@ -1321,7 +1322,7 @@ export class ShopService {
       take: 200,
       include: {
         createdBy: { select: { id: true, email: true, name: true } },
-        _count: { select: { redemptions: true } }
+        _count: { select: { redemptions: true, assignments: true } }
       }
     });
   }
@@ -1360,6 +1361,163 @@ export class ShopService {
       expiresAt: voucher.expiresAt
     });
     return voucher;
+  }
+
+  async listVoucherAssignments(voucherId: string) {
+    const voucher = await this.prisma.voucher.findUnique({ where: { id: voucherId }, select: { id: true } });
+    if (!voucher) throw new NotFoundException("Không tìm thấy mã ưu đãi.");
+    return this.prisma.voucherAssignment.findMany({
+      where: { voucherId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: {
+          select: {
+            id: true,
+            telegramId: true,
+            email: true,
+            displayName: true,
+            username: true,
+            firstName: true,
+            role: true,
+            isBlocked: true,
+            createdAt: true
+          }
+        },
+        assignedByAdmin: { select: { id: true, email: true, name: true } }
+      }
+    });
+  }
+
+  async assignVoucherToUsers(adminId: string, voucherId: string, userIds: string[]) {
+    const cleanUserIds = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+    if (!cleanUserIds.length) throw new BadRequestException("Chọn ít nhất một tài khoản để cấp voucher.");
+    const voucher = await this.prisma.voucher.findUnique({ where: { id: voucherId }, select: { id: true, code: true } });
+    if (!voucher) throw new NotFoundException("Không tìm thấy mã ưu đãi.");
+    const users = await this.prisma.telegramUser.findMany({
+      where: { id: { in: cleanUserIds } },
+      select: { id: true }
+    });
+    if (users.length !== cleanUserIds.length) {
+      throw new BadRequestException("Danh sách tài khoản có dữ liệu không hợp lệ.");
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const userId of cleanUserIds) {
+        await tx.voucherAssignment.upsert({
+          where: { voucherId_userId: { voucherId, userId } },
+          update: { revokedAt: null },
+          create: { voucherId, userId, assignedByAdminId: adminId }
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          actorAdminId: adminId,
+          action: "VOUCHER_ASSIGN",
+          entityType: "Voucher",
+          entityId: voucherId,
+          meta: { code: voucher.code, userIds: cleanUserIds }
+        }
+      });
+    }, ORDER_TRANSACTION_OPTIONS);
+
+    return this.listVoucherAssignments(voucherId);
+  }
+
+  async revokeVoucherAssignment(adminId: string, voucherId: string, assignmentId: string) {
+    const assignment = await this.prisma.voucherAssignment.findFirst({
+      where: { id: assignmentId, voucherId },
+      include: { voucher: { select: { code: true } } }
+    });
+    if (!assignment) throw new NotFoundException("Không tìm thấy lượt cấp voucher.");
+    if (assignment.usedAt) throw new BadRequestException("Voucher đã dùng không thể thu hồi.");
+    const updated = await this.prisma.voucherAssignment.update({
+      where: { id: assignment.id },
+      data: { revokedAt: new Date() }
+    });
+    await this.audit(adminId, "VOUCHER_ASSIGNMENT_REVOKE", "Voucher", voucherId, {
+      code: assignment.voucher.code,
+      assignmentId,
+      userId: assignment.userId
+    });
+    return updated;
+  }
+
+  async listCustomerVouchers(customerId: string) {
+    const user = await this.prisma.telegramUser.findUnique({ where: { id: customerId } });
+    if (!user) throw new NotFoundException("Không tìm thấy tài khoản.");
+    const now = new Date();
+    const assignments = await this.prisma.voucherAssignment.findMany({
+      where: { userId: customerId, revokedAt: null },
+      orderBy: { createdAt: "desc" },
+      include: {
+        voucher: {
+          select: {
+            id: true,
+            code: true,
+            discountPercent: true,
+            maxDiscountAmount: true,
+            maxDiscountUsdt: true,
+            active: true,
+            firstOrderOnly: true,
+            allowCollaboratorStacking: true,
+            startsAt: true,
+            expiresAt: true,
+            usedCount: true,
+            maxUses: true
+          }
+        }
+      }
+    });
+    const assignedVouchers = assignments
+      .filter((assignment) => assignment.voucher.active)
+      .map((assignment) => publicCustomerVoucher(assignment.voucher, {
+        assignedAt: assignment.createdAt,
+        usedAt: assignment.usedAt,
+        status: assignment.usedAt ? "USED" : assignment.voucher.expiresAt < now ? "EXPIRED" : assignment.voucher.startsAt > now ? "UPCOMING" : "AVAILABLE"
+      }));
+
+    const firstOrderVoucher = await this.publicFirstOrderVoucherForUser(user, now);
+    return {
+      vouchers: firstOrderVoucher ? [firstOrderVoucher, ...assignedVouchers] : assignedVouchers
+    };
+  }
+
+  private async publicFirstOrderVoucherForUser(user: { id: string; createdAt: Date; role: CustomerRole }, now: Date) {
+    if (user.role !== CustomerRole.CUSTOMER) return null;
+    const expiresAt = new Date(user.createdAt.getTime() + FIRST_ORDER_VOUCHER_DAYS * 24 * 60 * 60 * 1000);
+    if (expiresAt < now) return null;
+    const [existingOrder, existingRedemption, savedVoucher] = await Promise.all([
+      this.prisma.order.findFirst({
+        where: {
+          userId: user.id,
+          status: { notIn: [OrderStatus.EXPIRED, OrderStatus.CANCELLED, OrderStatus.CREDITED_TO_WALLET] }
+        },
+        select: { id: true }
+      }),
+      this.prisma.voucherRedemption.findFirst({
+        where: { userId: user.id, voucher: { code: FIRST_ORDER_VOUCHER_CODE } },
+        select: { id: true }
+      }),
+      this.prisma.voucher.findUnique({ where: { code: FIRST_ORDER_VOUCHER_CODE } })
+    ]);
+    if (existingOrder || existingRedemption) return null;
+    return publicCustomerVoucher(
+      {
+        id: savedVoucher?.id ?? FIRST_ORDER_VOUCHER_CODE,
+        code: FIRST_ORDER_VOUCHER_CODE,
+        discountPercent: 20,
+        maxDiscountAmount: 50_000,
+        maxDiscountUsdt: new Prisma.Decimal(2),
+        active: true,
+        firstOrderOnly: true,
+        allowCollaboratorStacking: false,
+        startsAt: user.createdAt,
+        expiresAt,
+        usedCount: savedVoucher?.usedCount ?? 0,
+        maxUses: null
+      },
+      { assignedAt: user.createdAt, usedAt: null, status: "AVAILABLE" }
+    );
   }
 
   async listOrders() {
@@ -1596,6 +1754,7 @@ export class ShopService {
       return {
         code: null,
         voucherId: null,
+        assignmentId: null,
         discountPercent: 0,
         subtotalAmount: pricing.subtotalAmount,
         collaboratorDiscountAmount: pricing.collaboratorDiscountAmount,
@@ -1630,6 +1789,19 @@ export class ShopService {
     }
     if (voucher.maxUses !== null && voucher.usedCount >= voucher.maxUses) {
       throw new BadRequestException("Mã ưu đãi đã hết lượt sử dụng.");
+    }
+
+    let assignmentId: string | null = null;
+    const assignmentCount = await tx.voucherAssignment.count({ where: { voucherId: voucher.id } });
+    if (assignmentCount > 0) {
+      const assignment = await tx.voucherAssignment.findUnique({
+        where: { voucherId_userId: { voucherId: voucher.id, userId: user.id } },
+        select: { id: true, revokedAt: true, usedAt: true }
+      });
+      if (!assignment || assignment.revokedAt || assignment.usedAt) {
+        throw new BadRequestException("Mã ưu đãi này không khả dụng cho tài khoản của bạn.");
+      }
+      assignmentId = assignment.id;
     }
 
     const existingRedemption = await tx.voucherRedemption.findFirst({
@@ -1685,6 +1857,7 @@ export class ShopService {
     return {
       code: voucher.code,
       voucherId: voucher.id,
+      assignmentId,
       discountPercent: voucher.discountPercent,
       subtotalAmount: pricing.subtotalAmount,
       collaboratorDiscountAmount: pricing.collaboratorDiscountAmount,
@@ -1728,19 +1901,32 @@ export class ShopService {
         claimFingerprintHash: quote.claimFingerprintHash
       }
     });
+    if (quote.assignmentId) {
+      const updatedAssignment = await tx.voucherAssignment.updateMany({
+        where: { id: quote.assignmentId, userId, revokedAt: null, usedAt: null },
+        data: { usedAt: now }
+      });
+      if (updatedAssignment.count !== 1) {
+        throw new BadRequestException("Mã ưu đãi này không còn khả dụng.");
+      }
+    }
   }
 
   private async releaseVoucherForOrder(tx: Prisma.TransactionClient, orderId: string) {
     if (!tx.voucherRedemption || !tx.voucher) return;
     const redemption = await tx.voucherRedemption.findUnique({
       where: { orderId },
-      select: { id: true, voucherId: true }
+      select: { id: true, voucherId: true, userId: true }
     });
     if (!redemption) return;
     await tx.voucherRedemption.delete({ where: { id: redemption.id } });
     await tx.voucher.updateMany({
       where: { id: redemption.voucherId, usedCount: { gt: 0 } },
       data: { usedCount: { decrement: 1 } }
+    });
+    await tx.voucherAssignment.updateMany({
+      where: { voucherId: redemption.voucherId, userId: redemption.userId, revokedAt: null },
+      data: { usedAt: null }
     });
   }
 
@@ -2207,6 +2393,40 @@ function publicVoucherQuote(quote: VoucherQuote) {
     maxDiscountUsdt: quote.maxDiscountUsdt,
     firstOrderOnly: quote.firstOrderOnly,
     expiresAt: quote.expiresAt
+  };
+}
+
+function publicCustomerVoucher(
+  voucher: {
+    id: string;
+    code: string;
+    discountPercent: number;
+    maxDiscountAmount: number | null;
+    maxDiscountUsdt: Prisma.Decimal | number | string | null;
+    active: boolean;
+    firstOrderOnly: boolean;
+    allowCollaboratorStacking: boolean;
+    startsAt: Date;
+    expiresAt: Date;
+    usedCount: number;
+    maxUses: number | null;
+  },
+  meta: { assignedAt: Date; usedAt: Date | null; status: string }
+) {
+  const exhausted = voucher.maxUses !== null && voucher.usedCount >= voucher.maxUses;
+  return {
+    id: voucher.id,
+    code: voucher.code,
+    discountPercent: voucher.discountPercent,
+    maxDiscountAmount: voucher.maxDiscountAmount,
+    maxDiscountUsdt: decimalNumber(voucher.maxDiscountUsdt),
+    firstOrderOnly: voucher.firstOrderOnly,
+    allowCollaboratorStacking: voucher.allowCollaboratorStacking,
+    startsAt: voucher.startsAt,
+    expiresAt: voucher.expiresAt,
+    assignedAt: meta.assignedAt,
+    usedAt: meta.usedAt,
+    status: exhausted && meta.status === "AVAILABLE" ? "EXHAUSTED" : meta.status
   };
 }
 

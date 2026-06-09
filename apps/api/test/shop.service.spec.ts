@@ -315,6 +315,123 @@ describe("ShopService", () => {
     );
   });
 
+  it("allows an assigned voucher only for the assigned customer", async () => {
+    const voucher = {
+      id: "voucher_assigned_1",
+      code: "PRIVATE20",
+      discountPercent: 20,
+      active: true,
+      firstOrderOnly: false,
+      allowCollaboratorStacking: true,
+      startsAt: new Date(Date.now() - 1000),
+      expiresAt: new Date(Date.now() + 60_000),
+      maxUses: null,
+      usedCount: 0,
+      maxDiscountAmount: null,
+      maxDiscountUsdt: null
+    };
+    const prisma = {
+      telegramUser: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "customer_assigned_1",
+          telegramId: "web:customer_assigned_1",
+          role: CustomerRole.CUSTOMER,
+          isBlocked: false,
+          createdAt: new Date()
+        })
+      },
+      product: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "product_assigned_1",
+          name: "Assigned voucher product",
+          price: 100000,
+          webPrice: 100000,
+          botPrice: 100000,
+          collaboratorDiscountPercent: 0,
+          showInWeb: true,
+          showInBot: true,
+          status: ProductStatus.ACTIVE,
+          deliveryType: ProductDeliveryType.MANUAL,
+          manualStock: 5
+        })
+      },
+      voucher: {
+        findUnique: vi.fn().mockResolvedValue(voucher)
+      },
+      voucherAssignment: {
+        count: vi.fn().mockResolvedValue(1),
+        findUnique: vi.fn().mockResolvedValue({ id: "assignment_1", revokedAt: null, usedAt: null })
+      },
+      voucherRedemption: {
+        findFirst: vi.fn().mockResolvedValue(null)
+      }
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const quote = await service.previewVoucher("web:customer_assigned_1", "product_assigned_1", 1, "PRIVATE20", "web");
+
+    expect(quote.discountAmount).toBe(20000);
+    expect(quote.totalAmount).toBe(80000);
+    expect(prisma.voucherAssignment.findUnique).toHaveBeenCalledWith({
+      where: { voucherId_userId: { voucherId: "voucher_assigned_1", userId: "customer_assigned_1" } },
+      select: { id: true, revokedAt: true, usedAt: true }
+    });
+  });
+
+  it("rejects an assigned voucher for a customer without an active assignment", async () => {
+    const prisma = {
+      telegramUser: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "customer_unassigned_1",
+          telegramId: "web:customer_unassigned_1",
+          role: CustomerRole.CUSTOMER,
+          isBlocked: false,
+          createdAt: new Date()
+        })
+      },
+      product: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "product_assigned_2",
+          name: "Assigned voucher product",
+          price: 100000,
+          webPrice: 100000,
+          botPrice: 100000,
+          collaboratorDiscountPercent: 0,
+          showInWeb: true,
+          showInBot: true,
+          status: ProductStatus.ACTIVE,
+          deliveryType: ProductDeliveryType.MANUAL,
+          manualStock: 5
+        })
+      },
+      voucher: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "voucher_assigned_2",
+          code: "PRIVATE20",
+          discountPercent: 20,
+          active: true,
+          firstOrderOnly: false,
+          allowCollaboratorStacking: true,
+          startsAt: new Date(Date.now() - 1000),
+          expiresAt: new Date(Date.now() + 60_000),
+          maxUses: null,
+          usedCount: 0,
+          maxDiscountAmount: null,
+          maxDiscountUsdt: null
+        })
+      },
+      voucherAssignment: {
+        count: vi.fn().mockResolvedValue(1),
+        findUnique: vi.fn().mockResolvedValue(null)
+      }
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    await expect(service.previewVoucher("web:customer_unassigned_1", "product_assigned_2", 1, "PRIVATE20", "web")).rejects.toThrow(
+      "kh"
+    );
+  });
+
   it("prices every collaborator cart line independently for multiple products and quantities", async () => {
     const user = {
       id: "collaborator_cart_1",

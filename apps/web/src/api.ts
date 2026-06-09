@@ -100,6 +100,25 @@ export type VoucherPreview = {
   expiresAt?: string | null;
 };
 
+export type MyVoucher = {
+  id: string;
+  code: string;
+  discountPercent: number;
+  maxDiscountAmount?: number | null;
+  maxDiscountUsdt?: number | string | null;
+  firstOrderOnly: boolean;
+  allowCollaboratorStacking: boolean;
+  startsAt: string;
+  expiresAt: string;
+  assignedAt: string;
+  usedAt?: string | null;
+  status: "AVAILABLE" | "UPCOMING" | "USED" | "EXPIRED" | "EXHAUSTED";
+};
+
+export type MyVouchersResponse = {
+  vouchers: MyVoucher[];
+};
+
 export type WalletPurchaseResult = {
   deliveryText: string;
   balanceAfter: number;
