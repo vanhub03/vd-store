@@ -114,6 +114,13 @@ export class StoreController {
     return this.store.catalog();
   }
 
+  @Get("member/catalog")
+  @UseGuards(CustomerAuthGuard)
+  @Header("Cache-Control", "no-store")
+  memberCatalog(@Req() request: CustomerRequest) {
+    return this.store.memberCatalog(request.customer!.id);
+  }
+
   @Get("reviews")
   @Header("Cache-Control", "no-store")
   reviews() {
@@ -124,6 +131,13 @@ export class StoreController {
   @Header("Cache-Control", "no-store")
   product(@Param("id") id: string) {
     return this.store.product(id);
+  }
+
+  @Get("member/products/:id")
+  @UseGuards(CustomerAuthGuard)
+  @Header("Cache-Control", "no-store")
+  memberProduct(@Req() request: CustomerRequest, @Param("id") id: string) {
+    return this.store.memberProduct(request.customer!.id, id);
   }
 
   @Get("wallet")

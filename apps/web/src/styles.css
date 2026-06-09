@@ -1351,6 +1351,10 @@ textarea {
   background: rgba(255, 61, 99, 0.86);
 }
 
+.product-badges .collaborator-badge {
+  background: #176b68;
+}
+
 .product-image-button {
   width: calc(100% - 20px);
   height: 172px;
@@ -1439,6 +1443,17 @@ textarea {
   color: #fff;
   font-size: 21px;
   letter-spacing: 0;
+}
+
+.product-price-row > div {
+  display: grid;
+  gap: 3px;
+}
+
+.product-price-row del,
+.detail-price del {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .product-price-row small {
@@ -2185,6 +2200,7 @@ textarea {
 
 .detail-price {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
   margin-top: 22px;
@@ -2197,7 +2213,16 @@ textarea {
 }
 
 .detail-price span {
-  color: var(--muted);
+  color: #63d8d4;
+  flex-basis: 100%;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.collaborator-summary-label {
+  color: #63d8d4;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .detail-price em {

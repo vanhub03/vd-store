@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
-import { OrderStatus, PaymentStatus, ProductStatus } from "@prisma/client";
+import { CustomerRole, OrderStatus, PaymentStatus, ProductStatus } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
 import { CartOrderItemInput, ShopService, VoucherClaim } from "../domain/shop.service";
 
@@ -37,6 +37,7 @@ export class StoreService {
     const customer = await this.prisma.telegramUser.findUnique({ where: { email: normalizedEmail } });
     if (!customer?.passwordHash) throw new UnauthorizedException("Email hoặc mật khẩu không đúng.");
 
+    if (customer.isBlocked) throw new UnauthorizedException("Tài khoản đã bị khóa.");
     const ok = await bcrypt.compare(password, customer.passwordHash);
     if (!ok) throw new UnauthorizedException("Email hoặc mật khẩu không đúng.");
     return this.session(customer);
@@ -56,8 +57,18 @@ export class StoreService {
     return this.shop.getCatalog("web");
   }
 
+  async memberCatalog(customerId: string) {
+    const customer = await this.requireActiveCustomer(customerId);
+    return this.shop.getCatalog("web", customer.role);
+  }
+
   product(productId: string) {
     return this.shop.getProduct(productId, "web");
+  }
+
+  async memberProduct(customerId: string, productId: string) {
+    const customer = await this.requireActiveCustomer(customerId);
+    return this.shop.getProduct(productId, "web", customer.role);
   }
 
   async reviews() {
@@ -287,7 +298,21 @@ export class StoreService {
     return this.shop.createCartCryptomusOrder(telegramId, items, "web", voucherCode, voucherClaim);
   }
 
-  private session(customer: { id: string; email: string | null; displayName: string | null; telegramId: string }) {
+  private async requireActiveCustomer(customerId: string) {
+    const customer = await this.prisma.telegramUser.findUnique({ where: { id: customerId } });
+    if (!customer?.email || !customer.passwordHash) throw new UnauthorizedException("Customer no longer exists.");
+    if (customer.isBlocked) throw new UnauthorizedException("Tài khoản đã bị khóa.");
+    return customer;
+  }
+
+  private session(customer: {
+    id: string;
+    email: string | null;
+    displayName: string | null;
+    telegramId: string;
+    role: CustomerRole;
+    isBlocked: boolean;
+  }) {
     if (!customer.email) throw new UnauthorizedException("Customer email missing.");
     const token = jwt.sign(
       {
@@ -305,11 +330,19 @@ export class StoreService {
     };
   }
 
-  private publicCustomer(customer: { id: string; email: string | null; displayName: string | null }) {
+  private publicCustomer(customer: {
+    id: string;
+    email: string | null;
+    displayName: string | null;
+    role: CustomerRole;
+    isBlocked: boolean;
+  }) {
     return {
       id: customer.id,
       email: customer.email,
-      displayName: customer.displayName
+      displayName: customer.displayName,
+      role: customer.role,
+      isBlocked: customer.isBlocked
     };
   }
 }

@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from "@nestjs/common";
-import { ManualOrderStatus, ProductDeliveryType, ProductStatus } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
+import { CustomerRole, ManualOrderStatus, ProductDeliveryType, ProductStatus } from "@prisma/client";
+import { IsBoolean, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
 import { ShopService, slugify } from "../domain/shop.service";
@@ -74,6 +74,12 @@ class ProductDto {
   @IsNumber()
   @Min(0)
   usdtPrice?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(90)
+  collaboratorDiscountPercent?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -164,6 +170,10 @@ class VoucherDto {
   firstOrderOnly?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  allowCollaboratorStacking?: boolean;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   maxUses?: number | null;
@@ -175,6 +185,38 @@ class VoucherDto {
   @IsOptional()
   @IsString()
   expiresAt?: string | null;
+}
+
+class CreateCollaboratorDto {
+  @IsEmail()
+  email!: string;
+
+  @IsOptional()
+  @IsString()
+  displayName?: string;
+
+  @IsString()
+  @MinLength(6)
+  password!: string;
+}
+
+class UpdateCollaboratorDto {
+  @IsOptional()
+  @IsEnum(CustomerRole)
+  role?: CustomerRole;
+
+  @IsOptional()
+  @IsBoolean()
+  isBlocked?: boolean;
+
+  @IsOptional()
+  @IsString()
+  displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
 }
 
 @Controller("admin")
@@ -199,6 +241,31 @@ export class AdminController {
   @Get("users")
   users() {
     return this.shop.listAdminUsers();
+  }
+
+  @Get("collaborators")
+  collaborators(
+    @Query("search") search?: string,
+    @Query("status") status?: string,
+    @Query("createdFrom") createdFrom?: string,
+    @Query("createdTo") createdTo?: string
+  ) {
+    return this.shop.listCollaborators({ search, status, createdFrom, createdTo });
+  }
+
+  @Get("collaborators/report")
+  collaboratorReport() {
+    return this.shop.getCollaboratorReport();
+  }
+
+  @Post("collaborators")
+  createCollaborator(@Req() request: AdminRequest, @Body() body: CreateCollaboratorDto) {
+    return this.shop.createCollaborator(request.admin!.id, body);
+  }
+
+  @Put("collaborators/:id")
+  updateCollaborator(@Req() request: AdminRequest, @Param("id") userId: string, @Body() body: UpdateCollaboratorDto) {
+    return this.shop.updateCollaborator(request.admin!.id, userId, body);
   }
 
   @Post("users/:id/wallet-adjustments")

@@ -441,6 +441,13 @@ label.wide {
   grid-column: 1 / -1;
 }
 
+.fieldHint,
+.tableSubtext {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+}
+
 .checkboxGroup {
   display: flex;
   flex-wrap: wrap;
@@ -637,6 +644,66 @@ th {
   gap: 8px;
 }
 
+.collaboratorForm {
+  align-items: end;
+}
+
+.promotionRow,
+.collaboratorFilters,
+.passwordReset {
+  display: grid;
+  gap: 8px;
+}
+
+.promotionRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.collaboratorFilters {
+  grid-template-columns: minmax(220px, 1fr) 160px 150px 150px auto;
+  margin: 14px 0;
+}
+
+.passwordReset {
+  grid-template-columns: minmax(130px, 1fr) 38px;
+}
+
+.passwordReset .smallButton {
+  padding: 7px;
+}
+
+.topProductList {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.topProductList div {
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.statusBadge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 8px;
+}
+
+.statusBadge.active {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.statusBadge.blocked {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .alert {
   border-radius: 8px;
   background: #fef2f2;
@@ -674,7 +741,9 @@ th {
 
   .formGrid,
   .inlineControls,
-  .dashboardGrid {
+  .dashboardGrid,
+  .promotionRow,
+  .collaboratorFilters {
     grid-template-columns: 1fr;
   }
 }

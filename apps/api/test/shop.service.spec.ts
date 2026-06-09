@@ -1,4 +1,5 @@
 import {
+  CustomerRole,
   InventoryStatus,
   OrderStatus,
   PaymentKind,
@@ -211,6 +212,200 @@ describe("ShopService", () => {
     expect(notifyManualOrderIfNeeded).toHaveBeenCalledWith("order_manual_1");
   });
 
+  it("applies the product collaborator discount and stores the pricing snapshot", async () => {
+    const user = {
+      id: "collaborator_1",
+      telegramId: "web:collaborator_1",
+      role: CustomerRole.COLLABORATOR,
+      isBlocked: false,
+      createdAt: new Date()
+    };
+    const product = {
+      id: "product_collaborator_1",
+      name: "Collaborator product",
+      price: 100000,
+      webPrice: 100000,
+      botPrice: 100000,
+      collaboratorDiscountPercent: 25,
+      showInWeb: true,
+      showInBot: true,
+      status: ProductStatus.ACTIVE,
+      deliveryType: ProductDeliveryType.MANUAL,
+      manualStock: 5,
+      manualInstructions: "Contact admin."
+    };
+    const tx = buildPurchaseTx({
+      user,
+      product,
+      balance: 300000,
+      orderId: "order_collaborator_1",
+      paymentId: "payment_collaborator_1"
+    });
+    const prisma = { $transaction: vi.fn(async (callback) => callback(tx)) };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+    vi.spyOn(service, "notifyManualOrderIfNeeded").mockResolvedValue(undefined);
+
+    const result = await service.purchaseWithWallet(user.telegramId, product.id, 2, "web");
+
+    expect(result.balanceAfter).toBe(150000);
+    expect(tx.order.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        unitPrice: 100000,
+        subtotalAmount: 200000,
+        collaboratorDiscountPercent: 25,
+        collaboratorDiscountAmount: 50000,
+        voucherDiscountAmount: 0,
+        discountAmount: 50000,
+        totalAmount: 150000,
+        customerRoleSnapshot: CustomerRole.COLLABORATOR
+      })
+    });
+    expect(tx.walletLedgerEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ amount: -150000 })
+    });
+  });
+
+  it("rejects vouchers that are not allowed to stack with collaborator pricing", async () => {
+    const prisma = {
+      telegramUser: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "collaborator_2",
+          telegramId: "web:collaborator_2",
+          role: CustomerRole.COLLABORATOR,
+          isBlocked: false,
+          createdAt: new Date()
+        })
+      },
+      product: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "product_collaborator_2",
+          name: "Collaborator product",
+          price: 100000,
+          webPrice: 100000,
+          botPrice: 100000,
+          collaboratorDiscountPercent: 20,
+          showInWeb: true,
+          showInBot: true,
+          status: ProductStatus.ACTIVE,
+          deliveryType: ProductDeliveryType.MANUAL,
+          manualStock: 5
+        })
+      },
+      voucher: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "voucher_1",
+          code: "NOCTV",
+          discountPercent: 10,
+          active: true,
+          firstOrderOnly: false,
+          allowCollaboratorStacking: false,
+          startsAt: new Date(Date.now() - 1000),
+          expiresAt: new Date(Date.now() + 60_000),
+          maxUses: null,
+          usedCount: 0,
+          maxDiscountAmount: null,
+          maxDiscountUsdt: null
+        })
+      }
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    await expect(service.previewVoucher("web:collaborator_2", "product_collaborator_2", 1, "NOCTV", "web")).rejects.toThrow(
+      "không áp dụng cùng giá cộng tác viên"
+    );
+  });
+
+  it("prices every collaborator cart line independently for multiple products and quantities", async () => {
+    const user = {
+      id: "collaborator_cart_1",
+      telegramId: "web:collaborator_cart_1",
+      role: CustomerRole.COLLABORATOR,
+      isBlocked: false,
+      createdAt: new Date()
+    };
+    const products = [
+      {
+        id: "product_cart_1",
+        name: "Product one",
+        price: 10000,
+        webPrice: 10000,
+        botPrice: 10000,
+        collaboratorDiscountPercent: 10,
+        showInWeb: true,
+        showInBot: true,
+        status: ProductStatus.ACTIVE,
+        deliveryType: ProductDeliveryType.MANUAL,
+        manualStock: 10,
+        manualInstructions: "Product one delivery."
+      },
+      {
+        id: "product_cart_2",
+        name: "Product two",
+        price: 20000,
+        webPrice: 20000,
+        botPrice: 20000,
+        collaboratorDiscountPercent: 25,
+        showInWeb: true,
+        showInBot: true,
+        status: ProductStatus.ACTIVE,
+        deliveryType: ProductDeliveryType.MANUAL,
+        manualStock: 10,
+        manualInstructions: "Product two delivery."
+      }
+    ];
+    const tx = buildCartPurchaseTx({ user, products, balance: 100000 });
+    const prisma = { $transaction: vi.fn(async (callback) => callback(tx)) };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+    vi.spyOn(service, "notifyManualOrderIfNeeded").mockResolvedValue(undefined);
+
+    const result = await service.purchaseCartWithWallet(
+      user.telegramId,
+      [
+        { productId: products[0].id, quantity: 2 },
+        { productId: products[1].id, quantity: 3 }
+      ],
+      "web"
+    );
+
+    expect(result.balanceAfter).toBe(37000);
+    expect(tx.order.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          productId: "product_cart_1",
+          quantity: 2,
+          unitPrice: 10000,
+          subtotalAmount: 20000,
+          collaboratorDiscountPercent: 10,
+          collaboratorDiscountAmount: 2000,
+          voucherDiscountAmount: 0,
+          totalAmount: 18000
+        })
+      })
+    );
+    expect(tx.order.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          productId: "product_cart_2",
+          quantity: 3,
+          unitPrice: 20000,
+          subtotalAmount: 60000,
+          collaboratorDiscountPercent: 25,
+          collaboratorDiscountAmount: 15000,
+          voucherDiscountAmount: 0,
+          totalAmount: 45000
+        })
+      })
+    );
+    expect(tx.payment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ amount: 63000, expectedAmount: 63000 })
+    });
+    expect(tx.walletLedgerEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ amount: -63000 })
+    });
+  });
+
   it("fulfills stock-item web wallet purchases by selling inventory lines and returning their content", async () => {
     const user = { id: "user_2", telegramId: "web:customer_2" };
     const product = {
@@ -417,7 +612,7 @@ describe("ShopService", () => {
 });
 
 function buildPurchaseTx(input: {
-  user: { id: string; telegramId: string };
+  user: { id: string; telegramId: string; role?: CustomerRole; isBlocked?: boolean; createdAt?: Date };
   product: Record<string, unknown>;
   balance: number;
   orderId: string;
@@ -450,6 +645,51 @@ function buildPurchaseTx(input: {
       count: vi.fn().mockResolvedValue(inventoryItems.length),
       findMany: vi.fn().mockResolvedValue(inventoryItems),
       updateMany: vi.fn().mockResolvedValue({ count: inventoryItems.length })
+    }
+  };
+}
+
+function buildCartPurchaseTx(input: {
+  user: { id: string; telegramId: string; role: CustomerRole; isBlocked: boolean; createdAt: Date };
+  products: Array<Record<string, unknown> & { id: string; name: string }>;
+  balance: number;
+}) {
+  let orderIndex = 0;
+  const orders = new Map<string, Record<string, unknown>>();
+  return {
+    telegramUser: {
+      findUnique: vi.fn().mockResolvedValue(input.user)
+    },
+    product: {
+      findMany: vi.fn().mockResolvedValue(input.products),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 })
+    },
+    walletLedgerEntry: {
+      aggregate: vi.fn().mockResolvedValue({ _sum: { amount: input.balance } }),
+      create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "ledger_cart_1", ...data }))
+    },
+    payment: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "payment_cart_1", ...data }))
+    },
+    order: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockImplementation(({ data }) => {
+        orderIndex += 1;
+        const order = { id: `order_cart_${orderIndex}`, ...data };
+        orders.set(order.id, order);
+        return Promise.resolve(order);
+      }),
+      update: vi.fn().mockImplementation(({ where, data }) => {
+        const order = orders.get(where.id) ?? {};
+        const product = input.products.find((item) => item.id === order.productId);
+        return Promise.resolve({ ...order, ...data, product });
+      })
+    },
+    inventoryItem: {
+      count: vi.fn(),
+      findMany: vi.fn(),
+      updateMany: vi.fn()
     }
   };
 }

@@ -9,6 +9,7 @@ export type CustomerRequest = Request & {
     email: string;
     displayName?: string | null;
     telegramId: string;
+    role: string;
   };
 };
 
@@ -33,11 +34,13 @@ export class CustomerAuthGuard implements CanActivate {
 
       const customer = await this.prisma.telegramUser.findUnique({ where: { id: payload.sub } });
       if (!customer?.email || !customer.passwordHash) throw new UnauthorizedException("Customer no longer exists.");
+      if (customer.isBlocked) throw new UnauthorizedException("Tài khoản đã bị khóa.");
       request.customer = {
         id: customer.id,
         email: customer.email,
         displayName: customer.displayName,
-        telegramId: customer.telegramId
+        telegramId: customer.telegramId,
+        role: customer.role
       };
       return true;
     } catch {

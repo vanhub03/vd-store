@@ -12,6 +12,11 @@ enum AdminRole {
   ADMIN
 }
 
+enum CustomerRole {
+  CUSTOMER
+  COLLABORATOR
+}
+
 enum ProductDeliveryType {
   STOCK_ITEM
   SHARED_CONTENT
@@ -101,6 +106,7 @@ model TelegramUser {
   firstName    String?
   lastName     String?
   languageCode String?
+  role         CustomerRole @default(CUSTOMER)
   isBlocked    Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -111,6 +117,8 @@ model TelegramUser {
   broadcastDeliveries BroadcastDelivery[]
   reviews             ProductReview[]
   voucherRedemptions  VoucherRedemption[]
+
+  @@index([role, isBlocked])
 }
 
 model Admin {
@@ -153,6 +161,7 @@ model Product {
   botPrice           Int                 @default(0)
   webPrice           Int                 @default(0)
   usdtPrice          Decimal?            @db.Decimal(18, 8)
+  collaboratorDiscountPercent Int        @default(0)
   showInBot          Boolean             @default(true)
   showInWeb          Boolean             @default(true)
   status             ProductStatus       @default(ACTIVE)
@@ -216,6 +225,10 @@ model Order {
   unitPrice       Int
   subtotalAmount  Int               @default(0)
   discountAmount  Int               @default(0)
+  collaboratorDiscountPercent Int   @default(0)
+  collaboratorDiscountAmount  Int   @default(0)
+  voucherDiscountAmount       Int   @default(0)
+  customerRoleSnapshot        CustomerRole @default(CUSTOMER)
   totalAmount     Int
   status          OrderStatus
   manualStatus    ManualOrderStatus @default(PENDING)
@@ -241,6 +254,7 @@ model Order {
   @@index([manualStatus, createdAt])
   @@index([voucherId])
   @@index([checkoutGroupId])
+  @@index([customerRoleSnapshot, createdAt])
 }
 
 model Voucher {
@@ -251,6 +265,7 @@ model Voucher {
   maxDiscountUsdt   Decimal? @db.Decimal(18, 8)
   active            Boolean  @default(true)
   firstOrderOnly    Boolean  @default(false)
+  allowCollaboratorStacking Boolean @default(false)
   maxUses           Int?
   usedCount         Int      @default(0)
   startsAt          DateTime @default(now())

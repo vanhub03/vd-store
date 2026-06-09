@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 import {
+  CustomerRole,
   InventoryStatus,
   ManualOrderStatus,
   OrderStatus,
@@ -39,6 +41,7 @@ export type ProductInput = {
   botPrice?: number;
   webPrice?: number;
   usdtPrice?: number | string | null;
+  collaboratorDiscountPercent?: number;
   showInBot?: boolean;
   showInWeb?: boolean;
   status?: ProductStatus;
@@ -56,6 +59,7 @@ export type VoucherInput = {
   maxDiscountUsdt?: number | string | null;
   active?: boolean;
   firstOrderOnly?: boolean;
+  allowCollaboratorStacking?: boolean;
   maxUses?: number | null;
   startsAt?: string | Date | null;
   expiresAt?: string | Date | null;
@@ -77,6 +81,9 @@ type VoucherQuote = {
   voucherId: string | null;
   discountPercent: number;
   subtotalAmount: number;
+  collaboratorDiscountAmount: number;
+  voucherBaseAmount: number;
+  voucherDiscountAmount: number;
   discountAmount: number;
   totalAmount: number;
   firstOrderOnly: boolean;
@@ -86,6 +93,12 @@ type VoucherQuote = {
   maxDiscountUsdt: number | null;
   claimIpHash: string | null;
   claimFingerprintHash: string | null;
+};
+
+type PricingSummary = {
+  subtotalAmount: number;
+  collaboratorDiscountAmount: number;
+  collaboratorSubtotal: number;
 };
 
 const ORDER_TRANSACTION_OPTIONS = {
@@ -127,7 +140,7 @@ export class ShopService {
     });
   }
 
-  async getCatalog(channel: SalesChannel = "bot") {
+  async getCatalog(channel: SalesChannel = "bot", customerRole: CustomerRole = CustomerRole.CUSTOMER) {
     const loadCatalog = async () => {
       const categories = await this.prisma.category.findMany({
         where: { active: true },
@@ -162,15 +175,15 @@ export class ShopService {
       return {
         categories: categories.map((category) => ({
           ...category,
-          products: category.products.map((product) => applyChannelPrice(product, channel))
+            products: category.products.map((product) => applyChannelPrice(product, channel, customerRole))
         })),
-        uncategorized: uncategorized.map((product) => applyChannelPrice(product, channel))
+        uncategorized: uncategorized.map((product) => applyChannelPrice(product, channel, customerRole))
       };
     };
     return typeof this.prisma.withConnectionRetry === "function" ? this.prisma.withConnectionRetry(loadCatalog, `getCatalog:${channel}`) : loadCatalog();
   }
 
-  async getProduct(productId: string, channel: SalesChannel = "bot") {
+  async getProduct(productId: string, channel: SalesChannel = "bot", customerRole: CustomerRole = CustomerRole.CUSTOMER) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
       include: {
@@ -185,7 +198,7 @@ export class ShopService {
     if (!product || !isVisibleForChannel(product, channel)) {
       throw new NotFoundException("Không tìm thấy sản phẩm.");
     }
-    return applyChannelPrice(product, channel);
+    return applyChannelPrice(product, channel, customerRole);
   }
 
   async getWalletBalanceByTelegramId(telegramId: string) {
@@ -233,7 +246,8 @@ export class ShopService {
     const user = await this.requireTelegramUser(telegramId);
     const product = await this.getActiveProduct(productId, channel);
     await this.ensurePurchasable(product, quantity);
-    const quote = await this.quoteVoucher(this.prisma, user, product.price * quantity, voucherCode, voucherClaim);
+    const line = priceOrderLine(product, quantity, channel, user.role);
+    const quote = await this.quoteVoucher(this.prisma, user, summarizePricing([line]), voucherCode, voucherClaim);
     return publicVoucherQuote(quote);
   }
 
@@ -242,8 +256,9 @@ export class ShopService {
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
       if (!user) throw new NotFoundException("User chưa đăng ký.");
-      const lines = await this.prepareCartLines(tx, cartItems, channel);
-      const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+      assertActiveUser(user);
+      const lines = await this.prepareCartLines(tx, cartItems, channel, user);
+      const quote = await this.quoteVoucher(tx, user, summarizePricing(lines), voucherCode, voucherClaim);
       return publicVoucherQuote(quote);
     }, ORDER_TRANSACTION_OPTIONS);
   }
@@ -265,14 +280,16 @@ export class ShopService {
         const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
         if (!user) throw new NotFoundException("User chÆ°a Ä‘Äƒng kÃ½ bot.");
 
+        assertActiveUser(user);
         const product = await tx.product.findUnique({ where: { id: productId } });
         if (!product || !isVisibleForChannel(product, channel)) {
           throw new NotFoundException("KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m.");
         }
         await this.ensurePurchasable(product, quantity, tx);
 
-        const unitPrice = channelPrice(product, channel);
-        const quote = await this.quoteVoucher(tx, user, unitPrice * quantity, voucherCode, voucherClaim);
+        const line = priceOrderLine(product, quantity, channel, user.role);
+        const unitPrice = line.unitPrice;
+        const quote = await this.quoteVoucher(tx, user, summarizePricing([line]), voucherCode, voucherClaim);
         const code = await this.createUniqueCode(DIRECT_ORDER_PREFIX, tx);
         const expiresAt = minutesFromNow(10);
         const qrImageUrl = this.buildVietQrImageUrl(quote.totalAmount, code);
@@ -286,6 +303,10 @@ export class ShopService {
             unitPrice,
             subtotalAmount: quote.subtotalAmount,
             discountAmount: quote.discountAmount,
+            collaboratorDiscountPercent: line.collaboratorDiscountPercent,
+            collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+            voucherDiscountAmount: quote.voucherDiscountAmount,
+            customerRoleSnapshot: user.role,
             totalAmount: quote.totalAmount,
             voucherId: quote.voucherId,
             voucherCode: quote.code,
@@ -333,6 +354,7 @@ export class ShopService {
         const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
         if (!user) throw new NotFoundException("User chÆ°a Ä‘Äƒng kÃ½ bot.");
 
+        assertActiveUser(user);
         const product = await tx.product.findUnique({ where: { id: productId } });
         if (!product || !isVisibleForChannel(product, channel)) {
           throw new NotFoundException("KhÃ´ng tÃ¬m tháº¥y sáº£n pháº©m.");
@@ -343,10 +365,12 @@ export class ShopService {
           throw new BadRequestException("San pham chua cau hinh gia USDT.");
         }
 
-        const unitPrice = channelPrice(product, channel);
-        const quote = await this.quoteVoucher(tx, user, unitPrice * quantity, voucherCode, voucherClaim);
+        const line = priceOrderLine(product, quantity, channel, user.role);
+        const unitPrice = line.unitPrice;
+        const quote = await this.quoteVoucher(tx, user, summarizePricing([line]), voucherCode, voucherClaim);
         const code = await this.createUniqueCode("USDT", tx);
-        const cryptoAmount = discountedCryptoAmount(unitCryptoAmount * quantity, quote);
+        const collaboratorCryptoAmount = unitCryptoAmount * quantity * (1 - line.collaboratorDiscountPercent / 100);
+        const cryptoAmount = discountedCryptoAmount(collaboratorCryptoAmount, quote);
         const expiresAt = minutesFromNow(10);
         const order = await tx.order.create({
           data: {
@@ -357,6 +381,10 @@ export class ShopService {
             unitPrice,
             subtotalAmount: quote.subtotalAmount,
             discountAmount: quote.discountAmount,
+            collaboratorDiscountPercent: line.collaboratorDiscountPercent,
+            collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+            voucherDiscountAmount: quote.voucherDiscountAmount,
+            customerRoleSnapshot: user.role,
             totalAmount: quote.totalAmount,
             voucherId: quote.voucherId,
             voucherCode: quote.code,
@@ -452,14 +480,16 @@ export class ShopService {
         const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
         if (!user) throw new NotFoundException("User chưa đăng ký bot.");
 
+        assertActiveUser(user);
         const product = await tx.product.findUnique({ where: { id: productId } });
         if (!product || !isVisibleForChannel(product, channel)) {
           throw new NotFoundException("Không tìm thấy sản phẩm.");
         }
         await this.ensurePurchasable(product, quantity, tx);
 
-        const unitPrice = channelPrice(product, channel);
-        const quote = await this.quoteVoucher(tx, user, unitPrice * quantity, voucherCode, voucherClaim);
+        const line = priceOrderLine(product, quantity, channel, user.role);
+        const unitPrice = line.unitPrice;
+        const quote = await this.quoteVoucher(tx, user, summarizePricing([line]), voucherCode, voucherClaim);
         const balance = await this.getWalletBalance(user.id, tx);
         if (balance < quote.totalAmount) {
           throw new BadRequestException("Số dư không đủ.");
@@ -475,6 +505,10 @@ export class ShopService {
             unitPrice,
             subtotalAmount: quote.subtotalAmount,
             discountAmount: quote.discountAmount,
+            collaboratorDiscountPercent: line.collaboratorDiscountPercent,
+            collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+            voucherDiscountAmount: quote.voucherDiscountAmount,
+            customerRoleSnapshot: user.role,
             totalAmount: quote.totalAmount,
             voucherId: quote.voucherId,
             voucherCode: quote.code,
@@ -537,8 +571,9 @@ export class ShopService {
       async (tx) => {
         const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
         if (!user) throw new NotFoundException("User chưa đăng ký.");
-        const lines = await this.prepareCartLines(tx, cartItems, channel);
-        const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+        assertActiveUser(user);
+        const lines = await this.prepareCartLines(tx, cartItems, channel, user);
+        const quote = await this.quoteVoucher(tx, user, summarizePricing(lines), voucherCode, voucherClaim);
         const pricedLines = allocateCartQuote(lines, quote);
         const balance = await this.getWalletBalance(user.id, tx);
         if (balance < quote.totalAmount) throw new BadRequestException("Số dư không đủ.");
@@ -558,6 +593,10 @@ export class ShopService {
               unitPrice: line.unitPrice,
               subtotalAmount: line.subtotalAmount,
               discountAmount: line.discountAmount,
+              collaboratorDiscountPercent: line.collaboratorDiscountPercent,
+              collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+              voucherDiscountAmount: line.voucherDiscountAmount,
+              customerRoleSnapshot: user.role,
               totalAmount: line.totalAmount,
               voucherId: index === 0 ? quote.voucherId : null,
               voucherCode: index === 0 ? quote.code : null,
@@ -630,8 +669,9 @@ export class ShopService {
       async (tx) => {
         const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
         if (!user) throw new NotFoundException("User chưa đăng ký.");
-        const lines = await this.prepareCartLines(tx, cartItems, channel);
-        const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+        assertActiveUser(user);
+        const lines = await this.prepareCartLines(tx, cartItems, channel, user);
+        const quote = await this.quoteVoucher(tx, user, summarizePricing(lines), voucherCode, voucherClaim);
         const pricedLines = allocateCartQuote(lines, quote);
         const checkoutGroupId = crypto.randomUUID();
         const code = await this.createUniqueCode(DIRECT_ORDER_PREFIX, tx);
@@ -651,6 +691,10 @@ export class ShopService {
                 unitPrice: line.unitPrice,
                 subtotalAmount: line.subtotalAmount,
                 discountAmount: line.discountAmount,
+                collaboratorDiscountPercent: line.collaboratorDiscountPercent,
+                collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+                voucherDiscountAmount: line.voucherDiscountAmount,
+                customerRoleSnapshot: user.role,
                 totalAmount: line.totalAmount,
                 voucherId: index === 0 ? quote.voucherId : null,
                 voucherCode: index === 0 ? quote.code : null,
@@ -695,17 +739,21 @@ export class ShopService {
       async (tx) => {
         const user = await tx.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
         if (!user) throw new NotFoundException("User chưa đăng ký.");
-        const lines = await this.prepareCartLines(tx, cartItems, channel);
+        assertActiveUser(user);
+        const lines = await this.prepareCartLines(tx, cartItems, channel, user);
         for (const line of lines) {
           if (!decimalNumber(line.product.usdtPrice)) throw new BadRequestException(`${line.product.name} chưa có giá USDT.`);
         }
-        const quote = await this.quoteVoucher(tx, user, lines.reduce((sum, line) => sum + line.subtotalAmount, 0), voucherCode, voucherClaim);
+        const quote = await this.quoteVoucher(tx, user, summarizePricing(lines), voucherCode, voucherClaim);
         const pricedLines = allocateCartQuote(lines, quote);
         const checkoutGroupId = crypto.randomUUID();
         const code = await this.createUniqueCode("USDT", tx);
         const expiresAt = minutesFromNow(10);
-        const rawCryptoAmount = lines.reduce((sum, line) => sum + Number(line.product.usdtPrice) * line.quantity, 0);
-        const cryptoAmount = discountedCryptoAmount(rawCryptoAmount, quote);
+        const collaboratorCryptoAmount = lines.reduce(
+          (sum, line) => sum + Number(line.product.usdtPrice) * line.quantity * (1 - line.collaboratorDiscountPercent / 100),
+          0
+        );
+        const cryptoAmount = discountedCryptoAmount(collaboratorCryptoAmount, quote);
         const orders = [];
         for (let index = 0; index < pricedLines.length; index += 1) {
           const line = pricedLines[index];
@@ -720,6 +768,10 @@ export class ShopService {
                 unitPrice: line.unitPrice,
                 subtotalAmount: line.subtotalAmount,
                 discountAmount: line.discountAmount,
+                collaboratorDiscountPercent: line.collaboratorDiscountPercent,
+                collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+                voucherDiscountAmount: line.voucherDiscountAmount,
+                customerRoleSnapshot: user.role,
                 totalAmount: line.totalAmount,
                 voucherId: index === 0 ? quote.voucherId : null,
                 voucherCode: index === 0 ? quote.code : null,
@@ -1024,7 +1076,137 @@ export class ShopService {
       take: 200
     });
     const balances = await Promise.all(users.map((user) => this.getWalletBalance(user.id)));
-    return users.map((user, index) => ({ ...user, balance: balances[index] }));
+    return users.map((user, index) => ({ ...user, passwordHash: undefined, balance: balances[index] }));
+  }
+
+  async listCollaborators(filters?: { search?: string; status?: string; createdFrom?: string; createdTo?: string }) {
+    const search = filters?.search?.trim();
+    const createdAt: Prisma.DateTimeFilter = {};
+    if (filters?.createdFrom) createdAt.gte = new Date(`${filters.createdFrom}T00:00:00+07:00`);
+    if (filters?.createdTo) createdAt.lte = new Date(`${filters.createdTo}T23:59:59+07:00`);
+    const users = await this.prisma.telegramUser.findMany({
+      where: {
+        role: CustomerRole.COLLABORATOR,
+        ...(filters?.status === "active" ? { isBlocked: false } : filters?.status === "blocked" ? { isBlocked: true } : {}),
+        ...(Object.keys(createdAt).length ? { createdAt } : {}),
+        ...(search
+          ? {
+              OR: [
+                { email: { contains: search, mode: "insensitive" } },
+                { displayName: { contains: search, mode: "insensitive" } },
+                { username: { contains: search, mode: "insensitive" } }
+              ]
+            }
+          : {})
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        orders: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          include: { product: { select: { id: true, name: true } } }
+        }
+      }
+    });
+    const balances = await Promise.all(users.map((user) => this.getWalletBalance(user.id)));
+    return users.map((user, index) => ({ ...user, passwordHash: undefined, balance: balances[index] }));
+  }
+
+  async getCollaboratorReport() {
+    const [total, active, orderStats, topProducts, recentOrders] = await Promise.all([
+      this.prisma.telegramUser.count({ where: { role: CustomerRole.COLLABORATOR } }),
+      this.prisma.telegramUser.count({ where: { role: CustomerRole.COLLABORATOR, isBlocked: false } }),
+      this.prisma.order.aggregate({
+        where: { customerRoleSnapshot: CustomerRole.COLLABORATOR },
+        _count: { id: true },
+        _sum: { totalAmount: true, collaboratorDiscountAmount: true }
+      }),
+      this.prisma.order.groupBy({
+        by: ["productId"],
+        where: { customerRoleSnapshot: CustomerRole.COLLABORATOR },
+        _sum: { quantity: true, totalAmount: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: 10
+      }),
+      this.prisma.order.findMany({
+        where: { customerRoleSnapshot: CustomerRole.COLLABORATOR },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        include: { user: true, product: true }
+      })
+    ]);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: topProducts.map((item) => item.productId) } },
+      select: { id: true, name: true }
+    });
+    const productsById = new Map(products.map((product) => [product.id, product]));
+    return {
+      total,
+      active,
+      orderCount: orderStats._count.id,
+      revenue: orderStats._sum.totalAmount ?? 0,
+      discountGranted: orderStats._sum.collaboratorDiscountAmount ?? 0,
+      topProducts: topProducts.map((item) => ({ ...item, product: productsById.get(item.productId) })),
+      recentOrders
+    };
+  }
+
+  async createCollaborator(adminId: string, input: { email: string; displayName?: string; password: string }) {
+    const email = input.email.toLowerCase().trim();
+    const existing = await this.prisma.telegramUser.findUnique({ where: { email } });
+    if (existing) throw new BadRequestException("Email đã được sử dụng.");
+    const passwordHash = await bcrypt.hash(input.password, 10);
+    const collaborator = await this.prisma.telegramUser.create({
+      data: {
+        telegramId: `web:${crypto.randomUUID()}`,
+        email,
+        username: email,
+        displayName: input.displayName?.trim() || email.split("@")[0],
+        passwordHash,
+        role: CustomerRole.COLLABORATOR
+      }
+    });
+    await this.audit(adminId, "COLLABORATOR_CREATE", "TelegramUser", collaborator.id, { email });
+    return { ...collaborator, passwordHash: undefined };
+  }
+
+  async updateCollaborator(
+    adminId: string,
+    userId: string,
+    input: { role?: CustomerRole; isBlocked?: boolean; password?: string; displayName?: string }
+  ) {
+    const previous = await this.prisma.telegramUser.findUnique({ where: { id: userId } });
+    if (!previous) throw new NotFoundException("Không tìm thấy tài khoản.");
+    const data: Prisma.TelegramUserUpdateInput = {};
+    if (input.role !== undefined) data.role = input.role;
+    if (input.isBlocked !== undefined) data.isBlocked = input.isBlocked;
+    if (input.displayName !== undefined) data.displayName = input.displayName.trim() || null;
+    if (input.password !== undefined) data.passwordHash = await bcrypt.hash(input.password, 10);
+    const updated = await this.prisma.telegramUser.update({ where: { id: userId }, data });
+    const auditActions: string[] = [];
+    if (input.role !== undefined && input.role !== previous.role) {
+      auditActions.push(
+        input.role === CustomerRole.COLLABORATOR ? "COLLABORATOR_PROMOTE" : "COLLABORATOR_REVOKE"
+      );
+    }
+    if (input.isBlocked !== undefined && input.isBlocked !== previous.isBlocked) {
+      auditActions.push(input.isBlocked ? "COLLABORATOR_LOCK" : "COLLABORATOR_UNLOCK");
+    }
+    if (input.password !== undefined) auditActions.push("COLLABORATOR_PASSWORD_RESET");
+    if (input.displayName !== undefined && updated.displayName !== previous.displayName) {
+      auditActions.push("COLLABORATOR_UPDATE");
+    }
+    if (auditActions.length === 0) auditActions.push("COLLABORATOR_UPDATE");
+    const auditMeta = {
+      role: input.role,
+      isBlocked: input.isBlocked,
+      displayNameChanged: input.displayName !== undefined,
+      passwordChanged: input.password !== undefined
+    };
+    await Promise.all(
+      auditActions.map((action) => this.audit(adminId, action, "TelegramUser", userId, auditMeta))
+    );
+    return { ...updated, passwordHash: undefined };
   }
 
   async adjustWallet(adminId: string, userId: string, amount: number, note?: string) {
@@ -1077,6 +1259,7 @@ export class ShopService {
 
   async createProduct(input: ProductInput, adminId: string) {
     const priceData = normalizeProductPrices(input, true);
+    assertCollaboratorDiscount(input.collaboratorDiscountPercent);
     assertNonNegativeStock(input.manualStock);
     const imageUrl = input.imageUrl ?? detectBrandImageUrl(input.name);
     const product = await this.prisma.product.create({
@@ -1096,6 +1279,7 @@ export class ShopService {
 
   async updateProduct(productId: string, input: Partial<ProductInput>, adminId: string) {
     const priceData = normalizeProductPrices(input, false);
+    assertCollaboratorDiscount(input.collaboratorDiscountPercent);
     assertNonNegativeStock(input.manualStock);
     const previous = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!previous) throw new NotFoundException("Không tìm thấy sản phẩm.");
@@ -1377,7 +1561,12 @@ export class ShopService {
     });
   }
 
-  private async prepareCartLines(tx: Prisma.TransactionClient, items: CartOrderItemInput[], channel: SalesChannel) {
+  private async prepareCartLines(
+    tx: Prisma.TransactionClient,
+    items: CartOrderItemInput[],
+    channel: SalesChannel,
+    user: { role: CustomerRole }
+  ) {
     const products = await tx.product.findMany({
       where: { id: { in: items.map((item) => item.productId) } }
     });
@@ -1390,16 +1579,15 @@ export class ShopService {
         throw new NotFoundException("Một sản phẩm trong giỏ không còn được bán.");
       }
       await this.ensurePurchasable(product, item.quantity, tx);
-      const unitPrice = channelPrice(product, channel);
-      lines.push({ product, quantity: item.quantity, unitPrice, subtotalAmount: unitPrice * item.quantity });
+      lines.push(priceOrderLine(product, item.quantity, channel, user.role));
     }
     return lines;
   }
 
   private async quoteVoucher(
     tx: Prisma.TransactionClient | PrismaService,
-    user: { id: string; createdAt: Date },
-    subtotalAmount: number,
+    user: { id: string; createdAt: Date; role: CustomerRole },
+    pricing: PricingSummary,
     voucherCode?: string | null,
     voucherClaim?: VoucherClaim | null
   ): Promise<VoucherQuote> {
@@ -1409,9 +1597,12 @@ export class ShopService {
         code: null,
         voucherId: null,
         discountPercent: 0,
-        subtotalAmount,
-        discountAmount: 0,
-        totalAmount: subtotalAmount,
+        subtotalAmount: pricing.subtotalAmount,
+        collaboratorDiscountAmount: pricing.collaboratorDiscountAmount,
+        voucherBaseAmount: pricing.collaboratorSubtotal,
+        voucherDiscountAmount: 0,
+        discountAmount: pricing.collaboratorDiscountAmount,
+        totalAmount: pricing.collaboratorSubtotal,
         firstOrderOnly: false,
         expiresAt: null,
         maxUses: null,
@@ -1425,6 +1616,9 @@ export class ShopService {
     const voucher = cleanCode === FIRST_ORDER_VOUCHER_CODE ? await this.ensureFirstOrderVoucher(tx) : await tx.voucher.findUnique({ where: { code: cleanCode } });
     if (!voucher || !voucher.active) {
       throw new BadRequestException("Mã ưu đãi không hợp lệ.");
+    }
+    if (user.role === CustomerRole.COLLABORATOR && !voucher.allowCollaboratorStacking) {
+      throw new BadRequestException("Mã ưu đãi này không áp dụng cùng giá cộng tác viên.");
     }
 
     const now = new Date();
@@ -1481,9 +1675,9 @@ export class ShopService {
       }
     }
 
-    const percentageDiscount = Math.floor((subtotalAmount * voucher.discountPercent) / 100);
+    const percentageDiscount = Math.floor((pricing.collaboratorSubtotal * voucher.discountPercent) / 100);
     const discountAmount = voucher.maxDiscountAmount === null ? percentageDiscount : Math.min(percentageDiscount, voucher.maxDiscountAmount);
-    const totalAmount = Math.max(0, subtotalAmount - discountAmount);
+    const totalAmount = Math.max(0, pricing.collaboratorSubtotal - discountAmount);
     if (totalAmount <= 0) {
       throw new BadRequestException("Mã ưu đãi vượt quá giá trị đơn hàng.");
     }
@@ -1492,8 +1686,11 @@ export class ShopService {
       code: voucher.code,
       voucherId: voucher.id,
       discountPercent: voucher.discountPercent,
-      subtotalAmount,
-      discountAmount,
+      subtotalAmount: pricing.subtotalAmount,
+      collaboratorDiscountAmount: pricing.collaboratorDiscountAmount,
+      voucherBaseAmount: pricing.collaboratorSubtotal,
+      voucherDiscountAmount: discountAmount,
+      discountAmount: pricing.collaboratorDiscountAmount + discountAmount,
       totalAmount,
       firstOrderOnly: voucher.firstOrderOnly,
       expiresAt: voucher.firstOrderOnly ? new Date(user.createdAt.getTime() + FIRST_ORDER_VOUCHER_DAYS * 24 * 60 * 60 * 1000) : voucher.expiresAt,
@@ -1506,7 +1703,7 @@ export class ShopService {
   }
 
   private async redeemVoucher(tx: Prisma.TransactionClient, quote: VoucherQuote, userId: string, orderId: string) {
-    if (!quote.voucherId || !quote.code || quote.discountAmount <= 0) return;
+    if (!quote.voucherId || !quote.code || quote.voucherDiscountAmount <= 0) return;
     const now = new Date();
     const updateWhere =
       quote.maxUses === null
@@ -1524,8 +1721,8 @@ export class ShopService {
         voucherId: quote.voucherId,
         userId,
         orderId,
-        subtotalAmount: quote.subtotalAmount,
-        discountAmount: quote.discountAmount,
+        subtotalAmount: quote.voucherBaseAmount,
+        discountAmount: quote.voucherDiscountAmount,
         totalAmount: quote.totalAmount,
         claimIpHash: quote.claimIpHash,
         claimFingerprintHash: quote.claimFingerprintHash
@@ -1554,6 +1751,7 @@ export class ShopService {
         discountPercent: 20,
         active: true,
         firstOrderOnly: true,
+        allowCollaboratorStacking: false,
         maxDiscountAmount: 50_000,
         maxDiscountUsdt: new Prisma.Decimal(2),
         maxUses: null,
@@ -1564,6 +1762,7 @@ export class ShopService {
         discountPercent: 20,
         active: true,
         firstOrderOnly: true,
+        allowCollaboratorStacking: false,
         maxDiscountAmount: 50_000,
         maxDiscountUsdt: new Prisma.Decimal(2),
         maxUses: null,
@@ -1575,6 +1774,7 @@ export class ShopService {
   private async requireTelegramUser(telegramId: string) {
     const user = await this.prisma.telegramUser.findUnique({ where: { telegramId: String(telegramId) } });
     if (!user) throw new NotFoundException("User chưa đăng ký bot.");
+    if (user.isBlocked) throw new BadRequestException("Tài khoản đã bị khóa.");
     return user;
   }
 
@@ -1583,7 +1783,7 @@ export class ShopService {
     if (!product || !isVisibleForChannel(product, channel)) {
       throw new NotFoundException("Không tìm thấy sản phẩm.");
     }
-    return applyChannelPrice(product, channel);
+    return { ...product, price: channelPrice(product, channel) };
   }
 
   private async ensurePurchasable(
@@ -1912,6 +2112,7 @@ function normalizeVoucherInput(input: Partial<VoucherInput>, partial: boolean) {
     maxDiscountUsdt?: Prisma.Decimal | null;
     active?: boolean;
     firstOrderOnly?: boolean;
+    allowCollaboratorStacking?: boolean;
     maxUses?: number | null;
     startsAt?: Date;
     expiresAt?: Date;
@@ -1937,6 +2138,7 @@ function normalizeVoucherInput(input: Partial<VoucherInput>, partial: boolean) {
 
   if (input.active !== undefined) data.active = Boolean(input.active);
   if (input.firstOrderOnly !== undefined) data.firstOrderOnly = Boolean(input.firstOrderOnly);
+  if (input.allowCollaboratorStacking !== undefined) data.allowCollaboratorStacking = Boolean(input.allowCollaboratorStacking);
   if (input.maxUses !== undefined) {
     if (input.maxUses === null) {
       data.maxUses = null;
@@ -1997,6 +2199,8 @@ function publicVoucherQuote(quote: VoucherQuote) {
     code: quote.code,
     discountPercent: quote.discountPercent,
     subtotalAmount: quote.subtotalAmount,
+    collaboratorDiscountAmount: quote.collaboratorDiscountAmount,
+    voucherDiscountAmount: quote.voucherDiscountAmount,
     discountAmount: quote.discountAmount,
     totalAmount: quote.totalAmount,
     maxDiscountAmount: quote.maxDiscountAmount,
@@ -2023,25 +2227,61 @@ function normalizeCartItems(items: CartOrderItemInput[]) {
 }
 
 function allocateCartQuote<T extends { subtotalAmount: number }>(lines: T[], quote: VoucherQuote) {
-  let allocatedDiscount = 0;
+  let allocatedVoucherDiscount = 0;
   return lines.map((line, index) => {
-    const discountAmount =
-      index === lines.length - 1
-        ? quote.discountAmount - allocatedDiscount
-        : Math.min(line.subtotalAmount, Math.floor((line.subtotalAmount / quote.subtotalAmount) * quote.discountAmount));
-    allocatedDiscount += discountAmount;
+    const collaboratorDiscountAmount = "collaboratorDiscountAmount" in line ? Number(line.collaboratorDiscountAmount) : 0;
+    const voucherBaseAmount = line.subtotalAmount - collaboratorDiscountAmount;
+    const voucherDiscountAmount =
+      quote.voucherDiscountAmount <= 0
+        ? 0
+        : index === lines.length - 1
+        ? quote.voucherDiscountAmount - allocatedVoucherDiscount
+        : Math.min(voucherBaseAmount, Math.floor((voucherBaseAmount / quote.voucherBaseAmount) * quote.voucherDiscountAmount));
+    allocatedVoucherDiscount += voucherDiscountAmount;
     return {
       ...line,
-      discountAmount,
-      totalAmount: line.subtotalAmount - discountAmount
+      voucherDiscountAmount,
+      discountAmount: collaboratorDiscountAmount + voucherDiscountAmount,
+      totalAmount: voucherBaseAmount - voucherDiscountAmount
     };
   });
 }
 
-function discountedCryptoAmount(rawAmount: number, quote: VoucherQuote) {
-  const percentageDiscount = (rawAmount * quote.discountPercent) / 100;
+function discountedCryptoAmount(collaboratorAmount: number, quote: VoucherQuote) {
+  const percentageDiscount = (collaboratorAmount * quote.discountPercent) / 100;
   const discount = quote.maxDiscountUsdt === null ? percentageDiscount : Math.min(percentageDiscount, quote.maxDiscountUsdt);
-  return roundUsdt(Math.max(0.00000001, rawAmount - discount));
+  return roundUsdt(Math.max(0.00000001, collaboratorAmount - discount));
+}
+
+function priceOrderLine<T extends { webPrice: number; botPrice: number; price: number; collaboratorDiscountPercent: number }>(
+  product: T,
+  quantity: number,
+  channel: SalesChannel,
+  role: CustomerRole
+) {
+  const unitPrice = channelPrice(product, channel);
+  const subtotalAmount = unitPrice * quantity;
+  const collaboratorDiscountPercent = role === CustomerRole.COLLABORATOR ? product.collaboratorDiscountPercent : 0;
+  const collaboratorDiscountAmount = Math.floor((subtotalAmount * collaboratorDiscountPercent) / 100);
+  return {
+    product,
+    quantity,
+    unitPrice,
+    subtotalAmount,
+    collaboratorDiscountPercent,
+    collaboratorDiscountAmount,
+    collaboratorSubtotal: subtotalAmount - collaboratorDiscountAmount
+  };
+}
+
+function summarizePricing(lines: Array<{ subtotalAmount: number; collaboratorDiscountAmount: number }>): PricingSummary {
+  const subtotalAmount = lines.reduce((sum, line) => sum + line.subtotalAmount, 0);
+  const collaboratorDiscountAmount = lines.reduce((sum, line) => sum + line.collaboratorDiscountAmount, 0);
+  return {
+    subtotalAmount,
+    collaboratorDiscountAmount,
+    collaboratorSubtotal: subtotalAmount - collaboratorDiscountAmount
+  };
 }
 
 function formatCartDelivery(orders: Array<{ product: { name: string }; deliveryText?: string | null }>) {
@@ -2054,6 +2294,17 @@ function assertNonNegativeStock(value?: number) {
   if (!Number.isInteger(value) || value < 0) {
     throw new BadRequestException("So luong phai la so nguyen khong am.");
   }
+}
+
+function assertCollaboratorDiscount(value?: number) {
+  if (value === undefined) return;
+  if (!Number.isInteger(value) || value < 0 || value > 90) {
+    throw new BadRequestException("Mức giảm cho cộng tác viên phải từ 0 đến 90%.");
+  }
+}
+
+function assertActiveUser(user: { isBlocked?: boolean }) {
+  if (user.isBlocked) throw new BadRequestException("Tài khoản đã bị khóa.");
 }
 
 function normalizeProductPrices(input: Partial<ProductInput>, required: boolean) {
@@ -2149,10 +2400,31 @@ function channelPrice(product: { price: number; botPrice?: number | null; webPri
   return price && price > 0 ? price : product.price;
 }
 
-function applyChannelPrice<T extends { price: number; botPrice?: number | null; webPrice?: number | null }>(product: T, channel: SalesChannel) {
+function applyChannelPrice<
+  T extends {
+    price: number;
+    botPrice?: number | null;
+    webPrice?: number | null;
+    usdtPrice?: Prisma.Decimal | number | string | null;
+    collaboratorDiscountPercent?: number | null;
+  }
+>(product: T, channel: SalesChannel, customerRole: CustomerRole = CustomerRole.CUSTOMER) {
+  const regularPrice = channelPrice(product, channel);
+  const collaboratorDiscountPercent =
+    customerRole === CustomerRole.COLLABORATOR ? Number(product.collaboratorDiscountPercent ?? 0) : 0;
+  const collaboratorPrice = regularPrice - Math.floor((regularPrice * collaboratorDiscountPercent) / 100);
+  const regularUsdtPrice = decimalNumber(product.usdtPrice);
+  const collaboratorUsdtPrice =
+    regularUsdtPrice === null ? null : roundUsdt(regularUsdtPrice * (1 - collaboratorDiscountPercent / 100));
   return {
     ...product,
-    price: channelPrice(product, channel)
+    price: collaboratorPrice,
+    regularPrice,
+    collaboratorPrice,
+    collaboratorDiscountPercent,
+    usdtPrice: collaboratorUsdtPrice,
+    regularUsdtPrice,
+    collaboratorUsdtPrice
   };
 }
 

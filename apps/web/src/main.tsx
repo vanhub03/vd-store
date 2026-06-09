@@ -545,7 +545,7 @@ function App() {
       window.removeEventListener("focus", refresh);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     if (!qr || !token) return;
@@ -564,7 +564,7 @@ function App() {
   async function loadPublicData() {
     try {
       const [nextCatalog, nextReviews] = await Promise.all([
-        api.get<Catalog>("/store/catalog"),
+        api.get<Catalog>(token ? "/store/member/catalog" : "/store/catalog"),
         api.get<ReviewsResponse>("/store/reviews").catch(() => ({ reviews: [] }))
       ]);
       setCatalog(nextCatalog);
@@ -607,6 +607,7 @@ function App() {
     setCustomer(null);
     setHistory(null);
     setBalance(0);
+    setCatalog(null);
   }
 
   function changeLanguage(next: Language) {
@@ -1012,7 +1013,7 @@ function App() {
 
   async function openProduct(product: Product) {
     await runAction(`product:${product.id}`, async () => {
-      const freshProduct = await api.get<Product>(`/store/products/${product.id}`);
+      const freshProduct = await api.get<Product>(`${token ? "/store/member/products" : "/store/products"}/${product.id}`);
       setSelectedQuantity(1);
       setSelectedProduct({ ...product, ...freshProduct, category: freshProduct.category ?? product.category });
       await loadPublicData();
@@ -1909,6 +1910,7 @@ function ProductCard({
   const imageSrc = productArtUrl(product);
   const copy = TEXT[language];
   const stockLabel = product.deliveryType === "SHARED_CONTENT" ? copy.unlimited : `${stock} ${copy.left}`;
+  const hasCollaboratorPrice = Boolean(product.collaboratorDiscountPercent && product.regularPrice && product.regularPrice > product.price);
 
   function setPointer(event: React.MouseEvent<HTMLElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1925,6 +1927,7 @@ function ProductCard({
     <article className="product-card reveal" onMouseMove={setPointer} style={{ "--d": `${Math.min(index, 7) * 45}ms` } as React.CSSProperties}>
       <div className="product-badges">
         <span>{postPaymentLabel(product.deliveryType, language)}</span>
+        {hasCollaboratorPrice ? <em className="collaborator-badge">-{product.collaboratorDiscountPercent}% CTV</em> : null}
         {disabled ? <em>{language === "vi" ? "Hết hàng" : "Sold out"}</em> : null}
       </div>
       <button className="product-image-button" onClick={onView} aria-label={`${copy.detail}: ${localizedName(product, language)}`}>
@@ -1940,7 +1943,10 @@ function ProductCard({
         <span>{stockLabel}</span>
       </div>
       <div className="product-price-row">
-        <b>{formatProductPrice(product, language)}</b>
+        <div>
+          <b>{formatProductPrice(product, language)}</b>
+          {hasCollaboratorPrice ? <del>{formatRegularProductPrice(product, language)}</del> : null}
+        </div>
         <small>{product.category?.name ?? copy.categoryFallback}</small>
       </div>
       <div className="product-card-actions">
@@ -2266,6 +2272,12 @@ function ProductDialog({
             <p className="product-description">{localizedDescription(product, language) || copy.deliveryFallback}</p>
             <div className="detail-price">
               <b>{formatProductPrice(product, language)}</b>
+              {product.collaboratorDiscountPercent ? (
+                <>
+                  <del>{formatRegularProductPrice(product, language)}</del>
+                  <span>{vi ? `Giá cộng tác viên · tiết kiệm ${product.collaboratorDiscountPercent}%` : `Collaborator price · save ${product.collaboratorDiscountPercent}%`}</span>
+                </>
+              ) : null}
             </div>
             <p className="stock-note">
               <Check size={15} />
@@ -2316,6 +2328,7 @@ function ProductDialog({
               </div>
             </div>
             <strong>{formatProductTotal(product, quantity, language)}</strong>
+            {product.collaboratorDiscountPercent ? <span className="collaborator-summary-label">{vi ? "Giá cộng tác viên" : "Collaborator price"}</span> : null}
             <ul>
               <li><Check size={14} /> {vi ? "Kích hoạt tự động" : "Automatic activation"}</li>
               <li><Check size={14} /> {vi ? "Bảo hành 100% nếu lỗi" : "Warranty if failed"}</li>
@@ -2373,7 +2386,7 @@ function CheckoutDialog({
   const vi = language === "vi";
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [method, setMethod] = useState<PayMethod>(language === "en" && item.product.usdtPrice ? "usdt" : "bank");
-  const [coupon, setCoupon] = useState(customer ? "FIRST20" : "");
+  const [coupon, setCoupon] = useState(customer?.role === "CUSTOMER" ? "FIRST20" : "");
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
@@ -2384,9 +2397,11 @@ function CheckoutDialog({
     email: customer?.email ?? "",
     phone: ""
   });
-  const subtotal = item.product.price * item.quantity;
-  const discountAmount = voucherPreview?.discountAmount ?? 0;
-  const amount = voucherPreview?.totalAmount ?? subtotal;
+  const subtotal = (item.product.regularPrice ?? item.product.price) * item.quantity;
+  const collaboratorDiscountAmount =
+    voucherPreview?.collaboratorDiscountAmount ?? subtotal - item.product.price * item.quantity;
+  const voucherDiscountAmount = voucherPreview?.voucherDiscountAmount ?? 0;
+  const amount = voucherPreview?.totalAmount ?? subtotal - collaboratorDiscountAmount;
   const walletMissing = Math.max(0, amount - balance);
   const actionLoading = loading === `wallet:${item.product.id}` || loading === `bank:${item.product.id}` || loading === `usdt:${item.product.id}`;
   const busy = actionLoading || localProcessing;
@@ -2463,8 +2478,8 @@ function CheckoutDialog({
       setCoupon(preview.code ?? cleanCode.toUpperCase());
       setCouponMessage(
         vi
-          ? `Đã áp dụng mã ${preview.code}: giảm ${formatVnd(preview.discountAmount)}.`
-          : `${preview.code} applied: ${formatVnd(preview.discountAmount)} off.`
+          ? `Đã áp dụng mã ${preview.code}: giảm ${formatVnd(preview.voucherDiscountAmount)}.`
+          : `${preview.code} applied: ${formatVnd(preview.voucherDiscountAmount)} off.`
       );
     } catch (err) {
       setVoucherPreview(null);
@@ -2596,7 +2611,8 @@ function CheckoutDialog({
               <h3>{vi ? "Tóm tắt đơn hàng" : "Order summary"}</h3>
               <dl>
                 <div><dt>{vi ? "Tạm tính" : "Subtotal"}</dt><dd>{formatVnd(subtotal)}</dd></div>
-                <div><dt>{vi ? "Giảm giá" : "Discount"}</dt><dd>{discountAmount > 0 ? `-${formatVnd(discountAmount)}` : formatVnd(0)}</dd></div>
+                {collaboratorDiscountAmount > 0 ? <div><dt>{vi ? "Ưu đãi cộng tác viên" : "Collaborator discount"}</dt><dd>-{formatVnd(collaboratorDiscountAmount)}</dd></div> : null}
+                <div><dt>Voucher</dt><dd>{voucherDiscountAmount > 0 ? `-${formatVnd(voucherDiscountAmount)}` : formatVnd(0)}</dd></div>
                 <div><dt>{vi ? "Phí xử lý" : "Processing fee"}</dt><dd>{vi ? "Miễn phí" : "Free"}</dd></div>
               </dl>
               <div className="grand-total">
@@ -2667,15 +2683,18 @@ function CartCheckoutDialog({
   const copy = TEXT[language];
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [method, setMethod] = useState<PayMethod>("bank");
-  const [coupon, setCoupon] = useState(customer ? "FIRST20" : "");
+  const [coupon, setCoupon] = useState(customer?.role === "CUSTOMER" ? "FIRST20" : "");
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
   const [localProcessing, setLocalProcessing] = useState(false);
   const [paymentAttempted, setPaymentAttempted] = useState(false);
-  const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const discountAmount = voucherPreview?.discountAmount ?? 0;
-  const amount = voucherPreview?.totalAmount ?? subtotal;
+  const subtotal = items.reduce((sum, item) => sum + (item.product.regularPrice ?? item.product.price) * item.quantity, 0);
+  const collaboratorDiscountAmount =
+    voucherPreview?.collaboratorDiscountAmount ??
+    items.reduce((sum, item) => sum + ((item.product.regularPrice ?? item.product.price) - item.product.price) * item.quantity, 0);
+  const voucherDiscountAmount = voucherPreview?.voucherDiscountAmount ?? 0;
+  const amount = voucherPreview?.totalAmount ?? subtotal - collaboratorDiscountAmount;
   const walletMissing = Math.max(0, amount - balance);
   const canUseUsdt = items.every((item) => Boolean(item.product.usdtPrice));
   const actionLoading = loading === "cart-wallet" || loading === "cart-bank" || loading === "cart-usdt";
@@ -2714,7 +2733,7 @@ function CartCheckoutDialog({
       });
       setVoucherPreview(preview);
       setCoupon(preview.code ?? cleanCode.toUpperCase());
-      setCouponMessage(vi ? `Đã áp dụng mã ${preview.code}: giảm ${formatVnd(preview.discountAmount)}.` : `${preview.code} applied.`);
+      setCouponMessage(vi ? `Đã áp dụng mã ${preview.code}: giảm ${formatVnd(preview.voucherDiscountAmount)}.` : `${preview.code} applied.`);
     } catch (err) {
       setVoucherPreview(null);
       if (silent) {
@@ -2796,7 +2815,8 @@ function CartCheckoutDialog({
             <h3>{vi ? "Tổng thanh toán" : "Summary"}</h3>
             <dl>
               <div><dt>{vi ? "Tạm tính" : "Subtotal"}</dt><dd>{formatVnd(subtotal)}</dd></div>
-              <div><dt>{vi ? "Giảm giá" : "Discount"}</dt><dd>{discountAmount > 0 ? `-${formatVnd(discountAmount)}` : formatVnd(0)}</dd></div>
+              {collaboratorDiscountAmount > 0 ? <div><dt>{vi ? "Ưu đãi cộng tác viên" : "Collaborator discount"}</dt><dd>-{formatVnd(collaboratorDiscountAmount)}</dd></div> : null}
+              <div><dt>Voucher</dt><dd>{voucherDiscountAmount > 0 ? `-${formatVnd(voucherDiscountAmount)}` : formatVnd(0)}</dd></div>
               <div><dt>{vi ? "Phí xử lý" : "Processing fee"}</dt><dd>{vi ? "Miễn phí" : "Free"}</dd></div>
             </dl>
             <div className="payment-methods">
@@ -3577,6 +3597,11 @@ function renderStars(rating: number) {
 
 function formatProductPrice(product: Product, language: Language) {
   return language === "en" && product.usdtPrice ? formatUsdt(product.usdtPrice) : formatVnd(product.price);
+}
+
+function formatRegularProductPrice(product: Product, language: Language) {
+  if (language === "en" && product.regularUsdtPrice) return formatUsdt(product.regularUsdtPrice);
+  return formatVnd(product.regularPrice ?? product.price);
 }
 
 function formatProductTotal(product: Product, quantity: number, language: Language) {

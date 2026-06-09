@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Ban, Bell, Boxes, CheckCircle2, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, Users, Wallet, X } from "lucide-react";
+import { Ban, Bell, Boxes, CheckCircle2, Download, KeyRound, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, UserPlus, Users, Wallet, X } from "lucide-react";
 import { AdminSession, Api, formatVnd } from "./api";
 
-type Tab = "overview" | "products" | "users" | "orders" | "vouchers" | "broadcasts";
+type Tab = "overview" | "products" | "users" | "collaborators" | "orders" | "vouchers" | "broadcasts";
 
 type RevenuePoint = { key: string; label: string; revenue: number; orders: number };
 type Dashboard = {
@@ -36,6 +36,7 @@ type Product = {
   botPrice: number;
   webPrice: number;
   usdtPrice?: number | string | null;
+  collaboratorDiscountPercent: number;
   showInBot: boolean;
   showInWeb: boolean;
   manualStock?: number;
@@ -47,11 +48,28 @@ type Product = {
   category?: Category;
   _count?: { inventoryItems: number };
 };
-type User = { id: string; telegramId: string; username?: string; firstName?: string; balance: number; createdAt: string };
+type User = {
+  id: string;
+  telegramId: string;
+  email?: string | null;
+  displayName?: string | null;
+  username?: string;
+  firstName?: string;
+  role: "CUSTOMER" | "COLLABORATOR";
+  isBlocked: boolean;
+  balance: number;
+  createdAt: string;
+  orders?: Order[];
+};
 type Order = {
   id: string;
   code: string;
   quantity: number;
+  subtotalAmount: number;
+  discountAmount: number;
+  collaboratorDiscountAmount: number;
+  voucherDiscountAmount: number;
+  customerRoleSnapshot: "CUSTOMER" | "COLLABORATOR";
   totalAmount: number;
   status: string;
   manualStatus?: "PENDING" | "COMPLETED" | "CANCELLED";
@@ -79,6 +97,7 @@ type Voucher = {
   maxDiscountUsdt?: number | string | null;
   active: boolean;
   firstOrderOnly: boolean;
+  allowCollaboratorStacking: boolean;
   maxUses?: number | null;
   usedCount: number;
   startsAt: string;
@@ -92,6 +111,7 @@ type ProductForm = {
   botPrice: number;
   webPrice: number;
   usdtPrice: string;
+  collaboratorDiscountPercent: number;
   showInBot: boolean;
   showInWeb: boolean;
   categoryId: string;
@@ -180,6 +200,9 @@ export function App() {
           <NavButton active={tab === "users"} onClick={() => setTab("users")} icon={<Users />}>
             User
           </NavButton>
+          <NavButton active={tab === "collaborators"} onClick={() => setTab("collaborators")} icon={<UserPlus />}>
+            Cộng tác viên
+          </NavButton>
           <NavButton active={tab === "orders"} onClick={() => setTab("orders")} icon={<Wallet />}>
             Đơn & tiền
           </NavButton>
@@ -216,6 +239,7 @@ export function App() {
         {tab === "overview" && <Overview api={api} onError={setError} />}
         {tab === "products" && <Products api={api} onError={setError} />}
         {tab === "users" && <UsersView api={api} onError={setError} />}
+        {tab === "collaborators" && <CollaboratorsView api={api} onError={setError} />}
         {tab === "orders" && <OrdersView api={api} onError={setError} />}
         {tab === "vouchers" && <Vouchers api={api} onError={setError} />}
         {tab === "broadcasts" && <Broadcasts api={api} onError={setError} />}
@@ -407,6 +431,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       botPrice: product.botPrice || product.price,
       webPrice: product.webPrice || product.price,
       usdtPrice: product.usdtPrice ? String(product.usdtPrice) : "",
+      collaboratorDiscountPercent: product.collaboratorDiscountPercent ?? 0,
       showInBot: product.showInBot,
       showInWeb: product.showInWeb,
       categoryId: product.categoryId ?? product.category?.id ?? "",
@@ -555,6 +580,20 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             Gia USDT
             <input type="number" value={form.usdtPrice} onChange={(event) => setForm({ ...form, usdtPrice: event.target.value })} min={0} step="0.00000001" placeholder="0.00" />
           </label>
+          <label>
+            Mức giảm cho CTV (%)
+            <input
+              type="number"
+              value={form.collaboratorDiscountPercent}
+              onChange={(event) => setForm({ ...form, collaboratorDiscountPercent: Number(event.target.value) })}
+              min={0}
+              max={90}
+            />
+            <span className="fieldHint">
+              Giá CTV: {formatVnd(Math.max(1, Math.floor(form.webPrice * (1 - form.collaboratorDiscountPercent / 100))))}
+              {form.usdtPrice ? ` · ${(Number(form.usdtPrice) * (1 - form.collaboratorDiscountPercent / 100)).toFixed(4)} USDT` : ""}
+            </span>
+          </label>
           <div className="checkboxGroup wide">
             <label className="checkboxLabel">
               <input type="checkbox" checked={form.showInBot} onChange={(event) => setForm({ ...form, showInBot: event.target.checked })} />
@@ -654,11 +693,13 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       </section>
 
       <DataTable
-        columns={["Tên", "Giá bot", "Giá web", "USDT", "Hiển thị", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
+        columns={["Tên", "Giá bot", "Giá web", "% CTV", "Giá CTV", "USDT", "Hiển thị", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
         rows={products.map((product) => [
           <ProductNameCell product={product} />,
           formatVnd(product.botPrice || product.price),
           formatVnd(product.webPrice || product.price),
+          `${product.collaboratorDiscountPercent ?? 0}%`,
+          formatVnd(Math.floor((product.webPrice || product.price) * (1 - (product.collaboratorDiscountPercent ?? 0) / 100))),
           product.usdtPrice ? `${product.usdtPrice} USDT` : "-",
           channelVisibilityLabel(product),
           product.deliveryType,
@@ -708,6 +749,7 @@ function emptyProductForm(): ProductForm {
     botPrice: 10000,
     webPrice: 10000,
     usdtPrice: "",
+    collaboratorDiscountPercent: 0,
     showInBot: true,
     showInWeb: true,
     categoryId: "",
@@ -733,6 +775,7 @@ function serializeProductForm(form: ProductForm) {
     price: Number(form.webPrice),
     nameEn: form.nameEn || null,
     usdtPrice: form.usdtPrice === "" ? null : Number(form.usdtPrice),
+    collaboratorDiscountPercent: Number(form.collaboratorDiscountPercent),
     showInBot: Boolean(form.showInBot),
     showInWeb: Boolean(form.showInWeb),
     manualStock: Number(form.manualStock) || 0,
@@ -843,6 +886,235 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
   );
 }
 
+type CollaboratorReport = {
+  total: number;
+  active: number;
+  orderCount: number;
+  revenue: number;
+  discountGranted: number;
+  topProducts: Array<{ productId: string; _sum: { quantity?: number | null; totalAmount?: number | null }; product?: { name: string } }>;
+  recentOrders: Order[];
+};
+
+function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
+  const [collaborators, setCollaborators] = useState<User[]>([]);
+  const [customers, setCustomers] = useState<User[]>([]);
+  const [report, setReport] = useState<CollaboratorReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [passwords, setPasswords] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState({ search: "", status: "all", createdFrom: "", createdTo: "" });
+  const [form, setForm] = useState({ email: "", displayName: "", password: "" });
+  const [promoteUserId, setPromoteUserId] = useState("");
+
+  async function load() {
+    setLoading(true);
+    try {
+      const query = new URLSearchParams();
+      if (filters.search.trim()) query.set("search", filters.search.trim());
+      if (filters.status !== "all") query.set("status", filters.status);
+      if (filters.createdFrom) query.set("createdFrom", filters.createdFrom);
+      if (filters.createdTo) query.set("createdTo", filters.createdTo);
+      const [nextCollaborators, nextUsers, nextReport] = await Promise.all([
+        api.get<User[]>(`/admin/collaborators${query.size ? `?${query}` : ""}`),
+        api.get<User[]>("/admin/users"),
+        api.get<CollaboratorReport>("/admin/collaborators/report")
+      ]);
+      setCollaborators(nextCollaborators);
+      setCustomers(nextUsers.filter((user) => user.role === "CUSTOMER" && user.email));
+      setReport(nextReport);
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    setSavingId("create");
+    try {
+      await api.post("/admin/collaborators", form);
+      setForm({ email: "", displayName: "", password: "" });
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function promote() {
+    if (!promoteUserId || !confirm("Chuyển tài khoản khách hàng này thành cộng tác viên?")) return;
+    setSavingId(promoteUserId);
+    try {
+      await api.put(`/admin/collaborators/${promoteUserId}`, { role: "COLLABORATOR" });
+      setPromoteUserId("");
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function toggleBlocked(user: User) {
+    const action = user.isBlocked ? "mở khóa" : "khóa";
+    if (!confirm(`Xác nhận ${action} tài khoản ${user.email ?? displayUser(user)}?`)) return;
+    setSavingId(user.id);
+    try {
+      await api.put(`/admin/collaborators/${user.id}`, { isBlocked: !user.isBlocked });
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function revoke(user: User) {
+    if (!confirm(`Thu hồi quyền cộng tác viên của ${user.email ?? displayUser(user)}? Tài khoản sẽ trở về khách hàng thường.`)) return;
+    setSavingId(user.id);
+    try {
+      await api.put(`/admin/collaborators/${user.id}`, { role: "CUSTOMER" });
+      await load();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function resetPassword(user: User) {
+    const password = passwords[user.id]?.trim();
+    if (!password || password.length < 6) {
+      onError("Mật khẩu mới phải có ít nhất 6 ký tự.");
+      return;
+    }
+    setSavingId(user.id);
+    try {
+      await api.put(`/admin/collaborators/${user.id}`, { password });
+      setPasswords({ ...passwords, [user.id]: "" });
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  function exportCollaborators() {
+    downloadCsv(
+      "cong-tac-vien.csv",
+      ["Tên,Email,Trạng thái,Số dư,Ngày tạo", ...collaborators.map((user) =>
+        [user.displayName ?? "", user.email ?? "", user.isBlocked ? "Đã khóa" : "Hoạt động", user.balance, new Date(user.createdAt).toLocaleString("vi-VN")]
+          .map(csvCell)
+          .join(",")
+      )]
+    );
+  }
+
+  function exportOrders() {
+    downloadCsv(
+      "don-hang-ctv.csv",
+      ["Mã đơn,CTV,Sản phẩm,Số lượng,Giá gốc,Ưu đãi CTV,Voucher,Thực thu,Ngày tạo", ...(report?.recentOrders ?? []).map((order) =>
+        [
+          order.code,
+          order.user?.email ?? displayUser(order.user),
+          order.product?.name ?? "",
+          order.quantity,
+          order.subtotalAmount,
+          order.collaboratorDiscountAmount,
+          order.voucherDiscountAmount,
+          order.totalAmount,
+          new Date(order.createdAt).toLocaleString("vi-VN")
+        ].map(csvCell).join(",")
+      )]
+    );
+  }
+
+  return (
+    <div className="stack">
+      {loading && <LoadingBlock label="Đang tải cộng tác viên..." />}
+      <section className="metricsGrid">
+        <Metric label="Tổng cộng tác viên" value={report?.total ?? 0} />
+        <Metric label="Đang hoạt động" value={report?.active ?? 0} />
+        <Metric label="Đơn hàng CTV" value={report?.orderCount ?? 0} />
+        <Metric label="Doanh thu thực nhận" value={formatVnd(report?.revenue ?? 0)} />
+        <Metric label="Ưu đãi đã cấp" value={formatVnd(report?.discountGranted ?? 0)} />
+      </section>
+
+      <section className="dashboardGrid">
+        <div className="panel">
+          <h2>Tạo tài khoản CTV</h2>
+          <form className="formGrid collaboratorForm" onSubmit={create}>
+            <label>Tên hiển thị<input value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label>
+            <label>Email<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+            <label>Mật khẩu<input type="password" minLength={6} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /></label>
+            <button className="primaryButton" disabled={savingId === "create"}><UserPlus size={16} /> Tạo cộng tác viên</button>
+          </form>
+        </div>
+        <div className="panel">
+          <h2>Chuyển khách hàng hiện có</h2>
+          <div className="promotionRow">
+            <select value={promoteUserId} onChange={(event) => setPromoteUserId(event.target.value)}>
+              <option value="">Chọn tài khoản khách hàng</option>
+              {customers.map((user) => <option key={user.id} value={user.id}>{user.email} · {user.displayName ?? "Chưa có tên"}</option>)}
+            </select>
+            <button className="primaryButton" type="button" onClick={promote} disabled={!promoteUserId || savingId === promoteUserId}>Chuyển thành CTV</button>
+          </div>
+          <div className="topProductList">
+            {(report?.topProducts ?? []).slice(0, 5).map((item) => (
+              <div key={item.productId}><span>{item.product?.name ?? item.productId}</span><strong>{item._sum.quantity ?? 0} sản phẩm</strong></div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>Danh sách cộng tác viên</h2>
+          <div className="rowActions">
+            <button className="smallButton" type="button" onClick={exportCollaborators}><Download size={14} /> CTV CSV</button>
+            <button className="smallButton" type="button" onClick={exportOrders}><Download size={14} /> Đơn hàng CSV</button>
+          </div>
+        </div>
+        <div className="collaboratorFilters">
+          <input placeholder="Tìm tên hoặc email" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+          <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
+            <option value="all">Mọi trạng thái</option><option value="active">Hoạt động</option><option value="blocked">Đã khóa</option>
+          </select>
+          <input type="date" value={filters.createdFrom} onChange={(event) => setFilters({ ...filters, createdFrom: event.target.value })} />
+          <input type="date" value={filters.createdTo} onChange={(event) => setFilters({ ...filters, createdTo: event.target.value })} />
+          <button className="smallButton" type="button" onClick={() => void load()}><RefreshCw size={14} /> Lọc</button>
+        </div>
+        <div className="tableWrap">
+          <table>
+            <thead><tr><th>CTV</th><th>Trạng thái</th><th>Số dư</th><th>Đơn gần đây</th><th>Đặt lại mật khẩu</th><th>Thao tác</th></tr></thead>
+            <tbody>
+              {collaborators.map((user) => (
+                <tr key={user.id}>
+                  <td><strong>{user.displayName ?? "Chưa có tên"}</strong><span className="tableSubtext">{user.email}</span></td>
+                  <td><span className={user.isBlocked ? "statusBadge blocked" : "statusBadge active"}>{user.isBlocked ? "Đã khóa" : "Hoạt động"}</span></td>
+                  <td>{formatVnd(user.balance)}</td>
+                  <td>{user.orders?.length ?? 0}</td>
+                  <td><div className="passwordReset"><input type="password" placeholder="Mật khẩu mới" value={passwords[user.id] ?? ""} onChange={(event) => setPasswords({ ...passwords, [user.id]: event.target.value })} /><button className="smallButton" type="button" onClick={() => void resetPassword(user)}><KeyRound size={14} /></button></div></td>
+                  <td><div className="rowActions"><button className={user.isBlocked ? "smallButton successButton" : "smallButton dangerButton"} type="button" onClick={() => void toggleBlocked(user)}>{user.isBlocked ? "Mở khóa" : "Khóa"}</button><button className="smallButton secondaryButton" type="button" onClick={() => void revoke(user)}>Thu hồi quyền</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function OrdersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -864,12 +1136,16 @@ function OrdersView({ api, onError }: { api: Api; onError: (error: string | null
       {loading && <LoadingBlock label="Đang tải đơn hàng và thanh toán..." />}
       <DataTable
         title="Đơn hàng"
-        columns={["Mã", "User", "Sản phẩm", "SL", "Số tiền", "Trạng thái", "Thời gian"]}
+        columns={["Mã", "User", "Loại", "Sản phẩm", "SL", "Giá gốc", "Ưu đãi CTV", "Voucher", "Thực thu", "Trạng thái", "Thời gian"]}
         rows={orders.map((order) => [
           order.code,
           order.user?.username ? `@${order.user.username}` : order.user?.telegramId,
+          order.customerRoleSnapshot === "COLLABORATOR" ? "CTV" : "Khách",
           order.product?.name,
           order.quantity,
+          formatVnd(order.subtotalAmount ?? order.totalAmount),
+          formatVnd(order.collaboratorDiscountAmount ?? 0),
+          formatVnd(order.voucherDiscountAmount ?? 0),
           formatVnd(order.totalAmount),
           order.status,
           new Date(order.createdAt).toLocaleString("vi-VN")
@@ -975,7 +1251,8 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
     maxUses: "",
     expiresAt: defaultVoucherDate(),
     active: true,
-    firstOrderOnly: false
+    firstOrderOnly: false,
+    allowCollaboratorStacking: false
   }));
 
   async function load() {
@@ -1006,7 +1283,8 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
         maxUses: form.maxUses ? Number(form.maxUses) : null,
         expiresAt: form.expiresAt || null,
         active: form.active,
-        firstOrderOnly: form.firstOrderOnly
+        firstOrderOnly: form.firstOrderOnly,
+        allowCollaboratorStacking: form.allowCollaboratorStacking
       });
       setForm({
         code: generateVoucherCode(form.discountPercent),
@@ -1016,7 +1294,8 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
         maxUses: "",
         expiresAt: defaultVoucherDate(),
         active: true,
-        firstOrderOnly: false
+        firstOrderOnly: false,
+        allowCollaboratorStacking: false
       });
       await load();
     } catch (err) {
@@ -1086,6 +1365,14 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
               <input type="checkbox" checked={form.firstOrderOnly} onChange={(event) => setForm({ ...form, firstOrderOnly: event.target.checked })} />
               Chỉ đơn đầu
             </label>
+            <label className="checkboxLabel">
+              <input
+                type="checkbox"
+                checked={form.allowCollaboratorStacking}
+                onChange={(event) => setForm({ ...form, allowCollaboratorStacking: event.target.checked })}
+              />
+              Cộng dồn giá CTV
+            </label>
           </div>
           <div className="rowActions wide">
             <button className="smallButton secondaryButton" type="button" onClick={() => setForm({ ...form, code: generateVoucherCode(form.discountPercent) })}>
@@ -1100,7 +1387,7 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
 
       <DataTable
         title="Danh sách voucher"
-        columns={["Mã", "Giảm", "Trần VND / USDT", "Đã dùng", "Giới hạn", "Hết hạn", "Loại", "Trạng thái", ""]}
+        columns={["Mã", "Giảm", "Trần VND / USDT", "Đã dùng", "Giới hạn", "Hết hạn", "CTV", "Loại", "Trạng thái", ""]}
         rows={vouchers.map((voucher) => [
           <strong>{voucher.code}</strong>,
           `${voucher.discountPercent}%`,
@@ -1108,6 +1395,7 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
           voucher.usedCount ?? voucher._count?.redemptions ?? 0,
           voucher.maxUses ?? "Không giới hạn",
           new Date(voucher.expiresAt).toLocaleDateString("vi-VN"),
+          voucher.allowCollaboratorStacking ? "Được cộng dồn" : "Không cộng dồn",
           voucher.firstOrderOnly ? "Đơn đầu" : "Thường",
           voucher.active ? "Đang bật" : "Đã tắt",
           <button className={voucher.active ? "smallButton dangerButton" : "smallButton successButton"} onClick={() => toggle(voucher)} disabled={updatingId === voucher.id}>
@@ -1350,8 +1638,23 @@ function tabTitle(tab: Tab) {
     overview: "Tổng quan",
     products: "Sản phẩm",
     users: "User Telegram",
+    collaborators: "Cộng tác viên",
     orders: "Đơn hàng & thanh toán",
     broadcasts: "Thông báo bot"
   };
   return titles[tab] ?? "Voucher";
+}
+
+function csvCell(value: string | number) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+function downloadCsv(filename: string, rows: string[]) {
+  const blob = new Blob([`\uFEFF${rows.join("\r\n")}`], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

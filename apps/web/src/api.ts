@@ -9,6 +9,8 @@ export type Customer = {
   id: string;
   email: string;
   displayName?: string | null;
+  role: "CUSTOMER" | "COLLABORATOR";
+  isBlocked: boolean;
 };
 
 export type Product = {
@@ -20,7 +22,12 @@ export type Product = {
   imageUrl?: string | null;
   buttonIcon?: string | null;
   price: number;
+  regularPrice?: number;
+  collaboratorPrice?: number;
+  collaboratorDiscountPercent?: number;
   usdtPrice?: string | number | null;
+  regularUsdtPrice?: string | number | null;
+  collaboratorUsdtPrice?: string | number | null;
   deliveryType: "STOCK_ITEM" | "SHARED_CONTENT" | "MANUAL";
   manualStock?: number | null;
   category?: { id: string; name: string } | null;
@@ -83,6 +90,8 @@ export type VoucherPreview = {
   code: string | null;
   discountPercent: number;
   subtotalAmount: number;
+  collaboratorDiscountAmount: number;
+  voucherDiscountAmount: number;
   discountAmount: number;
   totalAmount: number;
   maxDiscountAmount?: number | null;
@@ -211,7 +220,7 @@ export class StoreApi {
         throw new Error(`API request timed out: ${API_BASE_URL}${path}`);
       }
       if (error instanceof TypeError) {
-        throw new Error(`Cannot connect to API: ${API_BASE_URL}${path}`);
+        throw new Error("Không thể kết nối tới hệ thống. Vui lòng thử lại.");
       }
       throw error;
     } finally {
