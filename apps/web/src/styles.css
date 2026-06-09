@@ -2961,6 +2961,8 @@ textarea {
 .cart-line-buttons {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -2973,6 +2975,12 @@ textarea {
   color: #b8d8ff;
   font-size: 11px;
   font-weight: 900;
+}
+
+.ghost-line-button.is-strong {
+  background: rgba(92, 211, 199, 0.16);
+  color: #e8fffb;
+  box-shadow: inset 0 0 0 1px rgba(92, 211, 199, 0.36);
 }
 
 .danger-link {
@@ -3019,6 +3027,14 @@ textarea {
   min-height: 44px;
   padding: 0 17px;
   white-space: nowrap;
+}
+
+.cart-pending-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .cart-checkout-modal {

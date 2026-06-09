@@ -243,6 +243,26 @@ type CartItem = {
   quantity: number;
 };
 
+type PendingCheckoutPayment = {
+  key: string;
+  scope: "single" | "cart";
+  items: CartItem[];
+  payment: PaymentResult;
+  method: "bank" | "usdt";
+  voucherCode?: string | null;
+};
+
+function cartSignature(items: CartItem[]) {
+  return items
+    .map((item) => `${item.product.id}:${item.quantity}`)
+    .sort()
+    .join("|");
+}
+
+function checkoutKey(items: CartItem[], scope: PendingCheckoutPayment["scope"]) {
+  return `${scope}:${cartSignature(items)}`;
+}
+
 type CartFlyItem = {
   id: number;
   name: string;
@@ -473,6 +493,7 @@ function App() {
   const [cartOpen, setCartOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<PendingCheckoutPayment[]>([]);
   const [cartPulse, setCartPulse] = useState(false);
   const [loading, setLoading] = useState("boot");
   const [error, setError] = useState("");
@@ -763,6 +784,83 @@ function App() {
     playCartFlyAnimation(product, origin);
   }
 
+  function ensureCartItem(product: Product, quantity = 1) {
+    const stock = availableQuantity(product);
+    const maxQuantity = product.deliveryType === "SHARED_CONTENT" ? 999 : Math.max(0, stock);
+    if (maxQuantity <= 0) return;
+    setCartItems((current) => {
+      const existing = current.find((item) => item.product.id === product.id);
+      const safeQuantity = Math.min(maxQuantity, Math.max(1, quantity));
+      if (existing) {
+        return current.map((item) =>
+          item.product.id === product.id
+            ? { ...item, product: { ...item.product, ...product }, quantity: Math.min(maxQuantity, Math.max(item.quantity, safeQuantity)) }
+            : item
+        );
+      }
+      return [...current, { product, quantity: safeQuantity }];
+    });
+  }
+
+  function upsertPendingPayment(nextPayment: PendingCheckoutPayment) {
+    setPendingPayments((current) => [
+      ...current.filter((payment) => payment.key !== nextPayment.key && payment.payment.code !== nextPayment.payment.code),
+      nextPayment
+    ]);
+  }
+
+  function removePurchasedItems(items: CartItem[]) {
+    setCartItems((current) =>
+      current.flatMap((item) => {
+        const purchased = items.find((pendingItem) => pendingItem.product.id === item.product.id);
+        if (!purchased) return [item];
+        const nextQuantity = item.quantity - purchased.quantity;
+        return nextQuantity > 0 ? [{ ...item, quantity: nextQuantity }] : [];
+      })
+    );
+  }
+
+  function clearPendingPayment(code: string, removeItems: boolean) {
+    const pending = pendingPayments.find((payment) => payment.payment.code === code);
+    if (pending && removeItems) removePurchasedItems(pending.items);
+    setPendingPayments((current) => current.filter((payment) => payment.payment.code !== code));
+  }
+
+  function continuePendingPayment(payment: PendingCheckoutPayment) {
+    setCartOpen(false);
+    setCheckoutItem(null);
+    setCheckoutCartItems(null);
+    setQr(payment.payment);
+    setQrStatus(null);
+    setDelivery(null);
+  }
+
+  function changePendingPayment(payment: PendingCheckoutPayment) {
+    setQr(null);
+    setQrStatus(null);
+    setDelivery(null);
+    setCartOpen(false);
+    const freshItems = payment.items.map((pendingItem) => {
+      const currentItem = cartItems.find((item) => item.product.id === pendingItem.product.id);
+      return currentItem ? { ...pendingItem, product: currentItem.product } : pendingItem;
+    });
+    if (payment.scope === "single") {
+      setCheckoutCartItems(null);
+      setCheckoutItem(freshItems[0] ?? payment.items[0]);
+      return;
+    }
+    setCheckoutItem(null);
+    setCheckoutCartItems(freshItems.length ? freshItems : payment.items);
+  }
+
+  function closeCheckoutItemToCart(openCart = false) {
+    setCheckoutItem((current) => {
+      if (current) ensureCartItem(current.product, current.quantity);
+      return null;
+    });
+    if (openCart) setCartOpen(true);
+  }
+
   function updateCartQuantity(productId: string, quantity: number) {
     setCartItems((current) =>
       current.flatMap((item) => {
@@ -788,6 +886,7 @@ function App() {
     setCartItems((current) => current.filter((item) => item.product.id !== productId));
     setCheckoutItem((current) => (current?.product.id === productId ? null : current));
     setCheckoutCartItems((current) => current?.filter((item) => item.product.id !== productId) ?? null);
+    setPendingPayments((current) => current.filter((payment) => !payment.items.some((item) => item.product.id === productId)));
   }
 
   function checkoutCartItem(item: CartItem) {
@@ -853,24 +952,44 @@ function App() {
   async function buyWithBank(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
     await runAction(`bank:${product.id}`, async () => {
-      setQr(await api.post<PaymentResult>("/store/orders/bank", { productId: product.id, quantity, voucherCode }));
+      const payment = await api.post<PaymentResult>("/store/orders/bank", { productId: product.id, quantity, voucherCode });
+      const items = [{ product, quantity }];
+      ensureCartItem(product, quantity);
+      upsertPendingPayment({
+        key: checkoutKey(items, "single"),
+        scope: "single",
+        items,
+        payment,
+        method: "bank",
+        voucherCode
+      });
+      setQr(payment);
       setQrStatus(null);
       setDelivery(null);
       setSelectedProduct(null);
       setCheckoutItem(null);
-      removeFromCart(product.id);
     });
   }
 
   async function buyWithUsdt(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
     await runAction(`usdt:${product.id}`, async () => {
-      setQr(await api.post<PaymentResult>("/store/orders/usdt", { productId: product.id, quantity, voucherCode }));
+      const payment = await api.post<PaymentResult>("/store/orders/usdt", { productId: product.id, quantity, voucherCode });
+      const items = [{ product, quantity }];
+      ensureCartItem(product, quantity);
+      upsertPendingPayment({
+        key: checkoutKey(items, "single"),
+        scope: "single",
+        items,
+        payment,
+        method: "usdt",
+        voucherCode
+      });
+      setQr(payment);
       setQrStatus(null);
       setDelivery(null);
       setSelectedProduct(null);
       setCheckoutItem(null);
-      removeFromCart(product.id);
     });
   }
 
@@ -896,6 +1015,7 @@ function App() {
       setQrStatus(null);
       setCheckoutCartItems(null);
       setCartItems([]);
+      setPendingPayments((current) => current.filter((payment) => payment.scope !== "cart"));
       await loadPrivateData(false);
     });
   }
@@ -904,11 +1024,19 @@ function App() {
     if (!requireLogin()) return;
     const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
     await runAction("cart-bank", async () => {
-      setQr(await api.post<PaymentResult>("/store/cart/orders/bank", { items: payloadItems, voucherCode }));
+      const payment = await api.post<PaymentResult>("/store/cart/orders/bank", { items: payloadItems, voucherCode });
+      upsertPendingPayment({
+        key: checkoutKey(items, "cart"),
+        scope: "cart",
+        items,
+        payment,
+        method: "bank",
+        voucherCode
+      });
+      setQr(payment);
       setQrStatus(null);
       setDelivery(null);
       setCheckoutCartItems(null);
-      setCartItems([]);
     });
   }
 
@@ -916,11 +1044,19 @@ function App() {
     if (!requireLogin()) return;
     const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
     await runAction("cart-usdt", async () => {
-      setQr(await api.post<PaymentResult>("/store/cart/orders/usdt", { items: payloadItems, voucherCode }));
+      const payment = await api.post<PaymentResult>("/store/cart/orders/usdt", { items: payloadItems, voucherCode });
+      upsertPendingPayment({
+        key: checkoutKey(items, "cart"),
+        scope: "cart",
+        items,
+        payment,
+        method: "usdt",
+        voucherCode
+      });
+      setQr(payment);
       setQrStatus(null);
       setDelivery(null);
       setCheckoutCartItems(null);
-      setCartItems([]);
     });
   }
 
@@ -947,6 +1083,7 @@ function App() {
       }
 
       if (status.kind === "DIRECT_ORDER" && status.status === "SUCCEEDED" && status.order?.deliveryText) {
+        clearPendingPayment(status.code, true);
         setQr(null);
         setDelivery({
           title: language === "vi" ? "Mua hàng thành công" : "Purchase completed",
@@ -984,6 +1121,7 @@ function App() {
       }
 
       if (status.status === "EXPIRED" || status.status === "FAILED") {
+        clearPendingPayment(status.code, false);
         setQr(null);
         setDelivery({
           title: status.status === "EXPIRED" ? (language === "vi" ? "QR đã hết hạn" : "QR expired") : language === "vi" ? "Thanh toán thất bại" : "Payment failed",
@@ -1172,20 +1310,17 @@ function App() {
           loading={loading}
           actionError={error}
           language={language}
-          onClose={() => setCheckoutItem(null)}
+          onClose={() => closeCheckoutItemToCart(false)}
           onQuantity={updateCheckoutQuantity}
           onWallet={(quantity, voucherCode) => buyWithWallet(checkoutItem.product, quantity, voucherCode)}
           onBank={(quantity, voucherCode) => buyWithBank(checkoutItem.product, quantity, voucherCode)}
           onUsdt={(quantity, voucherCode) => buyWithUsdt(checkoutItem.product, quantity, voucherCode)}
           onWalletOpen={() => {
-            setCheckoutItem(null);
+            closeCheckoutItemToCart(false);
             if (token) setWalletOpen(true);
             else setAuthOpen(true);
           }}
-          onBackToCart={() => {
-            setCheckoutItem(null);
-            setCartOpen(true);
-          }}
+          onBackToCart={() => closeCheckoutItemToCart(true)}
         />
       ) : null}
       {checkoutCartItems ? (
@@ -1216,11 +1351,14 @@ function App() {
           items={cartItems}
           language={language}
           total={cartTotal}
+          pendingPayments={pendingPayments}
           onClose={() => setCartOpen(false)}
           onQuantity={updateCartQuantity}
           onRemove={removeFromCart}
           onCheckout={checkoutCartItem}
           onCheckoutAll={checkoutCartAll}
+          onContinuePayment={continuePendingPayment}
+          onChangePayment={changePendingPayment}
           onShop={() => {
             setCartOpen(false);
             navigateTab("products");
@@ -1234,6 +1372,11 @@ function App() {
           loading={loading === "payment-status"}
           language={language}
           onClose={() => setQr(null)}
+          onChangePayment={() => {
+            const pendingPayment = pendingPayments.find((payment) => payment.payment.code === qr.code);
+            if (pendingPayment) changePendingPayment(pendingPayment);
+          }}
+          canChangePayment={pendingPayments.some((payment) => payment.payment.code === qr.code)}
           onRefresh={() => void checkPaymentStatus(true)}
         />
       ) : null}
@@ -2924,25 +3067,32 @@ function CartDialog({
   items,
   language,
   total,
+  pendingPayments,
   onClose,
   onQuantity,
   onRemove,
   onCheckout,
   onCheckoutAll,
+  onContinuePayment,
+  onChangePayment,
   onShop
 }: {
   items: CartItem[];
   language: Language;
   total: number;
+  pendingPayments: PendingCheckoutPayment[];
   onClose: () => void;
   onQuantity: (productId: string, quantity: number) => void;
   onRemove: (productId: string) => void;
   onCheckout: (item: CartItem) => void;
   onCheckoutAll: () => void;
+  onContinuePayment: (payment: PendingCheckoutPayment) => void;
+  onChangePayment: (payment: PendingCheckoutPayment) => void;
   onShop: () => void;
 }) {
   const copy = TEXT[language];
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
+  const cartPendingPayment = pendingPayments.find((payment) => payment.key === checkoutKey(items, "cart"));
 
   return (
     <div className={`overlay cart-overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
@@ -2958,6 +3108,12 @@ function CartDialog({
           <div className="cart-list">
             {items.map((item) => {
               const maxQuantity = item.product.deliveryType === "SHARED_CONTENT" ? 999 : Math.max(1, availableQuantity(item.product));
+              const itemPendingPayment = pendingPayments.find(
+                (payment) =>
+                  payment.scope === "single" &&
+                  payment.items[0]?.product.id === item.product.id &&
+                  payment.items[0].quantity <= item.quantity
+              );
               return (
                 <article className="cart-item" key={item.product.id}>
                   <img src={productArtUrl(item.product)} alt="" loading="lazy" />
@@ -2967,7 +3123,18 @@ function CartDialog({
                     <div className="cart-line-actions">
                       <QuantityControl value={item.quantity} max={maxQuantity} label={copy.quantity} compact onChange={(quantity) => onQuantity(item.product.id, quantity)} />
                       <div className="cart-line-buttons">
-                        <button className="ghost-line-button" onClick={() => onCheckout(item)}>{copy.checkout}</button>
+                        {itemPendingPayment ? (
+                          <>
+                            <button className="ghost-line-button is-strong" onClick={() => onContinuePayment(itemPendingPayment)}>
+                              {language === "vi" ? "Thanh toán tiếp" : "Continue payment"}
+                            </button>
+                            <button className="ghost-line-button" onClick={() => onChangePayment(itemPendingPayment)}>
+                              {language === "vi" ? "Đổi phương thức" : "Change method"}
+                            </button>
+                          </>
+                        ) : (
+                          <button className="ghost-line-button" onClick={() => onCheckout(item)}>{copy.checkout}</button>
+                        )}
                         <button className="danger-link" onClick={() => onRemove(item.product.id)} aria-label={copy.remove}>
                           <Trash2 size={14} />
                         </button>
@@ -2987,10 +3154,23 @@ function CartDialog({
             <span>{language === "vi" ? "Tạm tính" : "Subtotal"}</span>
             <b>{formatVnd(total)}</b>
           </div>
-          <button className="primary-button cart-checkout-all" onClick={onCheckoutAll} disabled={!items.length}>
-            <ShieldCheck size={17} />
-            {language === "vi" ? "Thanh toán tất cả" : "Checkout all"}
-          </button>
+          {cartPendingPayment ? (
+            <div className="cart-pending-actions">
+              <button className="primary-button cart-checkout-all" onClick={() => onContinuePayment(cartPendingPayment)}>
+                <ShieldCheck size={17} />
+                {language === "vi" ? "Thanh toán tiếp" : "Continue payment"}
+              </button>
+              <button className="secondary-button cart-checkout-all" onClick={() => onChangePayment(cartPendingPayment)}>
+                <CreditCard size={17} />
+                {language === "vi" ? "Đổi phương thức" : "Change method"}
+              </button>
+            </div>
+          ) : (
+            <button className="primary-button cart-checkout-all" onClick={onCheckoutAll} disabled={!items.length}>
+              <ShieldCheck size={17} />
+              {language === "vi" ? "Thanh toán tất cả" : "Checkout all"}
+            </button>
+          )}
         </div>
       </aside>
     </div>
@@ -3127,6 +3307,8 @@ function QrDialog({
   loading,
   language,
   onClose,
+  onChangePayment,
+  canChangePayment,
   onRefresh
 }: {
   payment: PaymentResult;
@@ -3134,6 +3316,8 @@ function QrDialog({
   loading: boolean;
   language: Language;
   onClose: () => void;
+  onChangePayment?: () => void;
+  canChangePayment?: boolean;
   onRefresh: () => void;
 }) {
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
@@ -3196,6 +3380,11 @@ function QrDialog({
         <button className="secondary-button full" onClick={onRefresh} disabled={loading}>
           <RefreshCw className={loading ? "spin" : ""} size={17} /> {copy.refreshStatus}
         </button>
+        {canChangePayment && onChangePayment ? (
+          <button className="secondary-button full" onClick={onChangePayment}>
+            <CreditCard size={17} /> {language === "vi" ? "Đổi phương thức thanh toán" : "Change payment method"}
+          </button>
+        ) : null}
       </section>
     </div>
   );
