@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomUUID } from "node:crypto";
-import { CustomerRole, OrderStatus, PaymentStatus, ProductStatus } from "@prisma/client";
+import { CustomerRole, OrderStatus, PaymentKind, PaymentStatus, ProductStatus } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
 import { CartOrderItemInput, ShopService, VoucherClaim } from "../domain/shop.service";
 
@@ -230,6 +230,31 @@ export class StoreService {
         : null,
       orders: groupOrders
     };
+  }
+
+  async cancelPendingPayment(customerId: string, code: string) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { code, userId: customerId },
+      include: { order: true }
+    });
+    if (!payment || payment.kind !== PaymentKind.DIRECT_ORDER || !payment.order) {
+      throw new BadRequestException("Không tìm thấy giao dịch chờ thanh toán.");
+    }
+    if (payment.status !== PaymentStatus.PENDING || payment.order.status !== OrderStatus.PENDING_PAYMENT) {
+      return { status: payment.status };
+    }
+    await this.shop.releaseVoucherReservation(payment.order.id);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { status: PaymentStatus.FAILED }
+      });
+      await tx.order.updateMany({
+        where: payment.order!.checkoutGroupId ? { checkoutGroupId: payment.order!.checkoutGroupId } : { id: payment.order!.id },
+        data: { status: OrderStatus.CANCELLED }
+      });
+    });
+    return { status: PaymentStatus.FAILED };
   }
 
   private async resolvePaymentStatus(payment: {

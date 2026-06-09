@@ -847,7 +847,15 @@ function App() {
     setDelivery(null);
   }
 
-  function changePendingPayment(payment: PendingCheckoutPayment) {
+  async function changePendingPayment(payment: PendingCheckoutPayment) {
+    try {
+      await api.post(`/store/payments/${payment.payment.code}/cancel`);
+      clearPendingPayment(payment.payment.code, false);
+      await loadPrivateData(false);
+    } catch (err) {
+      setError((err as Error).message);
+      return;
+    }
     setQr(null);
     setQrStatus(null);
     setDelivery(null);
@@ -1348,6 +1356,7 @@ function App() {
           actionError={error}
           language={language}
           initialVoucherCode={selectedVoucherCode}
+          vouchers={myVouchers}
           onClose={() => closeCheckoutItemToCart(false)}
           onQuantity={updateCheckoutQuantity}
           onWallet={(quantity, voucherCode) => buyWithWallet(checkoutItem.product, quantity, voucherCode)}
@@ -1370,6 +1379,7 @@ function App() {
           actionError={error}
           language={language}
           initialVoucherCode={selectedVoucherCode}
+          vouchers={myVouchers}
           onClose={() => setCheckoutCartItems(null)}
           onWallet={(voucherCode) => buyCartWithWallet(checkoutCartItems, voucherCode)}
           onBank={(voucherCode) => buyCartWithBank(checkoutCartItems, voucherCode)}
@@ -2545,6 +2555,7 @@ function CheckoutDialog({
   actionError,
   language,
   initialVoucherCode,
+  vouchers,
   onClose,
   onQuantity,
   onWallet,
@@ -2560,6 +2571,7 @@ function CheckoutDialog({
   actionError: string;
   language: Language;
   initialVoucherCode: string;
+  vouchers: MyVoucher[];
   onClose: () => void;
   onQuantity: (quantity: number) => void;
   onWallet: (quantity: number, voucherCode?: string | null) => Promise<void> | void;
@@ -2685,6 +2697,13 @@ function CheckoutDialog({
     void validateCoupon();
   }
 
+  function chooseVoucher(code: string) {
+    setCoupon(code);
+    setVoucherPreview(null);
+    setCouponMessage("");
+    void validateCoupon(code);
+  }
+
   return (
     <div className={`overlay checkout-overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
       <section className="checkout-modal" role="dialog" aria-modal="true" aria-label={copy.checkout}>
@@ -2722,6 +2741,7 @@ function CheckoutDialog({
                 />
                 <button disabled={voucherLoading}>{voucherLoading ? <Loader2 className="spin" size={15} /> : vi ? "Áp dụng" : "Apply"}</button>
               </form>
+              <CheckoutVoucherPicker language={language} vouchers={vouchers} selectedCode={coupon} onSelect={chooseVoucher} />
               {couponMessage ? <p className="inline-message">{couponMessage}</p> : null}
             </section>
 
@@ -2846,6 +2866,7 @@ function CartCheckoutDialog({
   actionError,
   language,
   initialVoucherCode,
+  vouchers,
   onClose,
   onWallet,
   onBank,
@@ -2860,6 +2881,7 @@ function CartCheckoutDialog({
   actionError: string;
   language: Language;
   initialVoucherCode: string;
+  vouchers: MyVoucher[];
   onClose: () => void;
   onWallet: (voucherCode?: string | null) => Promise<void> | void;
   onBank: (voucherCode?: string | null) => Promise<void> | void;
@@ -2940,6 +2962,13 @@ function CartCheckoutDialog({
     void validateCoupon();
   }
 
+  function chooseVoucher(code: string) {
+    setCoupon(code);
+    setVoucherPreview(null);
+    setCouponMessage("");
+    void validateCoupon(code);
+  }
+
   function runPayment(action: () => Promise<void> | void) {
     setCouponMessage("");
     setPaymentAttempted(true);
@@ -2997,6 +3026,7 @@ function CartCheckoutDialog({
               />
               <button disabled={voucherLoading}>{voucherLoading ? <Loader2 className="spin" size={15} /> : vi ? "Áp dụng" : "Apply"}</button>
             </form>
+            <CheckoutVoucherPicker language={language} vouchers={vouchers} selectedCode={coupon} onSelect={chooseVoucher} />
             {couponMessage ? <p className="inline-message">{couponMessage}</p> : null}
           </section>
           <aside className="checkout-card cart-batch-summary">
@@ -3037,6 +3067,44 @@ function CartCheckoutDialog({
           </button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function CheckoutVoucherPicker({
+  language,
+  vouchers,
+  selectedCode,
+  onSelect
+}: {
+  language: Language;
+  vouchers: MyVoucher[];
+  selectedCode: string;
+  onSelect: (code: string) => void;
+}) {
+  const vi = language === "vi";
+  const availableVouchers = vouchers.filter((voucher) => voucher.status === "AVAILABLE").slice(0, 6);
+  if (!availableVouchers.length) return null;
+  const normalizedSelectedCode = selectedCode.trim().toUpperCase();
+  return (
+    <div className="checkout-voucher-picker">
+      <div className="checkout-voucher-picker-head">
+        <span><TicketPercent size={15} /> {vi ? "Voucher trong kho của bạn" : "Your vouchers"}</span>
+      </div>
+      <div className="checkout-voucher-list">
+        {availableVouchers.map((voucher) => {
+          const active = normalizedSelectedCode === voucher.code;
+          return (
+            <button className={active ? "active" : ""} type="button" key={`${voucher.id}:${voucher.code}`} onClick={() => onSelect(voucher.code)}>
+              <strong>{voucher.code}</strong>
+              <span>
+                -{voucher.discountPercent}%
+                {voucher.maxDiscountAmount ? ` · ${vi ? "tối đa" : "cap"} ${formatVnd(voucher.maxDiscountAmount)}` : ""}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -3635,6 +3703,7 @@ function VoucherTab({
   onLogin: () => void;
 }) {
   const vi = language === "vi";
+  const visibleVouchers = vouchers.filter((voucher) => voucher.status !== "USED");
   return (
     <section className="voucher-panel reveal">
       <div className="history-head">
@@ -3649,9 +3718,9 @@ function VoucherTab({
         </button>
       </div>
       {customer ? (
-        vouchers.length ? (
+        visibleVouchers.length ? (
           <div className="voucher-grid">
-            {vouchers.map((voucher) => {
+            {visibleVouchers.map((voucher) => {
               const available = voucher.status === "AVAILABLE";
               return (
                 <article className={`voucher-card ${available ? "is-available" : ""}`} key={`${voucher.id}:${voucher.code}`}>

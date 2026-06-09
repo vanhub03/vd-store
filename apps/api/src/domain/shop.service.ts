@@ -331,7 +331,7 @@ export class ShopService {
           include: { payments: true, product: true }
         });
 
-        await this.redeemVoucher(tx, quote, user.id, order.id);
+        await this.redeemVoucher(tx, quote, user.id, order.id, false);
         return { order, payment: order.payments[0], code, amount: quote.totalAmount, expiresAt, qrImageUrl, voucher: publicVoucherQuote(quote) };
       },
       ORDER_TRANSACTION_OPTIONS
@@ -411,7 +411,7 @@ export class ShopService {
           include: { payments: true, product: true }
         });
 
-        await this.redeemVoucher(tx, quote, user.id, order.id);
+        await this.redeemVoucher(tx, quote, user.id, order.id, false);
         return { order, payment: order.payments[0], code, amount: quote.totalAmount, cryptoAmount, expiresAt, product, voucher: publicVoucherQuote(quote) };
       },
       ORDER_TRANSACTION_OPTIONS
@@ -721,7 +721,7 @@ export class ShopService {
             qrPayload: code
           }
         });
-        await this.redeemVoucher(tx, quote, user.id, orders[0].id);
+        await this.redeemVoucher(tx, quote, user.id, orders[0].id, false);
         return { orders, order: orders[0], payment, code, amount: quote.totalAmount, expiresAt, qrImageUrl, voucher: publicVoucherQuote(quote) };
       },
       ORDER_TRANSACTION_OPTIONS
@@ -800,7 +800,7 @@ export class ShopService {
             cryptoAmount: new Prisma.Decimal(cryptoAmount)
           }
         });
-        await this.redeemVoucher(tx, quote, user.id, orders[0].id);
+        await this.redeemVoucher(tx, quote, user.id, orders[0].id, false);
         return { orders, order: orders[0], payment, code, amount: quote.totalAmount, cryptoAmount, expiresAt, voucher: publicVoucherQuote(quote) };
       },
       ORDER_TRANSACTION_OPTIONS
@@ -907,6 +907,7 @@ export class ShopService {
               where: { id: payment.id },
               data: { status: PaymentStatus.SUCCEEDED }
             });
+            await this.markVoucherAssignmentUsedForOrder(tx, payment.order.id);
             const order = await tx.order.update({
               where: { id: payment.order.id },
               data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() }
@@ -917,6 +918,7 @@ export class ShopService {
             where: { id: payment.id },
             data: { status: PaymentStatus.SUCCEEDED }
           });
+          await this.markVoucherAssignmentUsedForOrder(tx, payment.order.id);
           const fulfilledOrders = [];
           for (const order of groupOrders) {
             const deliveryText = await this.fulfillOrderItems(tx, order.id, order.product, order.quantity);
@@ -1456,7 +1458,7 @@ export class ShopService {
     if (!user) throw new NotFoundException("Không tìm thấy tài khoản.");
     const now = new Date();
     const assignments = await this.prisma.voucherAssignment.findMany({
-      where: { userId: customerId, revokedAt: null },
+      where: { userId: customerId, revokedAt: null, usedAt: null },
       orderBy: { createdAt: "desc" },
       include: {
         voucher: {
@@ -1884,7 +1886,7 @@ export class ShopService {
     };
   }
 
-  private async redeemVoucher(tx: Prisma.TransactionClient, quote: VoucherQuote, userId: string, orderId: string) {
+  private async redeemVoucher(tx: Prisma.TransactionClient, quote: VoucherQuote, userId: string, orderId: string, markAssignmentUsed = true) {
     if (!quote.voucherId || !quote.code || quote.voucherDiscountAmount <= 0) return;
     const now = new Date();
     const updateWhere =
@@ -1910,7 +1912,7 @@ export class ShopService {
         claimFingerprintHash: quote.claimFingerprintHash
       }
     });
-    if (quote.assignmentId) {
+    if (markAssignmentUsed && quote.assignmentId) {
       const updatedAssignment = await tx.voucherAssignment.updateMany({
         where: { id: quote.assignmentId, userId, revokedAt: null, usedAt: null },
         data: { usedAt: now }
@@ -1919,6 +1921,19 @@ export class ShopService {
         throw new BadRequestException("Mã ưu đãi này không còn khả dụng.");
       }
     }
+  }
+
+  private async markVoucherAssignmentUsedForOrder(tx: Prisma.TransactionClient, orderId: string) {
+    if (!tx.voucherRedemption || !tx.voucherAssignment) return;
+    const redemption = await tx.voucherRedemption.findUnique({
+      where: { orderId },
+      select: { voucherId: true, userId: true }
+    });
+    if (!redemption) return;
+    await tx.voucherAssignment.updateMany({
+      where: { voucherId: redemption.voucherId, userId: redemption.userId, revokedAt: null, usedAt: null },
+      data: { usedAt: new Date() }
+    });
   }
 
   private async releaseVoucherForOrder(tx: Prisma.TransactionClient, orderId: string) {

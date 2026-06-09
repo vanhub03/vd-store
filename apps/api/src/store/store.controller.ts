@@ -164,6 +164,12 @@ export class StoreController {
     return this.store.paymentStatus(request.customer!.id, code);
   }
 
+  @Post("payments/:code/cancel")
+  @UseGuards(CustomerAuthGuard)
+  cancelPayment(@Req() request: CustomerRequest, @Param("code") code: string) {
+    return this.store.cancelPendingPayment(request.customer!.id, code);
+  }
+
   @Post("topups")
   @UseGuards(CustomerAuthGuard)
   topup(@Req() request: CustomerRequest, @Body() body: TopupDto) {
