@@ -556,7 +556,7 @@ export class ShopService {
       },
       ORDER_TRANSACTION_OPTIONS
     );
-    await this.notifyManualOrderIfNeeded(result.order.id);
+    this.notifyManualOrdersInBackground([result.order.id]);
     return result;
   }
 
@@ -654,7 +654,7 @@ export class ShopService {
       },
       ORDER_TRANSACTION_OPTIONS
     );
-    await Promise.all(result.orders.map((order) => this.notifyManualOrderIfNeeded(order.id)));
+    this.notifyManualOrdersInBackground(result.orders.map((order) => order.id));
     return result;
   }
 
@@ -1068,6 +1068,15 @@ export class ShopService {
       totalAmount: order.totalAmount,
       customerLabel: order.user.email ?? order.user.username ?? order.user.telegramId,
       deliveryText: order.deliveryText
+    });
+  }
+
+  private notifyManualOrdersInBackground(orderIds: string[]) {
+    void Promise.allSettled(orderIds.map((orderId) => this.notifyManualOrderIfNeeded(orderId))).then((results) => {
+      const failed = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failed.length) {
+        this.logger.warn(`Manual order notification failed for ${failed.length}/${orderIds.length} order(s): ${failed.map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason)).join("; ")}`);
+      }
     });
   }
 
