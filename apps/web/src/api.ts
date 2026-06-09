@@ -251,8 +251,10 @@ export class StoreApi {
 function isPaymentCreationPath(path: string) {
   return (
     path === "/store/topups" ||
+    path === "/store/orders/wallet" ||
     path === "/store/orders/bank" ||
     path === "/store/orders/usdt" ||
+    path === "/store/cart/orders/wallet" ||
     path === "/store/cart/orders/bank" ||
     path === "/store/cart/orders/usdt"
   );
