@@ -3014,7 +3014,18 @@ textarea {
 
 .cart-batch-list {
   display: grid;
+  align-content: start;
   gap: 8px;
+}
+
+.cart-batch-list .coupon-row {
+  align-items: center;
+}
+
+.cart-batch-list .coupon-row input,
+.cart-batch-list .coupon-row button {
+  height: 48px;
+  min-height: 48px;
 }
 
 .cart-batch-item {
