@@ -62,13 +62,21 @@ import {
 import "./styles.css";
 
 const TOKEN_KEY = "vd_store_token";
+const SESSION_CACHE_KEY = "vd_store_session";
 const LANGUAGE_KEY = "vd_store_language";
 const savedToken = readStoredToken();
+const cachedSession = readCachedSession(savedToken);
 const api = new StoreApi(savedToken);
 
 type Tab = "home" | "products" | "reviews" | "history" | "vouchers";
 type Language = "vi" | "en";
 type PayMethod = "bank" | "wallet" | "usdt";
+type CachedSession = {
+  token: string;
+  customer: Session["customer"];
+  balance: number;
+  savedAt: number;
+};
 
 const initialTab = readInitialTab();
 
@@ -481,12 +489,12 @@ function useDialogClose(onClose: () => void) {
 
 function App() {
   const [token, setToken] = useState(savedToken);
-  const [customer, setCustomer] = useState<Session["customer"] | null>(null);
+  const [customer, setCustomer] = useState<Session["customer"] | null>(cachedSession?.customer ?? null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [history, setHistory] = useState<StoreHistory | null>(null);
   const [myVouchers, setMyVouchers] = useState<MyVoucher[]>([]);
-  const [balance, setBalance] = useState(0);
+  const [balance, setBalance] = useState(cachedSession?.balance ?? 0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
   const [checkoutItem, setCheckoutItem] = useState<CartItem | null>(null);
@@ -494,7 +502,7 @@ function App() {
   const [qr, setQr] = useState<PaymentResult | null>(null);
   const [qrStatus, setQrStatus] = useState<PaymentStatusResult | null>(null);
   const [delivery, setDelivery] = useState<DeliveryNotice | null>(null);
-  const [authOpen, setAuthOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(() => isAuthPath(window.location.pathname) && !savedToken);
   const [walletOpen, setWalletOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
@@ -554,9 +562,19 @@ function App() {
   useEffect(() => {
     api.setToken(token);
     void loadPublicData();
-    if (token) void loadPrivateData();
+    if (token) void loadPrivateData(!customer);
     else setLoading("");
   }, [token]);
+
+  useEffect(() => {
+    if (!isAuthPath(window.location.pathname)) return;
+    if (customer) {
+      setAuthOpen(false);
+      navigateTab("home");
+    } else if (!token) {
+      setAuthOpen(true);
+    }
+  }, [token, customer]);
 
   useEffect(() => {
     const refresh = () => void loadPublicData();
@@ -606,6 +624,7 @@ function App() {
       ]);
       setCustomer(profile.customer);
       setBalance(profile.wallet.balance);
+      persistSessionCache(token, profile.customer, profile.wallet.balance);
       setHistory(nextHistory);
       setMyVouchers(nextVouchers.vouchers);
       setError("");
@@ -619,14 +638,17 @@ function App() {
 
   function saveSession(session: Session) {
     persistSessionToken(session.token);
+    persistSessionCache(session.token, session.customer, balance);
     api.setToken(session.token);
     setToken(session.token);
     setCustomer(session.customer);
     setAuthOpen(false);
+    if (isAuthPath(window.location.pathname)) navigateTab("home");
   }
 
   function logout() {
     clearSessionToken();
+    clearSessionCache();
     api.setToken(null);
     setToken(null);
     setCustomer(null);
@@ -634,6 +656,15 @@ function App() {
     setMyVouchers([]);
     setBalance(0);
     setCatalog(null);
+  }
+
+  function requestLogin() {
+    if (customer) {
+      setAuthOpen(false);
+      navigateTab("home");
+      return;
+    }
+    setAuthOpen(true);
   }
 
   function changeLanguage(next: Language) {
@@ -1158,7 +1189,7 @@ function App() {
 
   function requireLogin() {
     if (token) return true;
-    setAuthOpen(true);
+    requestLogin();
     return false;
   }
 
@@ -1193,12 +1224,13 @@ function App() {
 
   function navigateTab(next: Tab) {
     setActiveTab(next);
-    window.history.replaceState(null, "", next === "home" ? window.location.pathname : `${window.location.pathname}?tab=${next}`);
+    const basePath = currentStorePath();
+    window.history.replaceState(null, "", next === "home" ? basePath : `${basePath}?tab=${next}`);
   }
 
   function navigateHomeSection(sectionId: string) {
     setActiveTab("home");
-    window.history.replaceState(null, "", `${window.location.pathname}#${sectionId}`);
+    window.history.replaceState(null, "", `${currentStorePath()}#${sectionId}`);
     window.setTimeout(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   }
 
@@ -1214,11 +1246,11 @@ function App() {
         cartCount={cartCount}
         onLanguage={changeLanguage}
         onTab={navigateTab}
-        onLogin={() => setAuthOpen(true)}
+        onLogin={requestLogin}
         onLogout={logout}
         onWalletOpen={() => {
           if (token) setWalletOpen(true);
-          else setAuthOpen(true);
+          else requestLogin();
         }}
         onCartOpen={() => setCartOpen(true)}
         cartButtonRef={cartButtonRef}
@@ -1242,7 +1274,7 @@ function App() {
           onShop={() => navigateTab("products")}
           onWallet={() => {
             if (token) setWalletOpen(true);
-            else setAuthOpen(true);
+            else requestLogin();
           }}
         />
       ) : null}
@@ -1269,7 +1301,7 @@ function App() {
             customer={customer}
             loading={loading}
             language={language}
-            onLogin={() => setAuthOpen(true)}
+            onLogin={requestLogin}
             onSubmit={(input) => createReview(input)}
           />
         </section>
@@ -1282,7 +1314,7 @@ function App() {
             history={history}
             onRefresh={() => {
               if (token) void loadPrivateData();
-              else setAuthOpen(true);
+              else requestLogin();
             }}
             loading={loading === "profile"}
           />
@@ -1298,7 +1330,7 @@ function App() {
             loading={loading === "profile"}
             onRefresh={() => {
               if (token) void loadPrivateData();
-              else setAuthOpen(true);
+              else requestLogin();
             }}
             onUse={(code) => {
               setSelectedVoucherCode(code);
@@ -1309,7 +1341,7 @@ function App() {
                 navigateTab("products");
               }
             }}
-            onLogin={() => setAuthOpen(true)}
+            onLogin={requestLogin}
           />
         </section>
       ) : null}
@@ -1357,7 +1389,7 @@ function App() {
           onWalletOpen={() => {
             closeCheckoutItemToCart(false);
             if (token) setWalletOpen(true);
-            else setAuthOpen(true);
+            else requestLogin();
           }}
           onBackToCart={() => closeCheckoutItemToCart(true)}
         />
@@ -1379,7 +1411,7 @@ function App() {
           onWalletOpen={() => {
             setCheckoutCartItems(null);
             if (token) setWalletOpen(true);
-            else setAuthOpen(true);
+            else requestLogin();
           }}
           onBackToCart={() => {
             setCheckoutCartItems(null);
@@ -3963,9 +3995,41 @@ function readStoredToken() {
   return readCookie(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY);
 }
 
+function readCachedSession(token: string | null): CachedSession | null {
+  if (!token) return null;
+  try {
+    const raw = localStorage.getItem(SESSION_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as Partial<CachedSession>;
+    const maxAge = 1000 * 60 * 60 * 24 * 30;
+    if (
+      cached.token !== token ||
+      !cached.customer?.id ||
+      !cached.customer.email ||
+      typeof cached.balance !== "number" ||
+      !cached.savedAt ||
+      Date.now() - cached.savedAt > maxAge
+    ) {
+      return null;
+    }
+    return cached as CachedSession;
+  } catch {
+    return null;
+  }
+}
+
 function readInitialTab(): Tab {
   const tab = new URLSearchParams(window.location.search).get("tab");
   return tab === "products" || tab === "reviews" || tab === "history" || tab === "vouchers" ? tab : "home";
+}
+
+function isAuthPath(pathname: string) {
+  const normalized = pathname.replace(/\/+$/, "").toLowerCase();
+  return normalized === "/login" || normalized === "/signin" || normalized === "/sign-in" || normalized === "/dang-nhap";
+}
+
+function currentStorePath() {
+  return isAuthPath(window.location.pathname) ? "/" : window.location.pathname || "/";
 }
 
 function readStoredLanguage(): Language {
@@ -4056,10 +4120,27 @@ function persistSessionToken(token: string) {
   document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; SameSite=Lax${secure}`;
 }
 
+function persistSessionCache(token: string | null, customer: Session["customer"], balance: number) {
+  if (!token) return;
+  localStorage.setItem(
+    SESSION_CACHE_KEY,
+    JSON.stringify({
+      token,
+      customer,
+      balance,
+      savedAt: Date.now()
+    } satisfies CachedSession)
+  );
+}
+
 function clearSessionToken() {
   const secure = window.location.protocol === "https:" ? "; Secure" : "";
   localStorage.removeItem(TOKEN_KEY);
   document.cookie = `${TOKEN_KEY}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+}
+
+function clearSessionCache() {
+  localStorage.removeItem(SESSION_CACHE_KEY);
 }
 
 function readCookie(name: string) {
