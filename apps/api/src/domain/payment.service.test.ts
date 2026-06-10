@@ -177,11 +177,68 @@ describe("PaymentService", () => {
     });
 
     expect(result).toEqual({ ok: true, status: "fulfilled" });
-    expect(shop.fulfillDirectOrder).toHaveBeenCalledWith("payment_direct_web_1");
+    expect(shop.fulfillDirectOrder).toHaveBeenCalledWith("payment_direct_web_1", undefined);
     expect(shop.notifyManualOrderIfNeeded).toHaveBeenCalledWith("order_direct_web_1");
     expect(telegram.deleteMessage).toHaveBeenCalledWith(null, null);
     expect(telegram.notifyDirectOrderFulfilled).not.toHaveBeenCalled();
     expect(telegram.notifyPaymentCredited).not.toHaveBeenCalled();
+  });
+
+  it("passes the bank transaction time to direct-order fulfillment", async () => {
+    process.env.SEPAY_ACCOUNT_NUMBER = "03219071601";
+
+    const payment = {
+      id: "payment_direct_timed_1",
+      code: "DHCCP4MYEZ",
+      kind: PaymentKind.DIRECT_ORDER,
+      status: PaymentStatus.PENDING,
+      amount: 225000,
+      expectedAmount: 225000,
+      telegramChatId: null,
+      telegramMessageId: null,
+      user: { telegramId: "web:customer-1" },
+      order: { id: "order_direct_timed_1" }
+    };
+    const prisma = {
+      bankTransaction: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: "bank_tx_timed_1" }),
+        update: vi.fn().mockResolvedValue({})
+      },
+      payment: {
+        findUnique: vi.fn().mockResolvedValueOnce(payment).mockResolvedValueOnce({
+          telegramChatId: null,
+          telegramMessageId: null
+        })
+      }
+    };
+    const shop = {
+      fulfillDirectOrder: vi.fn().mockResolvedValue({
+        outcome: "fulfilled",
+        order: { id: "order_direct_timed_1" },
+        deliveryText: "ok",
+        user: payment.user
+      }),
+      notifyManualOrderIfNeeded: vi.fn().mockResolvedValue(undefined)
+    };
+    const telegram = {
+      deleteMessage: vi.fn().mockResolvedValue(undefined),
+      notifyDirectOrderFulfilled: vi.fn().mockResolvedValue(undefined),
+      notifyPaymentCredited: vi.fn().mockResolvedValue(undefined)
+    };
+
+    const service = new PaymentService(prisma as never, shop as never, telegram as never);
+    await service.handleSepayWebhook({
+      id: "TIMED123",
+      gateway: "TPBank",
+      accountNumber: "03219071601",
+      content: "CT DI:616111265206 QR - DHCCP4MYEZ; tai iPay",
+      transferType: "in",
+      transferAmount: 225000,
+      transactionDate: "2026-06-10T04:13:00.000Z"
+    });
+
+    expect(shop.fulfillDirectOrder).toHaveBeenCalledWith("payment_direct_timed_1", new Date("2026-06-10T04:13:00.000Z"));
   });
 
   it("ignores duplicate SePay transaction ids before touching payments or wallet balance", async () => {

@@ -21,22 +21,26 @@ export class PaymentService {
   ) {}
 
   verifySepayRequest(request: RawRequest) {
-    const mode = (process.env.SEPAY_AUTH_MODE ?? "hmac").toLowerCase();
+    const mode = (process.env.SEPAY_AUTH_MODE ?? "auto").toLowerCase();
     if (mode === "none") return;
 
-    if (mode === "api-key") {
-      const ok = verifyApiKeyHeader(request.headers.authorization, process.env.SEPAY_API_KEY);
-      if (!ok) throw new UnauthorizedException("Invalid SePay API key.");
-      return;
-    }
-
-    const ok = verifySepayHmac({
+    const apiKeyOk = verifyApiKeyHeader(request.headers.authorization, process.env.SEPAY_API_KEY);
+    const hmacOk = verifySepayHmac({
       rawBody: request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {})),
       signature: firstHeader(request.headers["x-sepay-signature"]) ?? firstHeader(request.headers["sepay-signature"]),
       timestamp: firstHeader(request.headers["x-sepay-timestamp"]) ?? firstHeader(request.headers["sepay-timestamp"]),
       secret: process.env.SEPAY_WEBHOOK_SECRET
     });
-    if (!ok) throw new UnauthorizedException("Invalid SePay signature.");
+
+    if (mode === "api-key") {
+      if (!apiKeyOk) throw new UnauthorizedException("Invalid SePay API key.");
+      return;
+    }
+    if (mode === "hmac") {
+      if (!hmacOk) throw new UnauthorizedException("Invalid SePay signature.");
+      return;
+    }
+    if (!apiKeyOk && !hmacOk) throw new UnauthorizedException("Invalid SePay webhook authentication.");
   }
 
   verifyCryptomusRequest(_request: RawRequest, body: Record<string, unknown>) {
@@ -69,8 +73,9 @@ export class PaymentService {
       return { ok: true, duplicate: true };
     }
 
-    const expectedAccount = process.env.SEPAY_ACCOUNT_NUMBER;
-    const accountMismatch = expectedAccount && normalized.accountNumber && expectedAccount !== normalized.accountNumber;
+    const expectedAccount = normalizeAccountNumber(process.env.SEPAY_ACCOUNT_NUMBER);
+    const payloadAccount = normalizeAccountNumber(normalized.accountNumber);
+    const accountMismatch = expectedAccount && payloadAccount && expectedAccount !== payloadAccount;
     const paymentCode = normalized.paymentCode ?? extractPaymentCode(normalized.content);
 
     const bankTransaction = await this.prisma.bankTransaction.create({
@@ -141,7 +146,7 @@ export class PaymentService {
     }
 
     if (payment.kind === PaymentKind.DIRECT_ORDER) {
-      const result = await this.shop.fulfillDirectOrder(payment.id);
+      const result = await this.shop.fulfillDirectOrder(payment.id, normalized.transactionDate);
       await this.deletePendingPaymentMessage(payment.id, payment);
       if (result.outcome === "fulfilled" && "deliveryText" in result) {
         const orders = Array.isArray((result as { orders?: Array<{ id: string }> }).orders)
@@ -325,6 +330,10 @@ function numberValue(value: unknown) {
     if (Number.isFinite(parsed)) return parsed;
   }
   return 0;
+}
+
+function normalizeAccountNumber(value?: string | null) {
+  return value?.replace(/\D/g, "") || null;
 }
 
 function decimalValue(value: unknown) {

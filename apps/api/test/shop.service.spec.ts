@@ -681,6 +681,44 @@ describe("ShopService", () => {
     expect(tx.inventoryItem.findMany).not.toHaveBeenCalled();
   });
 
+  it("fulfills direct bank orders when the bank transaction happened before expiry but webhook arrives late", async () => {
+    const user = { id: "user_direct_late_webhook", telegramId: "web:customer_direct_late_webhook" };
+    const product = {
+      id: "product_direct_late_webhook",
+      name: "Late webhook manual service",
+      price: 225000,
+      showInWeb: true,
+      showInBot: true,
+      status: ProductStatus.ACTIVE,
+      deliveryType: ProductDeliveryType.MANUAL,
+      manualStock: 2,
+      manualInstructions: "Nhan hang qua email."
+    };
+    const expiresAt = new Date("2026-06-10T04:20:00.000Z");
+    const tx = buildDirectOrderTx({
+      paymentId: "payment_direct_late_webhook",
+      orderId: "order_direct_late_webhook",
+      user,
+      product,
+      quantity: 1,
+      amount: 225000,
+      expiresAt
+    });
+    const prisma = {
+      $transaction: vi.fn(async (callback) => callback(tx))
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const result = await service.fulfillDirectOrder("payment_direct_late_webhook", new Date("2026-06-10T04:13:00.000Z"));
+
+    expect(result.outcome).toBe("fulfilled");
+    expect(tx.payment.update).toHaveBeenCalledWith({
+      where: { id: "payment_direct_late_webhook" },
+      data: { status: PaymentStatus.SUCCEEDED }
+    });
+    expect(tx.walletLedgerEntry.create).not.toHaveBeenCalled();
+  });
+
   it("credits topups exactly once and ignores already-processed topup payments", async () => {
     const pendingTx = buildTopupTx({
       status: PaymentStatus.PENDING,

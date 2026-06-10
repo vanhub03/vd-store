@@ -846,7 +846,7 @@ export class ShopService {
     };
   }
 
-  async fulfillDirectOrder(paymentId: string) {
+  async fulfillDirectOrder(paymentId: string, paidAt?: Date | null) {
     return this.prisma.$transaction(
       async (tx) => {
         const payment = await tx.payment.findUnique({
@@ -874,8 +874,8 @@ export class ShopService {
           : [payment.order];
         const groupOrderIds = groupOrders.map((order) => order.id);
 
-        const now = new Date();
-        if ((payment.expiresAt && payment.expiresAt < now) || (payment.order.expiresAt && payment.order.expiresAt < now)) {
+        const effectivePaidAt = paidAt ?? new Date();
+        if ((payment.expiresAt && payment.expiresAt < effectivePaidAt) || (payment.order.expiresAt && payment.order.expiresAt < effectivePaidAt)) {
           await this.creditPaymentToWallet(
             tx,
             payment.id,
@@ -901,6 +901,7 @@ export class ShopService {
           for (const order of groupOrders) {
             await this.ensurePurchasable(order.product, order.quantity, tx);
           }
+          await this.consumeOrderVoucherIfMissing(tx, payment.order);
           if (groupOrders.length === 1) {
             const deliveryText = await this.fulfillOrderItems(tx, payment.order.id, payment.order.product, payment.order.quantity);
             const updatedPayment = await tx.payment.update({
@@ -1934,6 +1935,44 @@ export class ShopService {
       where: { voucherId: redemption.voucherId, userId: redemption.userId, revokedAt: null, usedAt: null },
       data: { usedAt: new Date() }
     });
+  }
+
+  private async consumeOrderVoucherIfMissing(
+    tx: Prisma.TransactionClient,
+    order: {
+      id: string;
+      userId: string;
+      voucherId?: string | null;
+      subtotalAmount?: number | null;
+      collaboratorDiscountAmount?: number | null;
+      voucherDiscountAmount?: number | null;
+      totalAmount: number;
+    }
+  ) {
+    if (!order.voucherId || !order.voucherDiscountAmount || !tx.voucherRedemption || !tx.voucher || !tx.voucherAssignment) return;
+    const existing = await tx.voucherRedemption.findUnique({
+      where: { orderId: order.id },
+      select: { id: true }
+    });
+    if (existing) {
+      await this.markVoucherAssignmentUsedForOrder(tx, order.id);
+      return;
+    }
+    await tx.voucher.updateMany({
+      where: { id: order.voucherId },
+      data: { usedCount: { increment: 1 } }
+    });
+    await tx.voucherRedemption.create({
+      data: {
+        voucherId: order.voucherId,
+        userId: order.userId,
+        orderId: order.id,
+        subtotalAmount: (order.subtotalAmount ?? order.totalAmount) - (order.collaboratorDiscountAmount ?? 0),
+        discountAmount: order.voucherDiscountAmount,
+        totalAmount: order.totalAmount
+      }
+    });
+    await this.markVoucherAssignmentUsedForOrder(tx, order.id);
   }
 
   private async releaseVoucherForOrder(tx: Prisma.TransactionClient, orderId: string) {
