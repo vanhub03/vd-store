@@ -232,7 +232,7 @@ export class StoreApi {
       const data = text ? JSON.parse(text) : null;
       if (!response.ok) {
         const message = data?.message ?? data?.error ?? `HTTP ${response.status}`;
-        throw new Error(Array.isArray(message) ? message.join(", ") : message);
+        throw new StoreApiError(Array.isArray(message) ? message.join(", ") : message, response.status);
       }
       return data as T;
     } catch (error) {
@@ -246,6 +246,14 @@ export class StoreApi {
     } finally {
       window.clearTimeout(timeout);
     }
+  }
+}
+
+export class StoreApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "StoreApiError";
+    Object.setPrototypeOf(this, StoreApiError.prototype);
   }
 }
 

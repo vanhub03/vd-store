@@ -56,6 +56,7 @@ import {
   ReviewsResponse,
   Session,
   StoreApi,
+  StoreApiError,
   VoucherPreview,
   WalletPurchaseResult
 } from "./api";
@@ -615,24 +616,41 @@ function App() {
   }
 
   async function loadPrivateData(showLoading = true) {
+    if (!token) return;
     try {
       if (showLoading) setLoading("profile");
       const profile = await api.get<{ customer: Session["customer"]; wallet: { balance: number } }>("/store/me");
-      const [nextHistory, nextVouchers] = await Promise.all([
-        api.get<StoreHistory>("/store/history"),
-        api.get<MyVouchersResponse>("/store/my-vouchers")
-      ]);
       setCustomer(profile.customer);
       setBalance(profile.wallet.balance);
       persistSessionCache(token, profile.customer, profile.wallet.balance);
-      setHistory(nextHistory);
-      setMyVouchers(nextVouchers.vouchers);
       setError("");
     } catch (err) {
-      logout();
+      if (isAuthError(err)) {
+        logout();
+      }
       setError((err as Error).message);
+      return;
     } finally {
       setLoading("");
+    }
+
+    const [historyResult, vouchersResult] = await Promise.allSettled([
+      api.get<StoreHistory>("/store/history"),
+      api.get<MyVouchersResponse>("/store/my-vouchers")
+    ]);
+    if (historyResult.status === "fulfilled") {
+      setHistory(historyResult.value);
+    } else if (isAuthError(historyResult.reason)) {
+      logout();
+      setError((historyResult.reason as Error).message);
+      return;
+    }
+    if (vouchersResult.status === "fulfilled") {
+      setMyVouchers(vouchersResult.value.vouchers);
+    } else if (isAuthError(vouchersResult.reason)) {
+      logout();
+      setError((vouchersResult.reason as Error).message);
+      return;
     }
   }
 
@@ -4030,6 +4048,10 @@ function isAuthPath(pathname: string) {
 
 function currentStorePath() {
   return isAuthPath(window.location.pathname) ? "/" : window.location.pathname || "/";
+}
+
+function isAuthError(error: unknown) {
+  return error instanceof StoreApiError && (error.status === 401 || error.status === 403);
 }
 
 function readStoredLanguage(): Language {
