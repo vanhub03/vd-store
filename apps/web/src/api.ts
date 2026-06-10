@@ -21,6 +21,7 @@ export type Product = {
   descriptionEn?: string | null;
   imageUrl?: string | null;
   buttonIcon?: string | null;
+  createdAt?: string;
   price: number;
   regularPrice?: number;
   collaboratorPrice?: number;

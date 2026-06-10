@@ -514,13 +514,6 @@ function App() {
   useReveal();
 
   const products = useMemo(() => (catalog ? flattenCatalog(catalog) : []), [catalog]);
-  const filteredProducts = useMemo(() => {
-    const normalized = query.toLocaleLowerCase("vi-VN").trim();
-    if (!normalized) return products;
-    return products.filter((product) =>
-      `${localizedName(product, language)} ${localizedDescription(product, language) ?? ""}`.toLocaleLowerCase("vi-VN").includes(normalized)
-    );
-  }, [products, query, language]);
   const groupedProducts = useMemo(() => groupCatalogProducts(catalog, query, language), [catalog, query, language]);
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
@@ -1257,7 +1250,6 @@ function App() {
       {activeTab === "products" ? (
         <ProductsTab
           groups={groupedProducts}
-          productCount={filteredProducts.length}
           query={query}
           loading={loading}
           error={error}
@@ -1967,7 +1959,6 @@ function FeaturedProducts({
 
 function ProductsTab({
   groups,
-  productCount,
   query,
   loading,
   error,
@@ -1978,7 +1969,6 @@ function ProductsTab({
   language
 }: {
   groups: ProductGroup[];
-  productCount: number;
   query: string;
   loading: string;
   error: string;
@@ -1992,11 +1982,19 @@ function ProductsTab({
   const vi = language === "vi";
   const [sort, setSort] = useState("popular");
   const [delivery, setDelivery] = useState("all");
+  const [category, setCategory] = useState("all");
   const allProducts = useMemo(() => groups.flatMap((group) => group.products), [groups]);
+  const categoryOptions = useMemo(
+    () => groups.map((group) => ({ id: group.id, name: group.name, count: group.products.length })),
+    [groups]
+  );
   const visibleProducts = useMemo(() => {
-    const filtered = delivery === "all" ? allProducts : allProducts.filter((product) => product.deliveryType === delivery);
+    const filtered = allProducts.filter((product) => {
+      const productCategoryId = product.category?.id ?? "uncategorized";
+      return (delivery === "all" || product.deliveryType === delivery) && (category === "all" || productCategoryId === category);
+    });
     return sortProducts(filtered, sort);
-  }, [allProducts, delivery, sort]);
+  }, [allProducts, category, delivery, sort]);
 
   return (
     <section className="shell catalog-page">
@@ -2031,6 +2029,17 @@ function ProductsTab({
             </select>
           </label>
           <label>
+            {vi ? "Danh mục" : "Category"}
+            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+              <option value="all">{vi ? "Tất cả danh mục" : "All categories"}</option>
+              {categoryOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.name} ({option.count})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             {vi ? "Sắp xếp" : "Sort"}
             <select value={sort} onChange={(event) => setSort(event.target.value)}>
               <option value="popular">{vi ? "Phổ biến" : "Popular"}</option>
@@ -2040,7 +2049,7 @@ function ProductsTab({
             </select>
           </label>
           <div className="filter-stat">
-            <b>{productCount}</b>
+            <b>{visibleProducts.length}</b>
             <span>{vi ? "sản phẩm phù hợp" : "matching products"}</span>
           </div>
         </aside>
@@ -2070,6 +2079,7 @@ function ProductsTab({
               onAction={() => {
                 onQuery("");
                 setDelivery("all");
+                setCategory("all");
                 setSort("popular");
               }}
             />
@@ -4094,7 +4104,13 @@ function sortProducts(products: Product[], sort: string) {
   const copy = [...products];
   if (sort === "low") return copy.sort((a, b) => a.price - b.price);
   if (sort === "high") return copy.sort((a, b) => b.price - a.price);
-  if (sort === "new") return copy.reverse();
+  if (sort === "new") {
+    return copy.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }
   return copy.sort((a, b) => availableQuantity(b) - availableQuantity(a));
 }
 
