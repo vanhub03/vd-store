@@ -1261,6 +1261,7 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
   const [form, setForm] = useState(() => ({
     code: generateVoucherCode(20),
     discountPercent: 20,
@@ -1341,11 +1342,42 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
     }
   }
 
-  async function create(event: FormEvent) {
+  function resetVoucherForm(discountPercent = form.discountPercent) {
+    setEditingVoucherId(null);
+    setForm({
+      code: generateVoucherCode(discountPercent),
+      discountPercent,
+      maxDiscountAmount: "50000",
+      maxDiscountUsdt: "2",
+      maxUses: "",
+      expiresAt: defaultVoucherDate(),
+      active: true,
+      firstOrderOnly: false,
+      allowCollaboratorStacking: false
+    });
+  }
+
+  function editVoucher(voucher: Voucher) {
+    setEditingVoucherId(voucher.id);
+    setForm({
+      code: voucher.code,
+      discountPercent: voucher.discountPercent,
+      maxDiscountAmount: voucher.maxDiscountAmount ? String(voucher.maxDiscountAmount) : "",
+      maxDiscountUsdt: voucher.maxDiscountUsdt ? String(voucher.maxDiscountUsdt) : "",
+      maxUses: voucher.maxUses ? String(voucher.maxUses) : "",
+      expiresAt: voucher.expiresAt ? voucher.expiresAt.slice(0, 10) : "",
+      active: voucher.active,
+      firstOrderOnly: voucher.firstOrderOnly,
+      allowCollaboratorStacking: voucher.allowCollaboratorStacking
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveVoucher(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
     try {
-      await api.post("/admin/vouchers", {
+      const payload = {
         code: form.code,
         discountPercent: Number(form.discountPercent),
         maxDiscountAmount: form.maxDiscountAmount ? Number(form.maxDiscountAmount) : null,
@@ -1355,18 +1387,13 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
         active: form.active,
         firstOrderOnly: form.firstOrderOnly,
         allowCollaboratorStacking: form.allowCollaboratorStacking
-      });
-      setForm({
-        code: generateVoucherCode(form.discountPercent),
-        discountPercent: form.discountPercent,
-        maxDiscountAmount: form.maxDiscountAmount,
-        maxDiscountUsdt: form.maxDiscountUsdt,
-        maxUses: "",
-        expiresAt: defaultVoucherDate(),
-        active: true,
-        firstOrderOnly: false,
-        allowCollaboratorStacking: false
-      });
+      };
+      if (editingVoucherId) {
+        await api.put(`/admin/vouchers/${editingVoucherId}`, payload);
+      } else {
+        await api.post("/admin/vouchers", payload);
+      }
+      resetVoucherForm(form.discountPercent);
       await load();
     } catch (err) {
       onError((err as Error).message);
@@ -1403,10 +1430,10 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
       {loading && <LoadingBlock label="Đang tải voucher..." />}
       <section className="panel">
         <div className="panelHeader">
-          <h2>Tạo voucher</h2>
-          <span className="mutedText">Mặc định hết hạn sau 1 tháng</span>
+          <h2>{editingVoucherId ? "Sửa voucher" : "Tạo voucher"}</h2>
+          <span className="mutedText">{editingVoucherId ? "Cập nhật thông tin mã giảm giá đang chọn." : "Mặc định hết hạn sau 1 tháng"}</span>
         </div>
-        <form className="formGrid compactForm voucherForm" onSubmit={create}>
+        <form className="formGrid compactForm voucherForm" onSubmit={saveVoucher}>
           <label>
             Mã
             <input value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value.toUpperCase() })} required />
@@ -1456,11 +1483,16 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
             </label>
           </div>
           <div className="rowActions wide">
+            {editingVoucherId ? (
+              <button className="smallButton secondaryButton" type="button" onClick={() => resetVoucherForm()}>
+                <X size={14} /> Hủy sửa
+              </button>
+            ) : null}
             <button className="smallButton secondaryButton" type="button" onClick={() => setForm({ ...form, code: generateVoucherCode(form.discountPercent) })}>
               <TicketPercent size={14} /> Generate
             </button>
             <button className="primaryButton" disabled={creating}>
-              {creating ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {creating ? "Đang tạo..." : "Tạo voucher"}
+              {creating ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {creating ? "Đang lưu..." : editingVoucherId ? "Lưu thay đổi" : "Tạo voucher"}
             </button>
           </div>
         </form>
@@ -1541,7 +1573,7 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
 
       <DataTable
         title="Danh sách voucher"
-        columns={["Mã", "Giảm", "Trần VND / USDT", "Đã dùng", "Đã cấp", "Giới hạn", "Hết hạn", "CTV", "Loại", "Trạng thái", ""]}
+        columns={["Mã", "Giảm", "Trần VND / USDT", "Đã dùng", "Đã cấp", "Giới hạn", "Hết hạn", "CTV", "Loại", "Trạng thái", "Sửa", ""]}
         rows={vouchers.map((voucher) => [
           <strong>{voucher.code}</strong>,
           `${voucher.discountPercent}%`,
@@ -1553,6 +1585,9 @@ function Vouchers({ api, onError }: { api: Api; onError: (error: string | null) 
           voucher.allowCollaboratorStacking ? "Được cộng dồn" : "Không cộng dồn",
           voucher.firstOrderOnly ? "Đơn đầu" : "Thường",
           voucher.active ? "Đang bật" : "Đã tắt",
+          <button className="smallButton secondaryButton" onClick={() => editVoucher(voucher)}>
+            <Pencil size={14} /> Sửa
+          </button>,
           <button className={voucher.active ? "smallButton dangerButton" : "smallButton successButton"} onClick={() => toggle(voucher)} disabled={updatingId === voucher.id}>
             {updatingId === voucher.id ? <RefreshCw className="spin" size={14} /> : voucher.active ? <X size={14} /> : <CheckCircle2 size={14} />}
             {voucher.active ? "Tắt" : "Bật"}
