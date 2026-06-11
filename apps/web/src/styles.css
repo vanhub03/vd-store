@@ -4045,6 +4045,21 @@ textarea {
   }
 }
 
+@media (min-width: 1221px) and (max-width: 1460px) {
+  .nav-shell {
+    grid-template-columns: minmax(188px, auto) minmax(max-content, 1fr) auto;
+  }
+
+  .header-search {
+    display: none;
+  }
+
+  .desktop-nav > button,
+  .nav-dropdown > button {
+    padding-inline: 10px;
+  }
+}
+
 @media (max-width: 1220px) {
   .nav-shell {
     grid-template-columns: auto 1fr auto;

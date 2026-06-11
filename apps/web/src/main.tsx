@@ -1561,7 +1561,7 @@ function Header({
         </button>
 
         <nav className="desktop-nav" aria-label={language === "vi" ? "Điều hướng chính" : "Main navigation"}>
-          {navItems.slice(0, 2).map((item) => (
+          {navItems.slice(0, 3).map((item) => (
             <button key={item.tab} className={activeTab === item.tab ? "active" : ""} onClick={() => goTab(item.tab)}>
               {item.label}
             </button>
