@@ -2033,6 +2033,8 @@ function ProductsTab({
   const [sort, setSort] = useState("popular");
   const [delivery, setDelivery] = useState("all");
   const [category, setCategory] = useState("all");
+  const [supportDialogOpen, setSupportDialogOpen] = useState(false);
+  const [dismissedQuery, setDismissedQuery] = useState("");
   const allProducts = useMemo(() => groups.flatMap((group) => group.products), [groups]);
   const categoryOptions = useMemo(
     () => groups.map((group) => ({ id: group.id, name: group.name, count: group.products.length })),
@@ -2045,9 +2047,25 @@ function ProductsTab({
     });
     return sortProducts(filtered, sort);
   }, [allProducts, category, delivery, sort]);
+  const normalizedQuery = query.trim().toLocaleLowerCase("vi-VN");
+
+  useEffect(() => {
+    if (normalizedQuery.length < 2 || loading || error || allProducts.length > 0 || dismissedQuery === normalizedQuery) {
+      setSupportDialogOpen(false);
+      return;
+    }
+    const timeout = window.setTimeout(() => setSupportDialogOpen(true), 550);
+    return () => window.clearTimeout(timeout);
+  }, [allProducts.length, dismissedQuery, error, loading, normalizedQuery]);
+
+  function closeSupportDialog() {
+    setDismissedQuery(normalizedQuery);
+    setSupportDialogOpen(false);
+  }
 
   return (
-    <section className="shell catalog-page">
+    <>
+      <section className="shell catalog-page">
       <div className="catalog-heading reveal">
         <div className="breadcrumb">
           <Home size={14} />
@@ -2136,7 +2154,77 @@ function ProductsTab({
           ) : null}
         </div>
       </div>
-    </section>
+      </section>
+      {supportDialogOpen ? (
+        <SearchSupportDialog
+          language={language}
+          query={query.trim()}
+          onClose={closeSupportDialog}
+          onClear={() => {
+            closeSupportDialog();
+            onQuery("");
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function SearchSupportDialog({
+  language,
+  query,
+  onClose,
+  onClear
+}: {
+  language: Language;
+  query: string;
+  onClose: () => void;
+  onClear: () => void;
+}) {
+  const vi = language === "vi";
+  const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
+
+  return (
+    <div className={`overlay search-support-overlay${isClosing ? " is-closing" : ""}`} onClick={handleOverlayClick}>
+      <section className="dialog search-support-dialog" role="dialog" aria-modal="true" aria-labelledby="search-support-title">
+        <button className="close-button" type="button" onClick={requestClose} aria-label={vi ? "Đóng" : "Close"}>
+          <X size={18} />
+        </button>
+        <div className="search-support-icon"><Headphones size={28} /></div>
+        <p className="section-kicker">{vi ? "CSKH kiểm tra kho" : "Stock check with support"}</p>
+        <h2 id="search-support-title">
+          {vi ? "Chưa thấy sản phẩm bạn cần?" : "Can’t find what you need?"}
+        </h2>
+        <p className="search-support-query">
+          {vi ? "Từ khóa đang tìm:" : "Your search:"} <strong>“{query}”</strong>
+        </p>
+        <p className="search-support-copy">
+          {vi
+            ? "Chúng tôi còn rất nhiều sản phẩm chưa kịp đăng trên website. Hãy nhắn trực tiếp cho CSKH qua một trong các địa chỉ bên dưới để kiểm tra phần mềm bạn cần có đang sẵn trong kho hay không. Xin cảm ơn!"
+            : "We have many more products that have not been listed on the website yet. Message customer support through one of the channels below and we’ll check whether the software you need is currently in stock. Thank you!"}
+        </p>
+        <div className="search-support-links">
+          <a href="https://zalo.me/0377952999" target="_blank" rel="noreferrer">
+            <MessageCircle size={19} />
+            <span><b>Zalo</b><small>0377 952 999</small></span>
+            <ArrowRight size={16} />
+          </a>
+          <a href="https://t.me/vanhdao99" target="_blank" rel="noreferrer">
+            <Send size={19} />
+            <span><b>Telegram</b><small>@vanhdao99</small></span>
+            <ArrowRight size={16} />
+          </a>
+          <a href="https://www.facebook.com/profile.php?id=61590796347885" target="_blank" rel="noreferrer">
+            <MessageCircle size={19} />
+            <span><b>Facebook</b><small>VD AI Shop</small></span>
+            <ArrowRight size={16} />
+          </a>
+        </div>
+        <button className="secondary-button search-support-clear" type="button" onClick={onClear}>
+          <RefreshCw size={16} /> {vi ? "Xóa từ khóa và xem tất cả" : "Clear search and view all"}
+        </button>
+      </section>
+    </div>
   );
 }
 
