@@ -148,13 +148,11 @@ const checks = [
     run: async () => {
       const bundle = await storefrontBundleText();
       const requiredMarkers = [
-        "hero-motion",
-        "checkout-stage",
-        "stage-card",
-        "qr-matrix",
-        "route-map",
-        "trust-grid",
-        "brand-panel",
+        "hero-showcase",
+        "floating-product-card",
+        "energy-line",
+        "is-orbit-paused",
+        "orbitSpin",
         "reveal"
       ];
       const missing = requiredMarkers.filter((marker) => !bundle.includes(marker));

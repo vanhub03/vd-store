@@ -1,10 +1,10 @@
-# Deploy storefront on Vercel Free
+# Deploy storefront on Vercel
 
-Use this when Render has no free custom-domain slot left. Keep these services on Render:
+The public storefront runs on Vercel. API, admin, Telegram bot, PostgreSQL, and Redis run on the production VPS:
 
 - `api.vanhdao.io.vn` for API and SePay webhook
 - `admin.vanhdao.io.vn` for admin dashboard
-- `vd-store-bot.onrender.com` for Telegram bot webhook
+- `bot.vanhdao.io.vn` for Telegram bot webhook
 
 Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
 
@@ -66,4 +66,4 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
 
 8. Wait for DNS propagation, then click Verify in Vercel.
 
-The storefront calls the existing Render API, so SePay, wallet, products, and orders continue using the current backend.
+The storefront calls the VPS API, so SePay, wallet, products, and orders use the same PostgreSQL database as admin and the Telegram bot.

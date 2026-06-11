@@ -3823,7 +3823,7 @@ function Footer({ language, onTab, onSection }: { language: Language; onTab: (ta
         <span>AI. Premium. Software.</span>
         <p>{vi ? "Cung cấp tài khoản AI, phần mềm và dịch vụ số uy tín - Nhanh chóng - An toàn - Giá tốt." : "Trusted AI accounts, software and digital services with fast, safe checkout."}</p>
         <div className="social-row">
-          <a href="https://www.facebook.com/vanh.dao.735/" target="_blank" rel="noreferrer">f</a>
+          <a href="https://www.facebook.com/profile.php?id=61590796347885" target="_blank" rel="noreferrer">f</a>
           <a href="https://zalo.me/0377952999" target="_blank" rel="noreferrer">Z</a>
           <a href="https://t.me/vanhdao99" target="_blank" rel="noreferrer">T</a>
         </div>

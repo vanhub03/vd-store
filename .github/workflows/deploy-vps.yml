@@ -100,6 +100,8 @@ jobs:
           cd "$NEXT_DIR"
           corepack enable
           corepack prepare pnpm@11.3.0 --activate
+          systemctl is-active --quiet postgresql
+          pg_isready -h 127.0.0.1 -p 5432
           pnpm install --frozen-lockfile
           pnpm prisma:generate
           pnpm --filter @vd-store/api exec prisma migrate deploy
@@ -109,6 +111,7 @@ jobs:
           VITE_API_BASE_URL=https://api.vanhdao.io.vn pnpm --filter @vd-store/admin build
 
           chmod 755 "$NEXT_DIR"
+          chmod 755 "$NEXT_DIR/scripts/backup-postgres-vps.sh"
           chmod -R a+rX "$NEXT_DIR/apps/admin/dist"
 
           BOT_WAS_ACTIVE=0

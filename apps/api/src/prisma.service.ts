@@ -36,13 +36,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           throw error;
         }
         if (attempt === attempts) {
-          this.scheduleRestart(`Prisma engine did not recover while running ${label}.`);
+          if (!isConnectionPoolTimeout(error)) {
+            this.scheduleRestart(`Prisma engine did not recover while running ${label}.`);
+          }
           throw error;
         }
 
         this.logger.warn(`Retrying ${label} after database connection error. Attempt ${attempt}/${attempts}.`);
-        await this.resetConnection();
-        await delay(400 * attempt);
+        if (!isConnectionPoolTimeout(error)) {
+          await this.resetConnection();
+        }
+        await delay(isConnectionPoolTimeout(error) ? 750 * attempt : 400 * attempt);
       }
     }
 
@@ -63,12 +67,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   private async forceResetConnection() {
-    try {
-      await this.$disconnect();
-    } catch (error) {
-      this.logger.warn(`Ignoring Prisma disconnect failure during reset: ${errorMessage(error)}`);
-    }
-
     try {
       await this.$connect();
     } catch (error) {
@@ -103,7 +101,11 @@ function isRetryableConnectionError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? String(error.code) : "";
   const message = "message" in error ? String(error.message) : "";
-  return code === "P1001" || code === "P1017" || message.includes("Engine is not yet connected");
+  return code === "P1001" || code === "P1017" || code === "P2024" || message.includes("Engine is not yet connected");
+}
+
+function isConnectionPoolTimeout(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && String(error.code) === "P2024");
 }
 
 function errorMessage(error: unknown) {
