@@ -24,7 +24,7 @@ describe("AnalyticsService", () => {
 
   it("degrades safely when Google Analytics is not configured", async () => {
     delete process.env.GA_PROPERTY_ID;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = "/path/that/does/not/exist/google-analytics.json";
     const service = new AnalyticsService();
 
     await expect(service.overview("7d")).resolves.toMatchObject({
@@ -40,7 +40,7 @@ describe("AnalyticsService", () => {
 
   it("uses 30 days for an unsupported range", async () => {
     delete process.env.GA_PROPERTY_ID;
-    delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = "/path/that/does/not/exist/google-analytics.json";
     const service = new AnalyticsService();
 
     await expect(service.overview("365d")).resolves.toMatchObject({
