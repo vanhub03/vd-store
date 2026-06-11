@@ -2585,13 +2585,6 @@ function ProductDialog({
             <div className="gallery-main">
               {imageSrc ? <img src={imageSrc} alt={`${localizedName(product, language)} - VD AI Shop`} /> : <span>{brandGlyph(product.name)}</span>}
             </div>
-            <div className="thumbnail-row">
-              {[0, 1, 2, 3].map((item) => (
-                <button className={item === 0 ? "active" : ""} key={item}>
-                  {imageSrc ? <img src={imageSrc} alt="" /> : <span>{brandGlyph(product.name)}</span>}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="product-info-pane">
@@ -2663,7 +2656,9 @@ function ProductDialog({
 
           <aside className="purchase-summary">
             <div className="summary-product">
-              <img src={imageSrc} alt="" />
+              <div className="summary-product-image">
+                {imageSrc ? <img src={imageSrc} alt="" /> : <span>{brandGlyph(product.name)}</span>}
+              </div>
               <div>
                 <b>{localizedName(product, language)}</b>
                 <span>{vi ? "Gói hiện tại" : "Current package"}</span>
