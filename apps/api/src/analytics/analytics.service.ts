@@ -21,6 +21,7 @@ type Report = {
 const OVERVIEW_TTL_MS = 5 * 60_000;
 const REALTIME_TTL_MS = 60_000;
 const GOOGLE_TIMEOUT_MS = 4_000;
+const MAX_REPORTS_PER_BATCH = 5;
 
 @Injectable()
 export class AnalyticsService {
@@ -44,14 +45,19 @@ export class AnalyticsService {
     }
 
     try {
-      const [response] = await withTimeout(
-        this.client.batchRunReports({
-          property: `properties/${this.propertyId}`,
-          requests: overviewRequests(range)
-        }),
+      const reportBatches = chunkReports(overviewRequests(range));
+      const responses = await withTimeout(
+        Promise.all(
+          reportBatches.map((requests) =>
+            this.client!.batchRunReports({
+              property: `properties/${this.propertyId}`,
+              requests
+            })
+          )
+        ),
         GOOGLE_TIMEOUT_MS
       );
-      const reports = (response.reports ?? []) as Report[];
+      const reports = responses.flatMap(([response]) => (response.reports ?? []) as Report[]);
       const value = buildOverview(range, reports);
       this.overviewCache.set(range, { value, expiresAt: Date.now() + OVERVIEW_TTL_MS });
       return value;
@@ -185,6 +191,18 @@ function overviewRequests(range: AnalyticsRange) {
       }
     }
   ];
+}
+
+export function chunkReports<T>(requests: T[], size = MAX_REPORTS_PER_BATCH) {
+  if (!Number.isInteger(size) || size < 1) {
+    throw new Error("Analytics report batch size must be a positive integer.");
+  }
+
+  const batches: T[][] = [];
+  for (let index = 0; index < requests.length; index += size) {
+    batches.push(requests.slice(index, index + size));
+  }
+  return batches;
 }
 
 function buildOverview(range: AnalyticsRange, reports: Report[]) {

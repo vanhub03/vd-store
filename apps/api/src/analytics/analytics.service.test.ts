@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { AnalyticsService } from "./analytics.service";
+import { AnalyticsService, chunkReports } from "./analytics.service";
 
 const originalPropertyId = process.env.GA_PROPERTY_ID;
 const originalCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -12,6 +12,16 @@ afterEach(() => {
 });
 
 describe("AnalyticsService", () => {
+  it("splits overview reports within the GA4 batch limit", () => {
+    const requests = Array.from({ length: 8 }, (_, index) => index);
+
+    expect(chunkReports(requests)).toEqual([
+      [0, 1, 2, 3, 4],
+      [5, 6, 7]
+    ]);
+    expect(chunkReports(requests).every((batch) => batch.length <= 5)).toBe(true);
+  });
+
   it("degrades safely when Google Analytics is not configured", async () => {
     delete process.env.GA_PROPERTY_ID;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
