@@ -60,6 +60,20 @@ import {
   VoucherPreview,
   WalletPurchaseResult
 } from "./api";
+import {
+  AnalyticsConsent,
+  AnalyticsItem,
+  analyticsAvailable,
+  readAnalyticsConsent,
+  trackAddToCart,
+  trackBeginCheckout,
+  trackPageView,
+  trackPaymentInfo,
+  trackPurchaseOnce,
+  trackViewCart,
+  trackViewItem,
+  updateAnalyticsConsent
+} from "./analytics";
 import "./styles.css";
 
 const TOKEN_KEY = "vd_store_token";
@@ -517,6 +531,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [cartFlyItems, setCartFlyItems] = useState<CartFlyItem[]>([]);
+  const [analyticsConsent, setAnalyticsConsent] = useState<AnalyticsConsent>(() => readAnalyticsConsent());
+  const [consentPreferencesOpen, setConsentPreferencesOpen] = useState(false);
   const cartButtonRef = useRef<HTMLButtonElement>(null);
   const cartFlyTimersRef = useRef<number[]>([]);
 
@@ -541,6 +557,15 @@ function App() {
     document.title = title;
     document.querySelector("meta[name='description']")?.setAttribute("content", description);
   }, [language]);
+
+  useEffect(() => {
+    if (analyticsConsent !== "granted") return;
+    trackPageView(analyticsPath(activeTab), document.title);
+  }, [activeTab, analyticsConsent]);
+
+  useEffect(() => {
+    if (cartOpen) trackViewCart(cartItems.map((item) => analyticsItem(item.product, item.quantity)));
+  }, [cartOpen]);
 
   useEffect(() => {
     function handleShortcut(event: KeyboardEvent) {
@@ -835,6 +860,7 @@ function App() {
       }
       return [...current, { product, quantity: Math.min(maxQuantity, Math.max(1, quantity)) }];
     });
+    trackAddToCart(analyticsItem(product, quantity));
     playCartFlyAnimation(product, origin);
   }
 
@@ -956,6 +982,7 @@ function App() {
     setSelectedProduct(null);
     setCheckoutCartItems(null);
     setCheckoutItem(item);
+    trackBeginCheckout([analyticsItem(item.product, item.quantity)]);
   }
 
   function checkoutCartAll() {
@@ -964,6 +991,7 @@ function App() {
     setSelectedProduct(null);
     setCheckoutItem(null);
     setCheckoutCartItems(cartItems);
+    trackBeginCheckout(cartItems.map((item) => analyticsItem(item.product, item.quantity)));
   }
 
   function checkoutProduct(product: Product, quantity = 1) {
@@ -971,6 +999,7 @@ function App() {
     setCartOpen(false);
     setCheckoutCartItems(null);
     setCheckoutItem({ product, quantity });
+    trackBeginCheckout([analyticsItem(product, quantity)]);
   }
 
   async function createTopup(amount: number) {
@@ -985,8 +1014,10 @@ function App() {
 
   async function buyWithWallet(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
+    trackPaymentInfo("wallet", [analyticsItem(product, quantity)]);
     await runAction(`wallet:${product.id}`, async () => {
       const result = await api.post<WalletPurchaseResult>("/store/orders/wallet", { productId: product.id, quantity, voucherCode });
+      trackPurchaseOnce(result.payment?.code ?? result.order?.code ?? "", [analyticsItem(product, quantity)]);
       setDelivery({
         title: language === "vi" ? "Mua hàng thành công" : "Purchase completed",
         deliveryText: result.deliveryText,
@@ -1013,6 +1044,7 @@ function App() {
 
   async function buyWithBank(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
+    trackPaymentInfo("vietqr", [analyticsItem(product, quantity)]);
     await runAction(`bank:${product.id}`, async () => {
       const payment = await api.post<PaymentResult>("/store/orders/bank", { productId: product.id, quantity, voucherCode });
       const items = [{ product, quantity }];
@@ -1035,6 +1067,7 @@ function App() {
 
   async function buyWithUsdt(product: Product, quantity = 1, voucherCode?: string | null) {
     if (!requireLogin()) return;
+    trackPaymentInfo("usdt", [analyticsItem(product, quantity)]);
     await runAction(`usdt:${product.id}`, async () => {
       const payment = await api.post<PaymentResult>("/store/orders/usdt", { productId: product.id, quantity, voucherCode });
       const items = [{ product, quantity }];
@@ -1057,9 +1090,18 @@ function App() {
 
   async function buyCartWithWallet(items: CartItem[], voucherCode?: string | null) {
     if (!requireLogin()) return;
+    trackPaymentInfo("wallet", items.map((item) => analyticsItem(item.product, item.quantity)));
     const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
     await runAction("cart-wallet", async () => {
       const result = await api.post<CartPurchaseResult>("/store/cart/orders/wallet", { items: payloadItems, voucherCode });
+      trackPurchaseOnce(
+        result.payment?.code ?? result.order?.code ?? "",
+        result.orders.map((order) => ({
+          item_id: order.product.id ?? order.code,
+          item_name: order.product.name,
+          quantity: order.quantity
+        }))
+      );
       setDelivery({
         title: language === "vi" ? "Mua giỏ hàng thành công" : "Cart purchase completed",
         deliveryText: result.deliveryText,
@@ -1084,6 +1126,7 @@ function App() {
 
   async function buyCartWithBank(items: CartItem[], voucherCode?: string | null) {
     if (!requireLogin()) return;
+    trackPaymentInfo("vietqr", items.map((item) => analyticsItem(item.product, item.quantity)));
     const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
     await runAction("cart-bank", async () => {
       const payment = await api.post<PaymentResult>("/store/cart/orders/bank", { items: payloadItems, voucherCode });
@@ -1104,6 +1147,7 @@ function App() {
 
   async function buyCartWithUsdt(items: CartItem[], voucherCode?: string | null) {
     if (!requireLogin()) return;
+    trackPaymentInfo("usdt", items.map((item) => analyticsItem(item.product, item.quantity)));
     const payloadItems = items.map((item) => ({ productId: item.product.id, quantity: item.quantity }));
     await runAction("cart-usdt", async () => {
       const payment = await api.post<PaymentResult>("/store/cart/orders/usdt", { items: payloadItems, voucherCode });
@@ -1145,6 +1189,22 @@ function App() {
       }
 
       if (status.kind === "DIRECT_ORDER" && status.status === "SUCCEEDED" && status.order?.deliveryText) {
+        const purchasedItems = status.orders?.length
+          ? status.orders.map((order) => ({
+              item_id: order.product.id,
+              item_name: order.product.name,
+              quantity: order.quantity
+            }))
+          : status.order
+            ? [
+                {
+                  item_id: status.order.product.id,
+                  item_name: status.order.product.name,
+                  quantity: status.order.quantity
+                }
+              ]
+            : [];
+        trackPurchaseOnce(status.code, purchasedItems);
         clearPendingPayment(status.code, true);
         setQr(null);
         setDelivery({
@@ -1216,6 +1276,7 @@ function App() {
       const freshProduct = await api.get<Product>(`${token ? "/store/member/products" : "/store/products"}/${product.id}`);
       setSelectedQuantity(1);
       setSelectedProduct({ ...product, ...freshProduct, category: freshProduct.category ?? product.category });
+      trackViewItem(analyticsItem({ ...product, ...freshProduct, category: freshProduct.category ?? product.category }, 1));
       await loadPublicData();
     });
   }
@@ -1355,6 +1416,7 @@ function App() {
               if (cartItems.length) {
                 setCheckoutCartItems(cartItems);
                 setCartOpen(false);
+                trackBeginCheckout(cartItems.map((item) => analyticsItem(item.product, item.quantity)));
               } else {
                 navigateTab("products");
               }
@@ -1364,7 +1426,12 @@ function App() {
         </section>
       ) : null}
 
-      <Footer language={language} onTab={navigateTab} onSection={navigateHomeSection} />
+      <Footer
+        language={language}
+        onTab={navigateTab}
+        onSection={navigateHomeSection}
+        onAnalyticsPreferences={() => setConsentPreferencesOpen(true)}
+      />
 
       {commandOpen ? (
         <CommandPalette
@@ -1373,6 +1440,19 @@ function App() {
           onClose={() => setCommandOpen(false)}
           onOpenProduct={(product) => void openProduct(product)}
           onProducts={() => navigateTab("products")}
+        />
+      ) : null}
+
+      {analyticsAvailable() && (analyticsConsent === "unset" || consentPreferencesOpen) ? (
+        <AnalyticsConsentBanner
+          language={language}
+          preferences={consentPreferencesOpen}
+          onChoose={(choice) => {
+            updateAnalyticsConsent(choice);
+            setAnalyticsConsent(choice);
+            setConsentPreferencesOpen(false);
+          }}
+          onClose={() => setConsentPreferencesOpen(false)}
         />
       ) : null}
 
@@ -3896,7 +3976,17 @@ function VoucherTab({
   );
 }
 
-function Footer({ language, onTab, onSection }: { language: Language; onTab: (tab: Tab) => void; onSection: (sectionId: string) => void }) {
+function Footer({
+  language,
+  onTab,
+  onSection,
+  onAnalyticsPreferences
+}: {
+  language: Language;
+  onTab: (tab: Tab) => void;
+  onSection: (sectionId: string) => void;
+  onAnalyticsPreferences: () => void;
+}) {
   const vi = language === "vi";
   return (
     <footer className="site-footer">
@@ -3922,6 +4012,7 @@ function Footer({ language, onTab, onSection }: { language: Language; onTab: (ta
         <button onClick={() => onSection("faq")}>{vi ? "Hướng dẫn mua hàng" : "Buying guide"}</button>
         <button onClick={() => onSection("faq")}>{vi ? "Chính sách bảo hành" : "Warranty"}</button>
         <button onClick={() => onSection("faq")}>{vi ? "Chính sách hoàn tiền" : "Refund policy"}</button>
+        {analyticsAvailable() ? <button onClick={onAnalyticsPreferences}>{vi ? "Tùy chọn đo lường" : "Analytics preferences"}</button> : null}
       </div>
       <div>
         <h3>{vi ? "Thanh toán" : "Payment"}</h3>
@@ -3937,6 +4028,37 @@ function Footer({ language, onTab, onSection }: { language: Language; onTab: (ta
       </div>
       <small className="copyright">© 2026 VD AI Shop. All rights reserved.</small>
     </footer>
+  );
+}
+
+function AnalyticsConsentBanner({
+  language,
+  preferences,
+  onChoose,
+  onClose
+}: {
+  language: Language;
+  preferences: boolean;
+  onChoose: (choice: "granted" | "denied") => void;
+  onClose: () => void;
+}) {
+  const vi = language === "vi";
+  return (
+    <aside className="analytics-consent" role="dialog" aria-modal={preferences} aria-label={vi ? "Tùy chọn đo lường" : "Analytics preferences"}>
+      <div>
+        <strong>{vi ? "Giúp chúng tôi cải thiện trải nghiệm" : "Help us improve your experience"}</strong>
+        <p>
+          {vi
+            ? "Chúng tôi chỉ đo lượt xem và hành trình mua sắm, không gửi thông tin cá nhân hay dữ liệu thanh toán."
+            : "We only measure page views and shopping steps. Personal and payment information is never sent."}
+        </p>
+      </div>
+      <div className="analytics-consent-actions">
+        <button className="secondary-button" onClick={() => onChoose("denied")}>{vi ? "Từ chối" : "Decline"}</button>
+        <button className="primary-button" onClick={() => onChoose("granted")}>{vi ? "Đồng ý" : "Allow"}</button>
+        {preferences ? <button className="consent-close" onClick={onClose} aria-label={vi ? "Đóng" : "Close"}><X size={16} /></button> : null}
+      </div>
+    </aside>
   );
 }
 
@@ -4131,6 +4253,19 @@ function isAuthPath(pathname: string) {
 
 function currentStorePath() {
   return isAuthPath(window.location.pathname) ? "/" : window.location.pathname || "/";
+}
+
+function analyticsPath(tab: Tab) {
+  return tab === "home" ? "/" : `/?tab=${tab}`;
+}
+
+function analyticsItem(product: Product, quantity: number): AnalyticsItem {
+  return {
+    item_id: product.id,
+    item_name: product.name,
+    item_category: product.category?.name,
+    quantity: Math.max(1, quantity)
+  };
 }
 
 function isAuthError(error: unknown) {

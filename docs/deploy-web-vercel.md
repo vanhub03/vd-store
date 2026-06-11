@@ -17,7 +17,12 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
 
    ```env
    VITE_API_BASE_URL=https://api.vanhdao.io.vn
+   VITE_GA_MEASUREMENT_ID=G-CFYXXY4CYJ
    ```
+
+   The measurement ID is also compiled as a safe fallback because it is a public
+   website identifier, but keeping it in Vercel makes future property changes
+   explicit.
 
 5. Deploy.
    If you already created the project and Vercel still says `No Output Directory named "dist"`, go to Settings > Build and Development Settings and use one of these two configurations.

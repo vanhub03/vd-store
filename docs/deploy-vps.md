@@ -17,6 +17,39 @@ Storefront chay tren Vercel. API, admin static, Telegram bot, PostgreSQL va Redi
 Khong sua/xoa file `.env` tren VPS khi deploy code moi.
 PostgreSQL chi lang nghe local; khong mo cong 5432 ra Internet.
 
+## Google Analytics trong admin
+
+Storefront gui su kien vao measurement ID `G-CFYXXY4CYJ`. Admin doc bao cao
+property `249898520` qua Google Analytics Data API.
+
+1. Trong Google Cloud, bat `Google Analytics Data API`.
+2. Tao service account va tai JSON key.
+3. Trong GA4 Property > Quan ly quyen truy cap vao tai san, them email service
+   account voi quyen `Viewer`.
+4. Dat key tren VPS, khong dat trong repository:
+
+   ```bash
+   sudo install -d -m 700 /etc/vd-store
+   sudo install -m 600 google-analytics-service-account.json \
+     /etc/vd-store/google-analytics-service-account.json
+   ```
+
+5. Them vao `/opt/vd-store/.env`:
+
+   ```env
+   GA_PROPERTY_ID=249898520
+   GOOGLE_APPLICATION_CREDENTIALS=/etc/vd-store/google-analytics-service-account.json
+   ```
+
+6. Restart API:
+
+   ```bash
+   sudo systemctl restart vd-store-api
+   ```
+
+Neu key chua co, tab Phan tich hien huong dan cau hinh va cac luong khac van
+hoat dong binh thuong.
+
 ## Domain can tro ve VPS
 
 Giu storefront tren Vercel:

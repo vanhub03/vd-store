@@ -16,6 +16,7 @@ import { TelegramNotifyService } from "./domain/telegram-notify.service";
 import { PaymentService } from "./domain/payment.service";
 import { TaskService } from "./domain/task.service";
 import { BroadcastService } from "./domain/broadcast.service";
+import { AnalyticsService } from "./analytics/analytics.service";
 
 @Module({
   imports: [
@@ -34,7 +35,8 @@ import { BroadcastService } from "./domain/broadcast.service";
     TelegramNotifyService,
     PaymentService,
     TaskService,
-    BroadcastService
+    BroadcastService,
+    AnalyticsService
   ]
 })
 export class AppModule {}

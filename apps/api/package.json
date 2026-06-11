@@ -16,6 +16,7 @@
     "migration:import": "tsx prisma/migration-toolkit.ts import-json"
   },
   "dependencies": {
+    "@google-analytics/data": "^6.1.0",
     "@nestjs/common": "^11.1.24",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.24",

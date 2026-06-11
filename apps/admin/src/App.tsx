@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Ban, Bell, Boxes, CheckCircle2, Download, KeyRound, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, UserPlus, Users, Wallet, X } from "lucide-react";
+import { Activity, Ban, BarChart3, Bell, Boxes, CheckCircle2, Download, KeyRound, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, UserPlus, Users, Wallet, X } from "lucide-react";
 import { AdminSession, Api, formatVnd } from "./api";
 
-type Tab = "overview" | "products" | "users" | "collaborators" | "orders" | "vouchers" | "broadcasts";
+type Tab = "overview" | "analytics" | "products" | "users" | "collaborators" | "orders" | "vouchers" | "broadcasts";
 
 type RevenuePoint = { key: string; label: string; revenue: number; orders: number };
 type Dashboard = {
@@ -21,6 +21,32 @@ type Dashboard = {
   topWallets: Array<{ balance: number; user?: User }>;
   recentWalletEntries: Array<{ id: string; amount: number; type: string; note?: string; createdAt: string; user?: User }>;
   manualOrderAlerts: Order[];
+};
+type AnalyticsRange = "7d" | "30d" | "90d";
+type AnalyticsStatus = "ready" | "stale" | "not_configured" | "unavailable";
+type AnalyticsOverview = {
+  status: AnalyticsStatus;
+  range: AnalyticsRange;
+  generatedAt: string | null;
+  cached: boolean;
+  stale: boolean;
+  warning: string | null;
+  summary: { activeUsers: number; newUsers: number; sessions: number; views: number; engagementRate: number };
+  trend: Array<{ date: string; activeUsers: number; sessions: number; views: number }>;
+  sources: Array<{ name: string; sessions: number; users: number }>;
+  pages: Array<{ path: string; title: string; views: number; users: number }>;
+  products: Array<{ name: string; views: number; cartAdds: number; checkouts: number; purchases: number }>;
+  devices: Array<{ name: string; users: number }>;
+  countries: Array<{ name: string; users: number }>;
+  funnel: Array<{ key: string; label: string; count: number }>;
+};
+type AnalyticsRealtime = {
+  status: AnalyticsStatus;
+  generatedAt: string | null;
+  activeUsers: number;
+  cached: boolean;
+  stale: boolean;
+  warning: string | null;
 };
 type Category = { id: string; name: string; sortOrder?: number };
 type Product = {
@@ -204,6 +230,9 @@ export function App() {
           <NavButton active={tab === "overview"} onClick={() => setTab("overview")} icon={<ShoppingCart />}>
             Tổng quan
           </NavButton>
+          <NavButton active={tab === "analytics"} onClick={() => setTab("analytics")} icon={<BarChart3 />}>
+            Phân tích
+          </NavButton>
           <NavButton active={tab === "products"} onClick={() => setTab("products")} icon={<Boxes />}>
             Sản phẩm
           </NavButton>
@@ -247,6 +276,7 @@ export function App() {
         </header>
         {error && <div className="alert">{error}</div>}
         {tab === "overview" && <Overview api={api} onError={setError} />}
+        {tab === "analytics" && <AnalyticsView api={api} onError={setError} />}
         {tab === "products" && <Products api={api} onError={setError} />}
         {tab === "users" && <UsersView api={api} onError={setError} />}
         {tab === "collaborators" && <CollaboratorsView api={api} onError={setError} />}
@@ -362,6 +392,241 @@ function Overview({ api, onError }: { api: Api; onError: (error: string | null) 
         <Metric label="Đơn hàng" value={dashboard?.orders ?? 0} />
       </section>
     </div>
+  );
+}
+
+function AnalyticsView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
+  const [range, setRange] = useState<AnalyticsRange>("30d");
+  const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
+  const [realtime, setRealtime] = useState<AnalyticsRealtime | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  async function loadOverview(nextRange = range) {
+    setLoading(true);
+    try {
+      const value = await api.get<AnalyticsOverview>(`/admin/analytics/overview?range=${nextRange}`);
+      setOverview(value);
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadRealtime() {
+    try {
+      setRealtime(await api.get<AnalyticsRealtime>("/admin/analytics/realtime"));
+    } catch {
+      // Realtime is supplementary and must not interrupt the rest of the admin.
+    }
+  }
+
+  useEffect(() => {
+    void loadOverview(range);
+  }, [api, range]);
+
+  useEffect(() => {
+    void loadRealtime();
+    const timer = window.setInterval(() => void loadRealtime(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [api]);
+
+  const status = overview?.status;
+  const configured = status !== "not_configured";
+  const hasData = Boolean(overview?.trend.length || overview?.summary.views);
+
+  return (
+    <div className="stack analyticsView">
+      <section className="panel analyticsToolbar">
+        <div>
+          <h2>Lưu lượng website</h2>
+          <p>Dữ liệu từ Google Analytics, tách biệt với doanh thu và đơn hàng nội bộ.</p>
+        </div>
+        <div className="analyticsRange" aria-label="Khoảng thời gian">
+          {(["7d", "30d", "90d"] as AnalyticsRange[]).map((value) => (
+            <button className={range === value ? "active" : ""} key={value} onClick={() => setRange(value)}>
+              {value === "7d" ? "7 ngày" : value === "30d" ? "30 ngày" : "90 ngày"}
+            </button>
+          ))}
+          <button className="analyticsRefresh" onClick={() => void loadOverview()} disabled={loading} title="Làm mới">
+            <RefreshCw className={loading ? "spin" : ""} size={16} />
+          </button>
+        </div>
+      </section>
+
+      {status === "not_configured" ? (
+        <section className="panel analyticsState">
+          <BarChart3 size={26} />
+          <div>
+            <h2>Chưa kết nối báo cáo Google Analytics</h2>
+            <p>Website vẫn hoạt động bình thường. Hãy cấu hình tài khoản dịch vụ trên VPS để mở báo cáo tại đây.</p>
+          </div>
+        </section>
+      ) : null}
+
+      {overview?.warning ? (
+        <div className="analyticsWarning">
+          {overview.stale ? "Đang hiển thị dữ liệu gần nhất đã lưu. " : ""}
+          {overview.warning}
+        </div>
+      ) : null}
+
+      {loading && !overview ? <AnalyticsSkeleton /> : null}
+
+      {configured && overview ? (
+        <>
+          <section className="metricsGrid analyticsMetrics">
+            <div className="metric realtimeMetric">
+              <span><Activity size={15} /> Đang truy cập</span>
+              <strong>{realtime?.activeUsers ?? 0}</strong>
+              <small>Trong 30 phút gần nhất</small>
+            </div>
+            <Metric label="Người dùng" value={overview.summary.activeUsers.toLocaleString("vi-VN")} />
+            <Metric label="Người dùng mới" value={overview.summary.newUsers.toLocaleString("vi-VN")} />
+            <Metric label="Phiên truy cập" value={overview.summary.sessions.toLocaleString("vi-VN")} />
+            <Metric label="Lượt xem" value={overview.summary.views.toLocaleString("vi-VN")} />
+            <Metric label="Tỷ lệ tương tác" value={`${(overview.summary.engagementRate * 100).toFixed(1)}%`} />
+          </section>
+
+          {!hasData && overview.status === "ready" ? (
+            <section className="panel analyticsState">
+              <BarChart3 size={26} />
+              <div>
+                <h2>Chưa có dữ liệu trong khoảng thời gian này</h2>
+                <p>Dữ liệu mới có thể cần vài giờ để xuất hiện trong báo cáo tiêu chuẩn.</p>
+              </div>
+            </section>
+          ) : null}
+
+          <section className="dashboardGrid analyticsPrimaryGrid">
+            <AnalyticsTrend points={overview.trend} />
+            <AnalyticsFunnel steps={overview.funnel} />
+          </section>
+
+          <section className="dashboardGrid">
+            <AnalyticsTable
+              title="Nguồn truy cập"
+              columns={["Kênh", "Phiên", "Người dùng"]}
+              rows={overview.sources.map((item) => [item.name, item.sessions, item.users])}
+            />
+            <AnalyticsTable
+              title="Trang phổ biến"
+              columns={["Trang", "Lượt xem", "Người dùng"]}
+              rows={overview.pages.map((item) => [item.title || item.path, item.views, item.users])}
+            />
+          </section>
+
+          <AnalyticsTable
+            title="Sản phẩm được quan tâm"
+            columns={["Sản phẩm", "Lượt xem", "Thêm giỏ", "Checkout", "Mua thành công"]}
+            rows={overview.products.map((item) => [item.name, item.views, item.cartAdds, item.checkouts, item.purchases])}
+          />
+
+          <section className="dashboardGrid">
+            <AnalyticsTable
+              title="Thiết bị"
+              columns={["Loại thiết bị", "Người dùng"]}
+              rows={overview.devices.map((item) => [translateDevice(item.name), item.users])}
+            />
+            <AnalyticsTable
+              title="Quốc gia"
+              columns={["Quốc gia", "Người dùng"]}
+              rows={overview.countries.map((item) => [item.name, item.users])}
+            />
+          </section>
+
+          <p className="analyticsUpdated">
+            {overview.generatedAt ? `Cập nhật ${new Date(overview.generatedAt).toLocaleString("vi-VN")}` : ""}
+            {overview.cached ? " · dữ liệu lưu tạm" : ""}
+          </p>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function AnalyticsSkeleton() {
+  return (
+    <>
+      <section className="metricsGrid">
+        {Array.from({ length: 6 }).map((_, index) => <div className="metric analyticsSkeleton" key={index} />)}
+      </section>
+      <section className="dashboardGrid">
+        <div className="panel analyticsSkeleton analyticsSkeletonLarge" />
+        <div className="panel analyticsSkeleton analyticsSkeletonLarge" />
+      </section>
+    </>
+  );
+}
+
+function AnalyticsTrend({ points }: { points: AnalyticsOverview["trend"] }) {
+  const max = Math.max(...points.map((point) => point.views), 1);
+  return (
+    <section className="panel chartPanel analyticsTrendPanel">
+      <div className="panelHeader">
+        <h2>Lưu lượng theo ngày</h2>
+        <span>Cột: lượt xem · chấm: người dùng</span>
+      </div>
+      <div className="analyticsTrend">
+        {points.map((point) => (
+          <div className="analyticsTrendItem" key={point.date} title={`${formatAnalyticsDate(point.date)}: ${point.views} lượt xem, ${point.activeUsers} người dùng`}>
+            <div className="analyticsTrendPlot">
+              <span className="analyticsTrendUsers" style={{ bottom: `${Math.max(3, (point.activeUsers / max) * 100)}%` }} />
+              <i style={{ height: `${Math.max(3, (point.views / max) * 100)}%` }} />
+            </div>
+            <small>{formatAnalyticsDate(point.date, true)}</small>
+          </div>
+        ))}
+        {!points.length ? <p className="emptyText">Chưa có dữ liệu.</p> : null}
+      </div>
+    </section>
+  );
+}
+
+function AnalyticsFunnel({ steps }: { steps: AnalyticsOverview["funnel"] }) {
+  const max = Math.max(steps[0]?.count ?? 0, ...steps.map((step) => step.count), 1);
+  return (
+    <section className="panel analyticsFunnelPanel">
+      <h2>Phễu mua hàng</h2>
+      <div className="analyticsFunnel">
+        {steps.map((step, index) => {
+          const previous = index > 0 ? steps[index - 1].count : step.count;
+          const conversion = previous > 0 ? (step.count / previous) * 100 : 0;
+          return (
+            <div className="analyticsFunnelRow" key={step.key}>
+              <div>
+                <span>{step.label}</span>
+                <b>{step.count.toLocaleString("vi-VN")}</b>
+              </div>
+              <div className="analyticsFunnelTrack"><i style={{ width: `${Math.max(step.count ? 5 : 0, (step.count / max) * 100)}%` }} /></div>
+              {index > 0 ? <small>{conversion.toFixed(1)}% từ bước trước</small> : <small>Điểm bắt đầu</small>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function AnalyticsTable({ title, columns, rows }: { title: string; columns: string[]; rows: Array<Array<string | number>> }) {
+  return (
+    <section className="panel analyticsTable">
+      <h2>{title}</h2>
+      <div className="tableWrap">
+        <table>
+          <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`${row[0]}-${rowIndex}`}>
+                {row.map((cell, cellIndex) => <td key={`${cellIndex}-${cell}`}>{typeof cell === "number" ? cell.toLocaleString("vi-VN") : cell}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!rows.length ? <p className="emptyText">Chưa có dữ liệu.</p> : null}
+    </section>
   );
 }
 
@@ -1826,6 +2091,7 @@ function DataTable({ title, columns, rows }: { title?: string; columns: string[]
 function tabTitle(tab: Tab) {
   const titles: Record<string, string> = {
     overview: "Tổng quan",
+    analytics: "Phân tích lưu lượng",
     products: "Sản phẩm",
     users: "User Telegram",
     collaborators: "Cộng tác viên",
@@ -1833,6 +2099,19 @@ function tabTitle(tab: Tab) {
     broadcasts: "Thông báo bot"
   };
   return titles[tab] ?? "Voucher";
+}
+
+function formatAnalyticsDate(value: string, compact = false) {
+  if (!/^\d{8}$/.test(value)) return value;
+  const date = new Date(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T00:00:00`);
+  return date.toLocaleDateString("vi-VN", compact ? { day: "2-digit", month: "2-digit" } : undefined);
+}
+
+function translateDevice(value: string) {
+  if (value === "desktop") return "Máy tính";
+  if (value === "mobile") return "Điện thoại";
+  if (value === "tablet") return "Máy tính bảng";
+  return value;
 }
 
 function csvCell(value: string | number) {

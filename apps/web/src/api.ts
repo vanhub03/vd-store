@@ -124,7 +124,12 @@ export type WalletPurchaseResult = {
   deliveryText: string;
   balanceAfter: number;
   voucher?: VoucherPreview | null;
+  payment?: {
+    id: string;
+    code: string;
+  };
   order?: {
+    id?: string;
     code: string;
     status?: string;
     quantity: number;
@@ -174,6 +179,14 @@ export type PaymentStatusResult = {
     deliveryText?: string | null;
     product: { id: string; name: string; deliveryType: Product["deliveryType"] };
   } | null;
+  orders?: Array<{
+    id?: string;
+    code: string;
+    status: string;
+    quantity: number;
+    totalAmount: number;
+    product: { id: string; name: string; deliveryType: Product["deliveryType"] };
+  }>;
 };
 
 export type History = {

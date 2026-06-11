@@ -5,6 +5,7 @@ import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
 import { ShopService, slugify } from "../domain/shop.service";
 import { PrismaService } from "../prisma.service";
+import { AnalyticsService } from "../analytics/analytics.service";
 
 class CategoryDto {
   @IsString()
@@ -232,7 +233,8 @@ export class AdminController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly shop: ShopService,
-    private readonly broadcasts: BroadcastService
+    private readonly broadcasts: BroadcastService,
+    private readonly analytics: AnalyticsService
   ) {}
 
   @Get("stats")
@@ -243,6 +245,16 @@ export class AdminController {
   @Get("dashboard")
   dashboard() {
     return this.shop.getDashboard();
+  }
+
+  @Get("analytics/overview")
+  analyticsOverview(@Query("range") range?: string) {
+    return this.analytics.overview(range);
+  }
+
+  @Get("analytics/realtime")
+  analyticsRealtime() {
+    return this.analytics.realtime();
   }
 
   @Get("users")

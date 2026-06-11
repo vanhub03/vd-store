@@ -353,6 +353,251 @@ button:disabled {
   white-space: nowrap;
 }
 
+.analyticsToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.analyticsToolbar h2 {
+  margin-bottom: 5px;
+}
+
+.analyticsToolbar p,
+.analyticsUpdated {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.analyticsRange {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.analyticsRange button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.analyticsRange button.active {
+  background: #0f766e;
+  color: #fff;
+}
+
+.analyticsRange .analyticsRefresh {
+  width: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-left: 1px solid #d8dee7;
+  border-radius: 0 6px 6px 0;
+}
+
+.analyticsWarning,
+.analyticsState {
+  border: 1px solid #e5c987;
+  background: #fffaf0;
+  color: #854d0e;
+}
+
+.analyticsWarning {
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.analyticsState {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.analyticsState h2,
+.analyticsState p {
+  margin: 0;
+}
+
+.analyticsState p {
+  margin-top: 5px;
+  color: #64748b;
+}
+
+.analyticsMetrics .metric {
+  min-height: 126px;
+}
+
+.realtimeMetric {
+  border-color: #99d5cd;
+  background: #edf9f7;
+}
+
+.realtimeMetric span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #0f766e;
+}
+
+.realtimeMetric small {
+  display: block;
+  margin-top: 8px;
+  color: #64748b;
+}
+
+.analyticsTrend {
+  height: 280px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(24px, 1fr);
+  align-items: end;
+  gap: 5px;
+  overflow-x: auto;
+  padding-top: 18px;
+}
+
+.analyticsTrendItem {
+  min-width: 24px;
+  display: grid;
+  grid-template-rows: 230px 20px;
+  gap: 7px;
+}
+
+.analyticsTrendPlot {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  height: 230px;
+  overflow: hidden;
+  border-bottom: 1px solid #d8dee7;
+}
+
+.analyticsTrendPlot i {
+  width: 100%;
+  min-height: 3px;
+  display: block;
+  border-radius: 5px 5px 0 0;
+  background: #0f766e;
+}
+
+.analyticsTrendUsers {
+  position: absolute;
+  left: 50%;
+  z-index: 1;
+  width: 6px;
+  height: 6px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+  transform: translate(-50%, 50%);
+}
+
+.analyticsTrendItem small {
+  color: #64748b;
+  font-size: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.analyticsFunnel {
+  display: grid;
+  gap: 18px;
+}
+
+.analyticsFunnelRow {
+  display: grid;
+  gap: 7px;
+}
+
+.analyticsFunnelRow > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analyticsFunnelRow span {
+  color: #475569;
+  font-weight: 700;
+}
+
+.analyticsFunnelRow b {
+  font-size: 18px;
+}
+
+.analyticsFunnelRow small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.analyticsFunnelTrack {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #e8edf3;
+}
+
+.analyticsFunnelTrack i {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: #0f766e;
+}
+
+.analyticsTable {
+  min-width: 0;
+}
+
+.analyticsTable td:first-child {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analyticsSkeleton {
+  position: relative;
+  min-height: 126px;
+  overflow: hidden;
+  background: #eef2f7;
+}
+
+.analyticsSkeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #e2e8f0;
+  opacity: 0.55;
+  animation: analytics-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.analyticsSkeletonLarge {
+  min-height: 330px;
+}
+
+@keyframes analytics-pulse {
+  to {
+    opacity: 0.2;
+  }
+}
+
+.analyticsUpdated {
+  text-align: right;
+}
+
 .walletList {
   display: grid;
   gap: 10px;
@@ -756,5 +1001,18 @@ th {
   .promotionRow,
   .collaboratorFilters {
     grid-template-columns: 1fr;
+  }
+
+  .analyticsToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analyticsRange {
+    width: 100%;
+  }
+
+  .analyticsRange button:not(.analyticsRefresh) {
+    flex: 1;
   }
 }
