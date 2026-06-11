@@ -101,6 +101,10 @@ type PricingSummary = {
   collaboratorDiscountAmount: number;
   collaboratorSubtotal: number;
 };
+type ListOptions = {
+  take?: number | string;
+  skip?: number | string;
+};
 
 const ORDER_TRANSACTION_OPTIONS = {
   isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -110,10 +114,40 @@ const ORDER_TRANSACTION_OPTIONS = {
 const FIRST_ORDER_VOUCHER_CODE = "FIRST20";
 const FIRST_ORDER_VOUCHER_DAYS = 30;
 const VOUCHER_CODE_PATTERN = /^[A-Z0-9_-]{3,32}$/;
+const catalogProductSelect = {
+  id: true,
+  categoryId: true,
+  name: true,
+  nameEn: true,
+  slug: true,
+  description: true,
+  descriptionEn: true,
+  imageUrl: true,
+  buttonIcon: true,
+  price: true,
+  botPrice: true,
+  webPrice: true,
+  usdtPrice: true,
+  collaboratorDiscountPercent: true,
+  showInBot: true,
+  showInWeb: true,
+  status: true,
+  deliveryType: true,
+  manualStock: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: {
+    select: {
+      inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
+    }
+  }
+} satisfies Prisma.ProductSelect;
 
 @Injectable()
 export class ShopService {
   private readonly logger = new Logger(ShopService.name);
+  private readonly catalogCacheTtlMs = Number(process.env.CATALOG_CACHE_TTL_MS ?? 15_000);
+  private readonly catalogCache = new Map<string, { expiresAt: number; value: unknown }>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -142,6 +176,10 @@ export class ShopService {
   }
 
   async getCatalog(channel: SalesChannel = "bot", customerRole: CustomerRole = CustomerRole.CUSTOMER) {
+    const cacheKey = `${channel}:${customerRole}`;
+    const cached = this.catalogCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+
     const loadCatalog = async () => {
       const categories = await this.prisma.category.findMany({
         where: { active: true },
@@ -150,13 +188,7 @@ export class ShopService {
           products: {
             where: productVisibilityWhere(channel),
             orderBy: { createdAt: "desc" },
-            include: {
-              _count: {
-                select: {
-                  inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
-                }
-              }
-            }
+            select: catalogProductSelect
           }
         }
       });
@@ -164,13 +196,7 @@ export class ShopService {
       const uncategorized = await this.prisma.product.findMany({
         where: { categoryId: null, ...productVisibilityWhere(channel) },
         orderBy: { createdAt: "desc" },
-        include: {
-          _count: {
-            select: {
-              inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
-            }
-          }
-        }
+        select: catalogProductSelect
       });
 
       return {
@@ -181,19 +207,23 @@ export class ShopService {
         uncategorized: uncategorized.map((product) => applyChannelPrice(product, channel, customerRole))
       };
     };
-    return typeof this.prisma.withConnectionRetry === "function" ? this.prisma.withConnectionRetry(loadCatalog, `getCatalog:${channel}`) : loadCatalog();
+    const value = await (typeof this.prisma.withConnectionRetry === "function" ? this.prisma.withConnectionRetry(loadCatalog, `getCatalog:${channel}`) : loadCatalog());
+    if (this.catalogCacheTtlMs > 0) {
+      this.catalogCache.set(cacheKey, { expiresAt: Date.now() + this.catalogCacheTtlMs, value });
+    }
+    return value;
+  }
+
+  clearCatalogCache() {
+    this.catalogCache.clear();
   }
 
   async getProduct(productId: string, channel: SalesChannel = "bot", customerRole: CustomerRole = CustomerRole.CUSTOMER) {
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
-      include: {
+      select: {
+        ...catalogProductSelect,
         category: true,
-        _count: {
-          select: {
-            inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
-          }
-        }
       }
     });
     if (!product || !isVisibleForChannel(product, channel)) {
@@ -214,6 +244,16 @@ export class ShopService {
       _sum: { amount: true }
     });
     return aggregate._sum.amount ?? 0;
+  }
+
+  private async getWalletBalances(userIds: string[]) {
+    if (!userIds.length) return new Map<string, number>();
+    const groups = await this.prisma.walletLedgerEntry.groupBy({
+      by: ["userId"],
+      where: { userId: { in: userIds } },
+      _sum: { amount: true }
+    });
+    return new Map(groups.map((group) => [group.userId, group._sum.amount ?? 0]));
   }
 
   async createTopup(telegramId: string, amount: number) {
@@ -1083,13 +1123,15 @@ export class ShopService {
     });
   }
 
-  async listAdminUsers() {
+  async listAdminUsers(options: ListOptions = {}) {
+    const pagination = normalizeListOptions(options);
     const users = await this.prisma.telegramUser.findMany({
       orderBy: { createdAt: "desc" },
-      take: 200
+      take: pagination.take,
+      skip: pagination.skip
     });
-    const balances = await Promise.all(users.map((user) => this.getWalletBalance(user.id)));
-    return users.map((user, index) => ({ ...user, passwordHash: undefined, balance: balances[index] }));
+    const balances = await this.getWalletBalances(users.map((user) => user.id));
+    return users.map((user) => ({ ...user, passwordHash: undefined, balance: balances.get(user.id) ?? 0 }));
   }
 
   async listCollaborators(filters?: { search?: string; status?: string; createdFrom?: string; createdTo?: string }) {
@@ -1121,8 +1163,8 @@ export class ShopService {
         }
       }
     });
-    const balances = await Promise.all(users.map((user) => this.getWalletBalance(user.id)));
-    return users.map((user, index) => ({ ...user, passwordHash: undefined, balance: balances[index] }));
+    const balances = await this.getWalletBalances(users.map((user) => user.id));
+    return users.map((user) => ({ ...user, passwordHash: undefined, balance: balances.get(user.id) ?? 0 }));
   }
 
   async getCollaboratorReport() {
@@ -1256,9 +1298,12 @@ export class ShopService {
     }, ORDER_TRANSACTION_OPTIONS);
   }
 
-  async listProducts() {
+  async listProducts(options: ListOptions = {}) {
+    const pagination = normalizeListOptions(options);
     return this.prisma.product.findMany({
       orderBy: { createdAt: "desc" },
+      take: pagination.take,
+      skip: pagination.skip,
       include: {
         category: true,
         _count: {
@@ -1286,6 +1331,7 @@ export class ShopService {
       } as Prisma.ProductUncheckedCreateInput
     });
     await this.audit(adminId, "PRODUCT_CREATE", "Product", product.id, { name: product.name });
+    this.clearCatalogCache();
     await this.announceNewProductIfReady(product, adminId);
     return product;
   }
@@ -1308,6 +1354,7 @@ export class ShopService {
       }
     });
     await this.audit(adminId, "PRODUCT_UPDATE", "Product", product.id, input);
+    this.clearCatalogCache();
     await this.announceManualStockIncrease(previous, product, adminId);
     return product;
   }
@@ -1324,14 +1371,17 @@ export class ShopService {
       skipDuplicates: false
     });
     await this.audit(adminId, "INVENTORY_IMPORT", "Product", productId, { count: result.count });
+    this.clearCatalogCache();
     await this.announceStockItemIncrease(product, result.count, adminId);
     return result;
   }
 
-  async listVouchers() {
+  async listVouchers(options: ListOptions = {}) {
+    const pagination = normalizeListOptions(options);
     return this.prisma.voucher.findMany({
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: pagination.take,
+      skip: pagination.skip,
       include: {
         createdBy: { select: { id: true, email: true, name: true } },
         _count: { select: { redemptions: true, assignments: true } }
@@ -1532,10 +1582,12 @@ export class ShopService {
     );
   }
 
-  async listOrders() {
+  async listOrders(options: ListOptions = {}) {
+    const pagination = normalizeListOptions(options);
     return this.prisma.order.findMany({
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: pagination.take,
+      skip: pagination.skip,
       include: { user: true, product: true, payments: true, voucher: true }
     });
   }
@@ -1564,10 +1616,12 @@ export class ShopService {
     return updated;
   }
 
-  async listPayments() {
+  async listPayments(options: ListOptions = {}) {
+    const pagination = normalizeListOptions(options);
     return this.prisma.payment.findMany({
       orderBy: { createdAt: "desc" },
-      take: 200,
+      take: pagination.take,
+      skip: pagination.skip,
       include: { user: true, order: { include: { product: true } }, bankTransactions: true }
     });
   }
@@ -2078,6 +2132,7 @@ export class ShopService {
       if (updated.count !== 1) {
         throw new BadRequestException("San pham da het hang.");
       }
+      this.clearCatalogCache();
       return product.manualInstructions || defaultManualInstructions();
     }
 
@@ -2110,6 +2165,7 @@ export class ShopService {
       throw new BadRequestException("Tồn kho vừa thay đổi, vui lòng thử lại.");
     }
 
+    this.clearCatalogCache();
     return items.map((item) => item.content).join("\n");
   }
 
@@ -2507,6 +2563,12 @@ function normalizeCartItems(items: CartOrderItemInput[]) {
     quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
   }
   return [...quantities.entries()].map(([productId, quantity]) => ({ productId, quantity }));
+}
+
+function normalizeListOptions(options: ListOptions) {
+  const take = Math.min(500, Math.max(1, Number(options.take ?? 200) || 200));
+  const skip = Math.max(0, Number(options.skip ?? 0) || 0);
+  return { take, skip };
 }
 
 function allocateCartQuote<T extends { subtotalAmount: number }>(lines: T[], quote: VoucherQuote) {

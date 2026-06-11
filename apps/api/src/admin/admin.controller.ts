@@ -246,8 +246,8 @@ export class AdminController {
   }
 
   @Get("users")
-  users() {
-    return this.shop.listAdminUsers();
+  users(@Query("take") take?: string, @Query("skip") skip?: string) {
+    return this.shop.listAdminUsers({ take, skip });
   }
 
   @Get("collaborators")
@@ -303,12 +303,13 @@ export class AdminController {
         meta: { name: category.name }
       }
     });
+    this.shop.clearCatalogCache();
     return category;
   }
 
   @Get("products")
-  products() {
-    return this.shop.listProducts();
+  products(@Query("take") take?: string, @Query("skip") skip?: string) {
+    return this.shop.listProducts({ take, skip });
   }
 
   @Post("products")
@@ -332,8 +333,8 @@ export class AdminController {
   }
 
   @Get("orders")
-  orders() {
-    return this.shop.listOrders();
+  orders(@Query("take") take?: string, @Query("skip") skip?: string) {
+    return this.shop.listOrders({ take, skip });
   }
 
   @Post("orders/:id/manual-status")
@@ -342,13 +343,13 @@ export class AdminController {
   }
 
   @Get("payments")
-  payments() {
-    return this.shop.listPayments();
+  payments(@Query("take") take?: string, @Query("skip") skip?: string) {
+    return this.shop.listPayments({ take, skip });
   }
 
   @Get("vouchers")
-  vouchers() {
-    return this.shop.listVouchers();
+  vouchers(@Query("take") take?: string, @Query("skip") skip?: string) {
+    return this.shop.listVouchers({ take, skip });
   }
 
   @Post("vouchers")

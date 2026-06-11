@@ -120,6 +120,8 @@ model TelegramUser {
   voucherAssignments  VoucherAssignment[]
 
   @@index([role, isBlocked])
+  @@index([isBlocked, createdAt])
+  @@index([createdAt])
 }
 
 model Admin {
@@ -147,6 +149,8 @@ model Category {
   updatedAt DateTime @updatedAt
 
   products Product[]
+
+  @@index([active, sortOrder, name])
 }
 
 model Product {
@@ -182,6 +186,9 @@ model Product {
 
   @@index([categoryId])
   @@index([status])
+  @@index([status, showInWeb, categoryId, createdAt])
+  @@index([status, showInBot, categoryId, createdAt])
+  @@index([createdAt])
 }
 
 model ProductReview {
@@ -257,6 +264,8 @@ model Order {
   @@index([voucherId])
   @@index([checkoutGroupId])
   @@index([customerRoleSnapshot, createdAt])
+  @@index([status, createdAt])
+  @@index([paymentMethod, createdAt])
 }
 
 model Voucher {
@@ -300,6 +309,7 @@ model VoucherAssignment {
 
   @@unique([voucherId, userId])
   @@index([userId, createdAt])
+  @@index([userId, revokedAt, usedAt, createdAt])
   @@index([voucherId, createdAt])
   @@index([voucherId, revokedAt, usedAt])
 }
@@ -359,6 +369,9 @@ model Payment {
   @@index([status, expiresAt])
   @@index([userId, createdAt])
   @@index([orderId])
+  @@index([provider, providerPaymentId])
+  @@index([provider, status])
+  @@index([createdAt])
 }
 
 model WalletLedgerEntry {
@@ -378,6 +391,7 @@ model WalletLedgerEntry {
   @@index([userId, createdAt])
   @@index([referencePaymentId])
   @@index([referenceOrderId])
+  @@index([createdAt])
 }
 
 model BankTransaction {
@@ -402,6 +416,7 @@ model BankTransaction {
 
   @@index([code])
   @@index([paymentId])
+  @@index([provider, transactionDate])
 }
 
 model Broadcast {
@@ -418,6 +433,8 @@ model Broadcast {
 
   createdBy  Admin?              @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
   deliveries BroadcastDelivery[]
+
+  @@index([status, createdAt])
 }
 
 model BroadcastDelivery {
@@ -449,4 +466,5 @@ model AuditLog {
 
   @@index([actorAdminId, createdAt])
   @@index([entityType, entityId])
+  @@index([createdAt])
 }

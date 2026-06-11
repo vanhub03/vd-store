@@ -9,7 +9,11 @@
     "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "tsx prisma/seed.ts"
+    "prisma:seed": "tsx prisma/seed.ts",
+    "migration:discover": "tsx prisma/migration-toolkit.ts discover",
+    "migration:snapshot": "tsx prisma/migration-toolkit.ts snapshot",
+    "migration:reconcile": "tsx prisma/migration-toolkit.ts reconcile",
+    "migration:import": "tsx prisma/migration-toolkit.ts import-json"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.24",

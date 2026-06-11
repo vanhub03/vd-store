@@ -62,27 +62,35 @@ describe("ShopService", () => {
         products: {
           where: { status: ProductStatus.ACTIVE, showInWeb: true },
           orderBy: { createdAt: "desc" },
-          include: {
+          select: expect.objectContaining({
             _count: {
               select: {
                 inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
               }
             }
-          }
+          })
         }
       }
     });
     expect(prisma.product.findMany).toHaveBeenCalledWith({
       where: { categoryId: null, status: ProductStatus.ACTIVE, showInWeb: true },
       orderBy: { createdAt: "desc" },
-      include: {
+      select: expect.objectContaining({
         _count: {
           select: {
             inventoryItems: { where: { status: InventoryStatus.AVAILABLE } }
           }
         }
-      }
+      })
     });
+    const categoryProductSelect = prisma.category.findMany.mock.calls[0][0].include.products.select;
+    const uncategorizedSelect = prisma.product.findMany.mock.calls[0][0].select;
+    expect(categoryProductSelect).not.toHaveProperty("sharedContent");
+    expect(categoryProductSelect).not.toHaveProperty("sharedFilePath");
+    expect(categoryProductSelect).not.toHaveProperty("manualInstructions");
+    expect(uncategorizedSelect).not.toHaveProperty("sharedContent");
+    expect(uncategorizedSelect).not.toHaveProperty("sharedFilePath");
+    expect(uncategorizedSelect).not.toHaveProperty("manualInstructions");
     expect(catalog.categories[0].products[0].price).toBe(12000);
     expect(catalog.uncategorized[0].price).toBe(18000);
   });
