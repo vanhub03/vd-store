@@ -104,9 +104,15 @@ function ensureAnalyticsLoaded(): Promise<boolean> {
 
   loadPromise = new Promise<boolean>((resolve) => {
     window.dataLayer = window.dataLayer ?? [];
-    window.gtag = (...args: unknown[]) => {
-      window.dataLayer?.push(args);
+    window.gtag = function (..._args: unknown[]) {
+      window.dataLayer?.push(arguments);
     };
+    window.gtag("consent", "update", {
+      analytics_storage: "granted",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied"
+    });
     window.gtag("js", new Date());
     window.gtag("config", MEASUREMENT_ID, {
       send_page_view: false,
