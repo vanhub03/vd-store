@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://www.vanhdao.io.vn/sitemap.xml
+Host: www.vanhdao.io.vn

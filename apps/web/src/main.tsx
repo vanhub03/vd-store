@@ -546,8 +546,8 @@ function App() {
   useEffect(() => {
     const title =
       language === "vi"
-        ? "VD AI Shop - Tài khoản AI, premium account và phần mềm"
-        : "VD AI Shop - AI accounts, premium software and digital services";
+        ? "Vanhdao.io.vn | VD AI Shop - Tài khoản AI và phần mềm"
+        : "Vanhdao.io.vn | VD AI Shop - AI accounts and premium software";
     const description =
       language === "vi"
         ? "Mua ChatGPT Plus, Claude Pro, Gemini Advanced, Canva Pro, Adobe, YouTube Premium và dịch vụ số. Thanh toán VietQR, ví nội bộ hoặc USDT."
