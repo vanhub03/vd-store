@@ -2807,7 +2807,10 @@ function CheckoutDialog({
   const vi = language === "vi";
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [method, setMethod] = useState<PayMethod>(language === "en" && item.product.usdtPrice ? "usdt" : "bank");
-  const [coupon, setCoupon] = useState(initialVoucherCode || (customer?.role === "CUSTOMER" ? "FIRST20" : ""));
+  const availableFirstOrderVoucher = vouchers.find(
+    (voucher) => voucher.status === "AVAILABLE" && voucher.code.toUpperCase() === "FIRST20"
+  );
+  const [coupon, setCoupon] = useState(initialVoucherCode || availableFirstOrderVoucher?.code || "");
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
@@ -2866,7 +2869,7 @@ function CheckoutDialog({
       setCouponMessage(vi ? "Vui lòng nhập email nhận hàng trước khi thanh toán." : "Please enter a delivery email before checkout.");
       return;
     }
-    if (coupon.trim() && !voucherPreview && coupon.trim().toUpperCase() !== "FIRST20") {
+    if (coupon.trim() && !voucherPreview) {
       setCouponMessage(vi ? "Vui lòng áp dụng mã ưu đãi trước khi thanh toán." : "Apply the promo code before checkout.");
       return;
     }
@@ -3116,7 +3119,10 @@ function CartCheckoutDialog({
   const copy = TEXT[language];
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
   const [method, setMethod] = useState<PayMethod>("bank");
-  const [coupon, setCoupon] = useState(initialVoucherCode || (customer?.role === "CUSTOMER" ? "FIRST20" : ""));
+  const availableFirstOrderVoucher = vouchers.find(
+    (voucher) => voucher.status === "AVAILABLE" && voucher.code.toUpperCase() === "FIRST20"
+  );
+  const [coupon, setCoupon] = useState(initialVoucherCode || availableFirstOrderVoucher?.code || "");
   const [couponMessage, setCouponMessage] = useState("");
   const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
   const [voucherLoading, setVoucherLoading] = useState(false);
@@ -3205,7 +3211,7 @@ function CartCheckoutDialog({
   }
 
   function pay() {
-    if (coupon.trim() && !voucherPreview && coupon.trim().toUpperCase() !== "FIRST20") {
+    if (coupon.trim() && !voucherPreview) {
       setCouponMessage(vi ? "Vui lòng áp dụng mã ưu đãi trước khi thanh toán." : "Apply the promo code before checkout.");
       return;
     }

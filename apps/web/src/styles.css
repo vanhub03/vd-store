@@ -2635,10 +2635,12 @@ textarea {
 
 .checkout-stepper li {
   position: relative;
-  display: grid;
-  grid-template-columns: 34px 1fr;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
   align-items: center;
+  min-width: 0;
+  text-align: center;
   color: var(--muted);
   font-size: 13px;
   font-weight: 900;
@@ -2647,11 +2649,13 @@ textarea {
 .checkout-stepper li:not(:last-child)::after {
   content: "";
   position: absolute;
-  left: 36px;
-  right: -6px;
+  z-index: 0;
+  left: calc(50% + 21px);
+  right: calc(-50% + 13px);
   top: 16px;
   height: 2px;
   background: rgba(147, 197, 253, 0.22);
+  pointer-events: none;
 }
 
 .checkout-stepper li.done:not(:last-child)::after,
@@ -2682,6 +2686,10 @@ textarea {
 .checkout-stepper b {
   position: relative;
   z-index: 1;
+  display: block;
+  max-width: 100%;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .checkout-grid {
@@ -5095,8 +5103,7 @@ textarea {
   }
 
   .checkout-stepper li {
-    grid-template-columns: 28px 1fr;
-    gap: 5px;
+    gap: 6px;
     font-size: 11px;
   }
 
@@ -5106,7 +5113,8 @@ textarea {
   }
 
   .checkout-stepper li:not(:last-child)::after {
-    left: 29px;
+    left: calc(50% + 18px);
+    right: calc(-50% + 10px);
     top: 13px;
   }
 
