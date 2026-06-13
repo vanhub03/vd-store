@@ -248,13 +248,13 @@ export class AdminController {
   }
 
   @Get("analytics/overview")
-  analyticsOverview(@Query("range") range?: string) {
-    return this.analytics.overview(range);
+  analyticsOverview(@Query("range") range?: string, @Query("refresh") refresh?: string) {
+    return this.analytics.overview(range, refresh === "1");
   }
 
   @Get("analytics/realtime")
-  analyticsRealtime() {
-    return this.analytics.realtime();
+  analyticsRealtime(@Query("refresh") refresh?: string) {
+    return this.analytics.realtime(refresh === "1");
   }
 
   @Get("users")

@@ -401,10 +401,11 @@ function AnalyticsView({ api, onError }: { api: Api; onError: (error: string | n
   const [realtime, setRealtime] = useState<AnalyticsRealtime | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function loadOverview(nextRange = range) {
+  async function loadOverview(nextRange = range, forceRefresh = false) {
     setLoading(true);
     try {
-      const value = await api.get<AnalyticsOverview>(`/admin/analytics/overview?range=${nextRange}`);
+      const refreshQuery = forceRefresh ? "&refresh=1" : "";
+      const value = await api.get<AnalyticsOverview>(`/admin/analytics/overview?range=${nextRange}${refreshQuery}`);
       setOverview(value);
       onError(null);
     } catch (err) {
@@ -414,9 +415,10 @@ function AnalyticsView({ api, onError }: { api: Api; onError: (error: string | n
     }
   }
 
-  async function loadRealtime() {
+  async function loadRealtime(forceRefresh = false) {
     try {
-      setRealtime(await api.get<AnalyticsRealtime>("/admin/analytics/realtime"));
+      const refreshQuery = forceRefresh ? "?refresh=1" : "";
+      setRealtime(await api.get<AnalyticsRealtime>(`/admin/analytics/realtime${refreshQuery}`));
     } catch {
       // Realtime is supplementary and must not interrupt the rest of the admin.
     }
@@ -449,7 +451,12 @@ function AnalyticsView({ api, onError }: { api: Api; onError: (error: string | n
               {value === "7d" ? "7 ngày" : value === "30d" ? "30 ngày" : "90 ngày"}
             </button>
           ))}
-          <button className="analyticsRefresh" onClick={() => void loadOverview()} disabled={loading} title="Làm mới">
+          <button
+            className="analyticsRefresh"
+            onClick={() => void Promise.all([loadOverview(range, true), loadRealtime(true)])}
+            disabled={loading}
+            title="Làm mới"
+          >
             <RefreshCw className={loading ? "spin" : ""} size={16} />
           </button>
         </div>

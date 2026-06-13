@@ -19,6 +19,7 @@ type Report = {
 };
 
 const OVERVIEW_TTL_MS = 5 * 60_000;
+const EMPTY_OVERVIEW_TTL_MS = 30_000;
 const REALTIME_TTL_MS = 60_000;
 const GOOGLE_TIMEOUT_MS = 4_000;
 const MAX_REPORTS_PER_BATCH = 5;
@@ -33,14 +34,14 @@ export class AnalyticsService {
   private readonly overviewCache = new Map<AnalyticsRange, CacheEntry<ReturnType<typeof emptyOverview>>>();
   private realtimeCache?: CacheEntry<ReturnType<typeof emptyRealtime>>;
 
-  async overview(rawRange?: string) {
+  async overview(rawRange?: string, forceRefresh = false) {
     const range = normalizeRange(rawRange);
     if (!this.configured || !this.client) {
       return { ...emptyOverview(range), status: "not_configured" as const };
     }
 
     const cached = this.overviewCache.get(range);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
       return { ...cached.value, cached: true };
     }
 
@@ -59,7 +60,8 @@ export class AnalyticsService {
       );
       const reports = responses.flatMap(([response]) => (response.reports ?? []) as Report[]);
       const value = buildOverview(range, reports);
-      this.overviewCache.set(range, { value, expiresAt: Date.now() + OVERVIEW_TTL_MS });
+      const ttl = hasOverviewData(value) ? OVERVIEW_TTL_MS : EMPTY_OVERVIEW_TTL_MS;
+      this.overviewCache.set(range, { value, expiresAt: Date.now() + ttl });
       return value;
     } catch (error) {
       if (cached) {
@@ -79,13 +81,13 @@ export class AnalyticsService {
     }
   }
 
-  async realtime() {
+  async realtime(forceRefresh = false) {
     if (!this.configured || !this.client) {
       return { ...emptyRealtime(), status: "not_configured" as const };
     }
 
     const cached = this.realtimeCache;
-    if (cached && cached.expiresAt > Date.now()) {
+    if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
       return { ...cached.value, cached: true };
     }
 
@@ -122,6 +124,10 @@ export class AnalyticsService {
       };
     }
   }
+}
+
+function hasOverviewData(value: ReturnType<typeof emptyOverview>) {
+  return value.summary.activeUsers > 0 || value.summary.sessions > 0 || value.summary.views > 0 || value.trend.length > 0;
 }
 
 function overviewRequests(range: AnalyticsRange) {
