@@ -1597,13 +1597,20 @@ function OrdersView({ api, onError }: { api: Api; onError: (error: string | null
     void loadOrders();
   }, []);
 
-  async function resolvePartnerItem(itemId: string, action: "COMPLETED" | "CANCELLED") {
+  async function resolvePartnerItem(itemId: string, action: "COMPLETED" | "CANCELLED", environment: "LIVE" | "TEST") {
     const deliveryText = partnerDeliveries[itemId]?.trim();
-    if (action === "COMPLETED" && !deliveryText) {
-      onError("Hãy nhập nội dung giao hàng trước khi hoàn tất.");
+    if (action === "COMPLETED" && environment === "LIVE" && !deliveryText) {
+      onError("Hãy nhập nội dung giao hàng LIVE trước khi hoàn tất.");
       return;
     }
-    if (!confirm(action === "COMPLETED" ? "Hoàn tất và gửi nội dung này qua webhook?" : "Hủy item, hoàn tiền và trả lại tồn kho?")) return;
+    const message = environment === "TEST"
+      ? action === "COMPLETED"
+        ? "Đây là đơn Sandbox/TEST. Hệ thống chỉ gửi nội dung mô phỏng qua webhook, không trừ ví và không tiêu kho. Tiếp tục?"
+        : "Đây là đơn Sandbox/TEST. Hủy item chỉ để test webhook, không hoàn tiền hoặc trả tồn thật. Tiếp tục?"
+      : action === "COMPLETED"
+        ? "Hoàn tất đơn LIVE và gửi nội dung này qua webhook?"
+        : "Hủy item LIVE, hoàn tiền và trả lại tồn kho?";
+    if (!confirm(message)) return;
     setResolvingPartnerItem(itemId);
     try {
       await api.post(`/admin/partner-order-items/${itemId}/resolve`, { action, deliveryText });
@@ -1629,11 +1636,11 @@ function OrdersView({ api, onError }: { api: Api; onError: (error: string | null
               <tr key={item.id}>
                 <td>{index === 0 ? <><strong>{order.externalOrderId}</strong><span className="tableSubtext">{new Date(order.createdAt).toLocaleString("vi-VN")}</span></> : ""}</td>
                 <td>{index === 0 ? order.user.email : ""}</td>
-                <td>{order.environment}</td>
+                <td><span className={order.environment === "LIVE" ? "statusBadge active" : "statusBadge"}>{order.environment === "LIVE" ? "LIVE" : "TEST / Sandbox"}</span></td>
                 <td><strong>{item.productName}</strong><span className="tableSubtext">SL {item.quantity} · {item.deliveryType}</span></td>
                 <td><span className={item.status === "FULFILLED" ? "statusBadge active" : item.status === "CANCELLED" ? "statusBadge blocked" : "statusBadge"}>{item.status}</span></td>
                 <td>{formatVnd(item.totalAmount)}</td>
-                <td>{item.deliveryType === "MANUAL" && item.status === "PENDING_FULFILLMENT" ? <div className="manualPartnerActions"><textarea placeholder="Nội dung giao cho website CTV" value={partnerDeliveries[item.id] ?? ""} onChange={(event) => setPartnerDeliveries({ ...partnerDeliveries, [item.id]: event.target.value })} /><div className="rowActions"><button className="smallButton successButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "COMPLETED")}>Hoàn tất</button><button className="smallButton dangerButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "CANCELLED")}>Hủy & hoàn tiền</button></div></div> : item.deliveryText ? <span className="tableSubtext">Đã có nội dung giao</span> : "—"}</td>
+                <td>{item.deliveryType === "MANUAL" && item.status === "PENDING_FULFILLMENT" ? <div className="manualPartnerActions"><textarea placeholder={order.environment === "LIVE" ? "Nội dung giao thật cho website CTV" : "Sandbox: nội dung nhập ở đây sẽ không được gửi, hệ thống tự dùng nội dung test"} value={partnerDeliveries[item.id] ?? ""} onChange={(event) => setPartnerDeliveries({ ...partnerDeliveries, [item.id]: event.target.value })} /><div className="rowActions"><button className="smallButton successButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "COMPLETED", order.environment)}>Hoàn tất</button><button className="smallButton dangerButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "CANCELLED", order.environment)}>{order.environment === "LIVE" ? "Hủy & hoàn tiền" : "Hủy test"}</button></div></div> : item.deliveryText ? <span className="tableSubtext">Đã có nội dung giao</span> : "—"}</td>
               </tr>
             )))}</tbody>
           </table>

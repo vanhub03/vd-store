@@ -202,17 +202,23 @@ export class PartnerService {
   }
 
   async fulfillItem(adminId: string, itemId: string, action: "COMPLETED" | "CANCELLED", deliveryText?: string) {
-    if (action === "COMPLETED" && !deliveryText?.trim()) throw new BadRequestException("Delivery content is required when completing a manual API item.");
     const result = await this.prisma.$transaction(async (tx) => {
       const item = await tx.partnerOrderItem.findUnique({ where: { id: itemId }, include: { partnerOrder: true, product: true, sourceOrder: true } });
       if (!item || item.deliveryType !== ProductDeliveryType.MANUAL) throw new NotFoundException("Pending manual partner item not found.");
       if (item.status !== PartnerOrderItemStatus.PENDING_FULFILLMENT) throw new BadRequestException("This partner item has already been resolved.");
       const now = new Date();
+      const isLive = item.partnerOrder.environment === PartnerEnvironment.LIVE;
+      const finalDeliveryText = action === "COMPLETED"
+        ? isLive
+          ? deliveryText?.trim()
+          : `TEST_MANUAL_DELIVERY_${crypto.randomBytes(12).toString("hex")}`
+        : null;
+      if (action === "COMPLETED" && isLive && !finalDeliveryText) throw new BadRequestException("Delivery content is required when completing a live manual API item.");
       if (item.partnerOrder.environment === PartnerEnvironment.LIVE && item.sourceOrderId) {
         if (action === "COMPLETED") {
           await tx.order.update({
             where: { id: item.sourceOrderId },
-            data: { status: OrderStatus.FULFILLED, manualStatus: ManualOrderStatus.COMPLETED, deliveryText: deliveryText!.trim(), fulfilledAt: now }
+            data: { status: OrderStatus.FULFILLED, manualStatus: ManualOrderStatus.COMPLETED, deliveryText: finalDeliveryText, fulfilledAt: now }
           });
         } else {
           await tx.order.update({ where: { id: item.sourceOrderId }, data: { status: OrderStatus.CANCELLED, manualStatus: ManualOrderStatus.CANCELLED } });
@@ -226,7 +232,7 @@ export class PartnerService {
         where: { id: item.id },
         data: {
           status: action === "COMPLETED" ? PartnerOrderItemStatus.FULFILLED : PartnerOrderItemStatus.CANCELLED,
-          deliveryText: action === "COMPLETED" ? deliveryText!.trim() : null,
+          deliveryText: finalDeliveryText,
           refundedAt: action === "CANCELLED" && item.partnerOrder.environment === PartnerEnvironment.LIVE ? now : null
         }
       });

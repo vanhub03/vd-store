@@ -107,4 +107,87 @@ describe("PartnerService", () => {
     expect(prisma.partnerOrder.create).toHaveBeenCalledTimes(1);
     expect(webhooks.emit).toHaveBeenCalledTimes(1);
   });
+
+  it("fulfills sandbox manual items with simulated content without touching live order, wallet, or stock state", async () => {
+    const createdAt = new Date("2026-06-20T00:00:00.000Z");
+    const sandboxItem = {
+      id: "poi_test_manual_1",
+      partnerOrderId: "po_test_manual_1",
+      productId: "product_manual_1",
+      sourceOrderId: null,
+      productName: "Manual product",
+      deliveryType: ProductDeliveryType.MANUAL,
+      quantity: 1,
+      unitPrice: 100_000,
+      subtotalAmount: 100_000,
+      collaboratorDiscountAmount: 10_000,
+      voucherDiscountAmount: 0,
+      totalAmount: 90_000,
+      status: PartnerOrderItemStatus.PENDING_FULFILLMENT,
+      deliveryText: null,
+      refundedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+      partnerOrder: {
+        id: "po_test_manual_1",
+        userId: "ctv_1",
+        environment: PartnerEnvironment.TEST,
+        externalOrderId: "sandbox-manual-1",
+        status: PartnerOrderStatus.PENDING_FULFILLMENT,
+        currency: "VND",
+        subtotalAmount: 100_000,
+        collaboratorDiscountAmount: 10_000,
+        voucherDiscountAmount: 0,
+        totalAmount: 90_000,
+        refundedAmount: 0,
+        voucherCode: null,
+        createdAt,
+        updatedAt: createdAt
+      },
+      product: {},
+      sourceOrder: null
+    };
+    let updatedItem = sandboxItem;
+    const tx = {
+      partnerOrderItem: {
+        findUnique: vi.fn().mockResolvedValue(sandboxItem),
+        update: vi.fn(async ({ data }) => {
+          updatedItem = { ...sandboxItem, ...data };
+          return updatedItem;
+        }),
+        findMany: vi.fn(async () => [updatedItem])
+      },
+      order: { update: vi.fn() },
+      product: { update: vi.fn(), updateMany: vi.fn() },
+      walletLedgerEntry: { create: vi.fn() },
+      voucherRedemption: { findUnique: vi.fn(), delete: vi.fn() },
+      voucher: { updateMany: vi.fn() },
+      voucherAssignment: { updateMany: vi.fn() },
+      partnerOrder: {
+        update: vi.fn(async ({ data }) => ({
+          ...sandboxItem.partnerOrder,
+          ...data,
+          updatedAt: createdAt,
+          items: [updatedItem]
+        }))
+      },
+      auditLog: { create: vi.fn() }
+    };
+    const prisma = { $transaction: vi.fn((callback) => callback(tx)) };
+    const shop = { clearCatalogCache: vi.fn() };
+    const webhooks = { emit: vi.fn().mockResolvedValue("evt_1") };
+    const service = new PartnerService(prisma as never, shop as never, webhooks as never);
+
+    const result = await service.fulfillItem("admin_1", sandboxItem.id, "COMPLETED", "REAL_SECRET_SHOULD_NOT_LEAK");
+
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(tx.product.update).not.toHaveBeenCalled();
+    expect(tx.product.updateMany).not.toHaveBeenCalled();
+    expect(tx.walletLedgerEntry.create).not.toHaveBeenCalled();
+    expect(updatedItem.deliveryText).toMatch(/^TEST_MANUAL_DELIVERY_[a-f0-9]+$/);
+    expect(updatedItem.deliveryText).not.toBe("REAL_SECRET_SHOULD_NOT_LEAK");
+    expect(result.items[0].delivery?.content).toBe(updatedItem.deliveryText);
+    expect(shop.clearCatalogCache).toHaveBeenCalledTimes(1);
+    expect(webhooks.emit).toHaveBeenCalledWith("ctv_1", PartnerEnvironment.TEST, "order.updated", { order: result }, "po_test_manual_1");
+  });
 });

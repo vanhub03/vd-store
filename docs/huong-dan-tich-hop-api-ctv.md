@@ -56,15 +56,48 @@ Riêng `POST /orders` bắt buộc thêm:
 Idempotency-Key: <mã duy nhất cho mỗi lần tạo đơn>
 ```
 
+## 2.1. Sandbox/test có ảnh hưởng ví, kho hoặc hàng thật không?
+
+Không. Nếu CTV dùng key `vd_test_...`, VD Store chỉ tạo đơn sandbox trong hệ thống Partner API để test luồng tích hợp.
+
+Key test:
+
+- Không tạo đơn bán hàng live trong bảng đơn hàng thật của website.
+- Không tạo payment thật.
+- Không ghi ledger trừ/cộng ví thật.
+- Không trừ `manualStock`.
+- Không bán hoặc khóa inventory `STOCK_ITEM`.
+- Không tiêu lượt voucher.
+- Không ảnh hưởng báo cáo doanh thu live.
+
+Tuy nhiên, đơn sandbox vẫn có thể xuất hiện trong màn admin VD Store ở khu vực “Đơn hàng đối tác” với môi trường `TEST / Sandbox` để admin và CTV kiểm thử webhook. Khi admin bấm hoàn tất item thủ công trong sandbox, hệ thống chỉ gửi nội dung mô phỏng dạng:
+
+```text
+TEST_MANUAL_DELIVERY_...
+```
+
+Nội dung hàng thật sẽ không được gửi cho đơn sandbox.
+
+CTV bắt buộc kiểm tra trường `livemode` trong mọi response/webhook:
+
+```js
+if (process.env.NODE_ENV === "production" && order.livemode !== true) {
+  throw new Error("Không giao hàng thật từ đơn sandbox/test.");
+}
+```
+
+Nếu website production của CTV lỡ cấu hình key test, đơn sẽ có `livemode: false`; website CTV phải coi đây là lỗi cấu hình và không giao hàng thật cho khách cuối.
+
 ## 3. Quy trình tích hợp khuyến nghị
 
 1. CTV gọi `GET /catalog` định kỳ để đồng bộ sản phẩm, giá CTV, loại giao hàng và tồn kho.
 2. Khách đặt hàng và thanh toán trên website của CTV.
 3. Backend CTV xác nhận tiền đã nhận.
 4. Backend CTV gọi `POST /orders` sang VD Store.
-5. Nếu đơn trả về `FULFILLED`, website CTV giao nội dung cho khách ngay.
-6. Nếu đơn trả về `PENDING_FULFILLMENT` hoặc `PARTIALLY_FULFILLED`, website CTV hiển thị trạng thái chờ admin VD Store xử lý phần thủ công.
-7. CTV nhận webhook `order.updated` hoặc chủ động gọi `GET /orders/:id` để cập nhật kết quả cuối.
+5. Backend CTV kiểm `livemode`. Môi trường production chỉ được chấp nhận `livemode: true`.
+6. Nếu đơn trả về `FULFILLED`, website CTV giao nội dung cho khách ngay.
+7. Nếu đơn trả về `PENDING_FULFILLMENT` hoặc `PARTIALLY_FULFILLED`, website CTV hiển thị trạng thái chờ admin VD Store xử lý phần thủ công.
+8. CTV nhận webhook `order.updated` hoặc chủ động gọi `GET /orders/:id` để cập nhật kết quả cuối.
 
 ## 4. API catalog
 
@@ -337,6 +370,14 @@ Với đơn live:
 - Nếu hết hàng, toàn bộ đơn bị từ chối, không trừ ví.
 - Nếu item thủ công bị admin hủy, hệ thống hoàn đúng phần tiền item đó và trả lại tồn.
 
+Với đơn sandbox/test:
+
+- `livemode` luôn là `false`.
+- Không có ví/kho/voucher live nào bị thay đổi.
+- Item tự động trả nội dung test.
+- Item thủ công khi admin hoàn tất sẽ trả nội dung mô phỏng `TEST_MANUAL_DELIVERY_...`.
+- CTV không được giao nội dung này cho khách thật.
+
 ## 11. Webhook
 
 CTV có thể cấu hình webhook để nhận cập nhật tự động từ VD Store.
@@ -370,6 +411,8 @@ Payload mẫu:
   }
 }
 ```
+
+Nếu webhook có `livemode: false`, đó là webhook sandbox/test. Website production của CTV chỉ nên ghi log hoặc cập nhật đơn test nội bộ, không giao hàng thật cho khách.
 
 Header webhook:
 
@@ -650,6 +693,8 @@ Trước khi dùng `vd_live_...`, CTV nên hoàn tất:
 - Đã test retry cùng `Idempotency-Key` không tạo trùng đơn.
 - Đã test xử lý đơn `FULFILLED`.
 - Đã test xử lý đơn `PENDING_FULFILLMENT`.
+- Production của CTV đã cấu hình key `vd_live_...`, không dùng key `vd_test_...`.
+- Code production của CTV đã kiểm `livemode === true` trước khi giao hàng thật.
 - Nếu dùng webhook: đã xác minh chữ ký, lưu `VD-Event-Id` và trả `2xx` nhanh.
 - Backend không log API key, webhook secret hoặc nội dung giao hàng nhạy cảm.
 - Website CTV chỉ gọi VD Store sau khi đã xác nhận khách thanh toán thành công.
@@ -673,4 +718,3 @@ Trước khi dùng `vd_live_...`, CTV nên hoàn tất:
 | POST | `/partner/v1/orders` | `orders:write` | Tạo đơn, trừ ví live |
 | GET | `/partner/v1/orders/:id` | `orders:read` | Xem chi tiết đơn |
 | GET | `/partner/v1/orders?limit=50&cursor=...` | `orders:read` | Xem danh sách đơn |
-
