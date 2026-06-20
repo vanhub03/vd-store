@@ -6,23 +6,42 @@ import { formatVnd } from "./money";
 export class TelegramNotifyService {
   private readonly logger = new Logger(TelegramNotifyService.name);
   private readonly telegram?: Telegram;
+  private readonly adminTelegram?: Telegram;
 
   constructor() {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (token) {
       this.telegram = new Telegram(token);
     }
+
+    const adminToken = process.env.ADMIN_TELEGRAM_BOT_TOKEN || token;
+    if (adminToken) {
+      this.adminTelegram = new Telegram(adminToken);
+    }
   }
 
   async sendMessage(chatId: string, message: string) {
-    if (!this.telegram) {
-      this.logger.warn(`Telegram token missing. Would send to ${chatId}: ${message}`);
+    await this.sendWithTelegram(this.telegram, "TELEGRAM_BOT_TOKEN", chatId, message);
+  }
+
+  async sendAdminMessage(chatId: string, message: string) {
+    await this.sendWithTelegram(
+      this.adminTelegram,
+      "ADMIN_TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN",
+      chatId,
+      message
+    );
+  }
+
+  private async sendWithTelegram(telegram: Telegram | undefined, tokenLabel: string, chatId: string, message: string) {
+    if (!telegram) {
+      this.logger.warn(`Telegram token missing (${tokenLabel}). Would send to ${chatId}: ${message}`);
       return;
     }
 
     for (const chunk of splitTelegramMessage(message)) {
       try {
-        await this.telegram.sendMessage(chatId, chunk, { parse_mode: "HTML" });
+        await telegram.sendMessage(chatId, chunk, { parse_mode: "HTML" });
       } catch (error) {
         this.logger.warn(`Could not send Telegram message to ${chatId}: ${(error as Error).message}`);
       }
@@ -90,7 +109,7 @@ export class TelegramNotifyService {
       );
       return;
     }
-    await this.sendMessage(adminChatId, message);
+    await this.sendAdminMessage(adminChatId, message);
   }
 }
 

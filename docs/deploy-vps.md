@@ -92,6 +92,44 @@ systemctl enable --now vd-store-bot
 journalctl -u vd-store-bot -n 100 --no-pager
 ```
 
+Bot thong bao don can admin giao:
+
+1. Vao Telegram mo `@BotFather`, chay `/newbot`, tao bot rieng vi du
+   `VD Store Admin Alert`.
+2. Copy token moi vao `/opt/vd-store/.env`:
+
+   ```env
+   ADMIN_TELEGRAM_BOT_TOKEN=123456:abc...
+   ADMIN_TELEGRAM_CHAT_ID=123456789
+   ADMIN_PUBLIC_URL=https://admin.vanhdao.io.vn
+   ```
+
+   Neu `ADMIN_TELEGRAM_BOT_TOKEN` de trong, API se fallback ve
+   `TELEGRAM_BOT_TOKEN` cu de tranh mat thong bao.
+
+3. De lay `ADMIN_TELEGRAM_CHAT_ID`, admin phai bam Start voi bot moi truoc,
+   sau do goi:
+
+   ```bash
+   curl "https://api.telegram.org/bot<ADMIN_TELEGRAM_BOT_TOKEN>/getUpdates"
+   ```
+
+   Lay gia tri numeric `message.chat.id`. Neu dung group rieng cho admin,
+   them bot vao group, gui mot tin nhan trong group, roi lay `chat.id` am.
+   Khong dien `@username` vao `ADMIN_TELEGRAM_CHAT_ID` vi bot Telegram
+   khong the DM username neu chua co chat id.
+
+4. Restart API de nhan env moi:
+
+   ```bash
+   systemctl restart vd-store-api
+   journalctl -u vd-store-api -n 100 --no-pager
+   ```
+
+Khi co don san pham giao thu cong (`MANUAL`) duoc thanh toan thanh cong
+hoac don CTV live co item can admin giao, API se gui tin vao bot admin
+rieng voi ma don, san pham, so luong, so tien va thong tin khach.
+
 ## CI/CD GitHub Actions
 
 Workflow `.github/workflows/deploy-vps.yml` deploy bang SSH/SCP, khong can VPS clone repo private. Them cac secret sau trong GitHub repo:
