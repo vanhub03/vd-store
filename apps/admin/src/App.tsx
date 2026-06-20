@@ -1445,10 +1445,10 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
       <section className="dashboardGrid">
         <div className="panel">
           <h2>Tạo tài khoản CTV</h2>
-          <form className="formGrid collaboratorForm" onSubmit={create}>
-            <label>Tên hiển thị<input value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label>
-            <label>Email<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
-            <label>Mật khẩu<input type="password" minLength={6} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /></label>
+          <form className="formGrid collaboratorForm" onSubmit={create} autoComplete="off">
+            <label>Tên hiển thị<input name="ctv-display-name" autoComplete="off" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label>
+            <label>Email<input name="ctv-email-manual-entry" type="text" inputMode="email" autoCapitalize="none" autoCorrect="off" autoComplete="new-password" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} required /></label>
+            <label>Mật khẩu<input name="ctv-password-manual-entry" type="password" minLength={6} autoComplete="new-password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required /></label>
             <button className="primaryButton" disabled={savingId === "create"}><UserPlus size={16} /> Tạo cộng tác viên</button>
           </form>
         </div>
@@ -1478,7 +1478,7 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
           </div>
         </div>
         <div className="collaboratorFilters">
-          <input placeholder="Tìm tên hoặc email" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+          <input name="ctv-filter-search" autoComplete="off" placeholder="Tìm tên hoặc email" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
           <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
             <option value="all">Mọi trạng thái</option><option value="active">Hoạt động</option><option value="blocked">Đã khóa</option>
           </select>
@@ -1495,7 +1495,7 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
             <span className={user.partnerApiEnabled ? "statusBadge active" : "statusBadge blocked"}>{user.partnerApiEnabled ? "Đã bật" : "Đang tắt"}</span>,
             formatVnd(user.balance),
             user.orders?.length ?? 0,
-            <div className="passwordReset"><input type="password" placeholder="Mật khẩu mới" value={passwords[user.id] ?? ""} onChange={(event) => setPasswords({ ...passwords, [user.id]: event.target.value })} /><button className="smallButton" type="button" onClick={() => void resetPassword(user)}><KeyRound size={14} /></button></div>,
+            <div className="passwordReset"><input name={`ctv-reset-password-${user.id}`} type="password" autoComplete="new-password" placeholder="Mật khẩu mới" value={passwords[user.id] ?? ""} onChange={(event) => setPasswords({ ...passwords, [user.id]: event.target.value })} /><button className="smallButton" type="button" onClick={() => void resetPassword(user)}><KeyRound size={14} /></button></div>,
             <div className="rowActions"><button className="smallButton" type="button" onClick={() => setApiUser(user)}><KeyRound size={14} /> API</button><button className={user.isBlocked ? "smallButton successButton" : "smallButton dangerButton"} type="button" onClick={() => void toggleBlocked(user)}>{user.isBlocked ? "Mở khóa" : "Khóa"}</button><button className="smallButton secondaryButton" type="button" onClick={() => void revoke(user)}>Thu hồi quyền</button></div>
           ])}
           searchPlaceholder="Tìm trong danh sách CTV..."
@@ -2403,7 +2403,7 @@ function DataTable({
       <div className="dataTableHeader">
         {title ? <h2>{title}</h2> : <span />}
         <div className="dataTableControls">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} />
+          <input name={`grid-search-${columns.join("-").toLocaleLowerCase("vi-VN").replace(/[^a-z0-9]+/g, "-")}`} type="search" autoComplete="off" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} />
           <select value={perPage} onChange={(event) => setPerPage(Number(event.target.value))}>
             {[10, 25, 50, 100].map((value) => (
               <option key={value} value={value}>{value}/trang</option>
