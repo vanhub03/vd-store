@@ -1604,8 +1604,7 @@ export class ShopService {
         content: true,
         status: true,
         createdAt: true
-      },
-      take: 500
+      }
     });
   }
 
