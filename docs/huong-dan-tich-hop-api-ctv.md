@@ -378,7 +378,68 @@ Với đơn sandbox/test:
 - Item thủ công khi admin hoàn tất sẽ trả nội dung mô phỏng `TEST_MANUAL_DELIVERY_...`.
 - CTV không được giao nội dung này cho khách thật.
 
-## 11. Webhook
+## 11. Cách điền webhook trong admin VD Store
+
+Webhook là URL backend của website CTV để VD Store gửi thông báo khi đơn API được tạo, được admin hoàn tất, bị hủy hoặc khi admin gửi event test.
+
+Trên màn admin VD Store, khu vực Webhook có các trường:
+
+| Trường/nút | Điền hoặc dùng như thế nào |
+|---|---|
+| `Môi trường` | Chọn `Sandbox` để test với key `vd_test_...`; chọn `Live` để nhận event thật từ key `vd_live_...` |
+| `HTTPS endpoint` | Dán URL webhook do CTV cung cấp, ví dụ `https://shopctv.vn/api/vd-store/webhook` |
+| `Đang nhận webhook` | Tick bật nếu CTV đã sẵn sàng nhận webhook |
+| `Lưu` | Lưu URL webhook cho môi trường đang chọn |
+| `Rotate secret` | Đổi webhook secret; chỉ dùng khi CTV muốn đổi secret hoặc nghi secret bị lộ |
+| `Gửi test` | Gửi event `webhook.test` đến URL đã lưu để CTV kiểm tra server nhận webhook |
+
+Ví dụ endpoint hợp lệ:
+
+```text
+https://shopabc.vn/api/webhooks/vd-store
+https://ctv-demo.com/webhook/vdstore
+https://api.shopctv.vn/vd-store/webhook
+```
+
+Không điền URL của VD Store vào ô này. Đây phải là URL thuộc website/server của CTV.
+
+Endpoint webhook bắt buộc:
+
+- Dùng HTTPS public.
+- Không dùng `localhost`, `127.0.0.1`, IP private hoặc URL nội bộ.
+- Không chứa username/password trong URL.
+- Không phụ thuộc redirect, vì VD Store không follow redirect khi gửi webhook.
+
+Quy trình cấu hình khuyến nghị:
+
+1. CTV tạo endpoint webhook trên backend của họ, ví dụ `https://shopctv.vn/api/vd-store/webhook`.
+2. Admin VD Store chọn môi trường `Sandbox`.
+3. Dán URL vào `HTTPS endpoint`.
+4. Tick `Đang nhận webhook`.
+5. Bấm `Lưu`.
+6. Nếu admin thấy `Webhook secret`, copy và gửi cho CTV. Secret chỉ hiển thị một lần khi tạo mới hoặc rotate.
+7. Bấm `Gửi test`.
+8. CTV kiểm tra đã nhận event `webhook.test`, xác minh chữ ký OK và trả HTTP `2xx`.
+9. Khi sandbox OK, admin cấu hình lại tương tự cho môi trường `Live`.
+
+CTV phải lưu webhook secret tương ứng theo từng môi trường:
+
+```env
+VD_STORE_WEBHOOK_SECRET_TEST=whsec_...
+VD_STORE_WEBHOOK_SECRET_LIVE=whsec_...
+```
+
+Production của CTV chỉ được giao hàng thật khi webhook/response có:
+
+```json
+{
+  "livemode": true
+}
+```
+
+Nếu `livemode: false`, đó là sandbox/test; website CTV không được giao hàng thật cho khách cuối.
+
+## 12. Webhook payload và retry
 
 CTV có thể cấu hình webhook để nhận cập nhật tự động từ VD Store.
 
@@ -432,7 +493,7 @@ Quy tắc:
 - Nếu timeout hoặc trả `5xx/4xx`, VD Store retry tối đa khoảng 24 giờ.
 - CTV nên lưu `VD-Event-Id` để bỏ qua event trùng.
 
-## 12. Xác minh chữ ký webhook bằng Node.js
+## 13. Xác minh chữ ký webhook bằng Node.js
 
 VD Store ký chuỗi:
 
@@ -495,7 +556,7 @@ function verifyVdStoreWebhook(rawBody, signatureHeader, secret) {
 }
 ```
 
-## 13. Xác minh chữ ký webhook bằng PHP
+## 14. Xác minh chữ ký webhook bằng PHP
 
 ```php
 <?php
@@ -544,7 +605,7 @@ function verifyVdStoreWebhook(string $rawBody, string $signatureHeader, string $
 }
 ```
 
-## 14. Ví dụ tạo đơn bằng Node.js
+## 15. Ví dụ tạo đơn bằng Node.js
 
 ```js
 const apiKey = process.env.VD_STORE_API_KEY;
@@ -578,7 +639,7 @@ async function createVdStoreOrder(localOrder) {
 }
 ```
 
-## 15. Ví dụ tạo đơn bằng PHP
+## 16. Ví dụ tạo đơn bằng PHP
 
 ```php
 <?php
@@ -623,7 +684,7 @@ function createVdStoreOrder(array $localOrder): array
 }
 ```
 
-## 16. Format lỗi
+## 17. Format lỗi
 
 Khi lỗi, API trả `application/problem+json`.
 
@@ -665,7 +726,7 @@ Các mã lỗi thường gặp:
 
 Khi cần hỗ trợ, gửi `requestId` cho VD Store để tra log nhanh hơn.
 
-## 17. Rate limit
+## 18. Rate limit
 
 Mặc định:
 
@@ -684,7 +745,7 @@ Retry-After: 30
 
 Nếu bị `429`, CTV nên retry sau thời gian trong `Retry-After`.
 
-## 18. Checklist trước khi chạy live
+## 19. Checklist trước khi chạy live
 
 Trước khi dùng `vd_live_...`, CTV nên hoàn tất:
 
@@ -700,7 +761,7 @@ Trước khi dùng `vd_live_...`, CTV nên hoàn tất:
 - Website CTV chỉ gọi VD Store sau khi đã xác nhận khách thanh toán thành công.
 - Ví CTV đã được nạp đủ tiền trước khi tạo đơn live.
 
-## 19. Ghi chú bảo mật quan trọng
+## 20. Ghi chú bảo mật quan trọng
 
 - Không đưa API key vào frontend.
 - Không gửi API key cho khách cuối.
@@ -709,7 +770,7 @@ Trước khi dùng `vd_live_...`, CTV nên hoàn tất:
 - Nếu nghi key lộ, báo admin VD Store để revoke/rotate ngay.
 - Nên lưu `externalOrderId`, `partnerOrder.id`, trạng thái đơn và toàn bộ response tạo đơn để đối soát.
 
-## 20. Tóm tắt endpoint
+## 21. Tóm tắt endpoint
 
 | Method | Endpoint | Scope | Mục đích |
 |---|---|---|---|
