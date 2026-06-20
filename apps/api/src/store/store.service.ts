@@ -295,6 +295,10 @@ export class StoreService {
     return this.shop.createTopup(telegramId, amount);
   }
 
+  createUsdtTopup(telegramId: string, amount: number) {
+    return this.shop.createCryptomusTopup(telegramId, amount);
+  }
+
   purchaseWithWallet(telegramId: string, productId: string, quantity: number, voucherCode?: string | null, voucherClaim?: VoucherClaim | null) {
     return this.shop.purchaseWithWallet(telegramId, productId, quantity, "web", voucherCode, voucherClaim);
   }

@@ -86,6 +86,7 @@ const checks = [
         { method: "GET", path: "/store/history" },
         { method: "GET", path: "/store/payments/DHSMOKE" },
         { method: "POST", path: "/store/topups", body: { amount: 1000 } },
+        { method: "POST", path: "/store/topups/usdt", body: { amount: 1000 } },
         { method: "POST", path: "/store/orders/wallet", body: { productId: "smoke-product", quantity: 1 } },
         { method: "POST", path: "/store/orders/bank", body: { productId: "smoke-product", quantity: 1 } }
       ];
@@ -104,6 +105,32 @@ const checks = [
         throw new Error(`Expected 401 without token: ${failures.join(", ")}`);
       }
       return `${probes.length} endpoint(s)`;
+    }
+  },
+  {
+    name: "partner api rejects missing credentials with problem details",
+    run: async () => {
+      const response = await fetchWithTimeout(`${config.apiUrl}/partner/v1/catalog`);
+      if (response.status !== 401) throw new Error(`Expected 401 without Partner API key, got ${response.status}.`);
+      const body = await response.json();
+      if (body?.code !== "missing_api_key" || body?.status !== 401 || !body?.requestId) {
+        throw new Error(`Unexpected Partner API problem response: ${JSON.stringify(body)}`);
+      }
+      return "401 application/problem+json";
+    }
+  },
+  {
+    name: "partner openapi contract",
+    run: async () => {
+      const response = await fetchWithTimeout(`${config.apiUrl}/partner/openapi.json`);
+      assertStatus(response, 200);
+      const document = await response.json();
+      const paths = Object.keys(document?.paths ?? {});
+      const required = ["/partner/v1/catalog", "/partner/v1/balance", "/partner/v1/orders", "/partner/v1/orders/{id}"];
+      const missing = required.filter((path) => !paths.includes(path));
+      const unrelated = paths.filter((path) => !path.startsWith("/partner/v1"));
+      if (missing.length || unrelated.length) throw new Error(`Unexpected Partner OpenAPI paths. Missing: ${missing.join(", ")}; unrelated: ${unrelated.join(", ")}`);
+      return `${paths.length} partner path(s)`;
     }
   },
   {

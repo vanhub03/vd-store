@@ -176,6 +176,12 @@ export class StoreController {
     return this.store.createTopup(request.customer!.telegramId, body.amount);
   }
 
+  @Post("topups/usdt")
+  @UseGuards(CustomerAuthGuard)
+  topupUsdt(@Req() request: CustomerRequest, @Body() body: TopupDto) {
+    return this.store.createUsdtTopup(request.customer!.telegramId, body.amount);
+  }
+
   @Post("orders/wallet")
   @UseGuards(CustomerAuthGuard)
   buyWithWallet(@Req() request: CustomerRequest, @Body() body: OrderDto) {

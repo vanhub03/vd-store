@@ -21,12 +21,20 @@ const orderedModels = [
   "ProductReview",
   "Broadcast",
   "BroadcastDelivery",
+  "PartnerApiCredential",
+  "PartnerOrder",
+  "PartnerOrderItem",
+  "ApiIdempotencyRecord",
+  "PartnerWebhookEndpoint",
+  "PartnerWebhookEvent",
+  "PartnerWebhookDelivery",
+  "StoreSetting",
   "AuditLog"
 ] as const;
 
 const fieldMap: Record<string, string[]> = {
   Admin: ["id", "email", "passwordHash", "name", "role", "createdAt", "updatedAt"],
-  TelegramUser: ["id", "telegramId", "email", "passwordHash", "displayName", "username", "firstName", "lastName", "languageCode", "role", "isBlocked", "createdAt", "updatedAt"],
+  TelegramUser: ["id", "telegramId", "email", "passwordHash", "displayName", "username", "firstName", "lastName", "languageCode", "role", "isBlocked", "partnerApiEnabled", "partnerReadRateLimit", "partnerWriteRateLimit", "createdAt", "updatedAt"],
   Category: ["id", "name", "slug", "sortOrder", "active", "createdAt", "updatedAt"],
   Product: ["id", "categoryId", "name", "nameEn", "slug", "description", "descriptionEn", "imageUrl", "buttonIcon", "price", "botPrice", "webPrice", "usdtPrice", "collaboratorDiscountPercent", "showInBot", "showInWeb", "status", "deliveryType", "sharedContent", "sharedFilePath", "manualInstructions", "manualStock", "createdAt", "updatedAt"],
   InventoryItem: ["id", "productId", "content", "status", "orderId", "soldAt", "createdAt"],
@@ -34,12 +42,20 @@ const fieldMap: Record<string, string[]> = {
   Voucher: ["id", "code", "discountPercent", "maxDiscountAmount", "maxDiscountUsdt", "active", "firstOrderOnly", "allowCollaboratorStacking", "maxUses", "usedCount", "startsAt", "expiresAt", "createdByAdminId", "createdAt", "updatedAt"],
   VoucherAssignment: ["id", "voucherId", "userId", "assignedByAdminId", "revokedAt", "usedAt", "createdAt"],
   VoucherRedemption: ["id", "voucherId", "userId", "orderId", "subtotalAmount", "discountAmount", "totalAmount", "claimIpHash", "claimFingerprintHash", "createdAt"],
-  Payment: ["id", "code", "kind", "status", "amount", "expectedAmount", "userId", "orderId", "expiresAt", "qrImageUrl", "qrPayload", "provider", "cryptoCurrency", "cryptoAmount", "providerPaymentId", "checkoutUrl", "deeplink", "providerPayload", "telegramChatId", "telegramMessageId", "createdAt", "updatedAt"],
+  Payment: ["id", "code", "kind", "status", "amount", "expectedAmount", "userId", "orderId", "expiresAt", "qrImageUrl", "qrPayload", "provider", "cryptoCurrency", "cryptoAmount", "quotedExchangeRate", "providerPaymentId", "checkoutUrl", "deeplink", "providerPayload", "telegramChatId", "telegramMessageId", "createdAt", "updatedAt"],
   WalletLedgerEntry: ["id", "userId", "amount", "type", "referencePaymentId", "referenceOrderId", "note", "createdAt"],
   BankTransaction: ["id", "provider", "providerTransactionId", "gateway", "transactionDate", "accountNumber", "subAccount", "code", "content", "transferType", "transferAmount", "accumulated", "referenceCode", "rawPayload", "paymentId", "createdAt"],
   ProductReview: ["id", "userId", "productId", "rating", "title", "content", "createdAt", "updatedAt"],
   Broadcast: ["id", "title", "message", "status", "target", "sentCount", "failedCount", "createdByAdminId", "createdAt", "updatedAt"],
   BroadcastDelivery: ["id", "broadcastId", "userId", "status", "error", "sentAt", "createdAt"],
+  PartnerApiCredential: ["id", "userId", "createdByAdminId", "environment", "label", "keyPrefix", "keyHash", "scopes", "expiresAt", "revokedAt", "lastUsedAt", "createdAt", "updatedAt"],
+  PartnerOrder: ["id", "userId", "environment", "externalOrderId", "status", "currency", "subtotalAmount", "collaboratorDiscountAmount", "voucherDiscountAmount", "totalAmount", "refundedAmount", "voucherCode", "createdAt", "updatedAt"],
+  PartnerOrderItem: ["id", "partnerOrderId", "productId", "sourceOrderId", "productName", "deliveryType", "quantity", "unitPrice", "subtotalAmount", "collaboratorDiscountAmount", "voucherDiscountAmount", "totalAmount", "status", "deliveryText", "refundedAt", "createdAt", "updatedAt"],
+  ApiIdempotencyRecord: ["id", "userId", "environment", "idempotencyKey", "requestHash", "status", "responseStatus", "responseBody", "expiresAt", "createdAt", "updatedAt"],
+  PartnerWebhookEndpoint: ["id", "userId", "environment", "url", "secretCiphertext", "secretIv", "secretTag", "enabled", "events", "createdAt", "updatedAt"],
+  PartnerWebhookEvent: ["id", "endpointId", "partnerOrderId", "type", "payload", "createdAt"],
+  PartnerWebhookDelivery: ["id", "eventId", "status", "attemptCount", "nextAttemptAt", "responseStatus", "lastError", "deliveredAt", "createdAt", "updatedAt"],
+  StoreSetting: ["key", "value", "updatedByAdminId", "createdAt", "updatedAt"],
   AuditLog: ["id", "actorAdminId", "action", "entityType", "entityId", "meta", "createdAt"]
 };
 
@@ -53,7 +69,11 @@ const dateFields = new Set([
   "revokedAt",
   "usedAt",
   "transactionDate",
-  "sentAt"
+  "sentAt",
+  "lastUsedAt",
+  "refundedAt",
+  "nextAttemptAt",
+  "deliveredAt"
 ]);
 
 async function main() {

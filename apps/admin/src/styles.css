@@ -960,6 +960,70 @@ th {
   color: #b91c1c;
 }
 
+.partnerApiPanel {
+  border: 1px solid #c7d2fe;
+}
+
+.partnerApiGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.apiCard {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.apiCard label:not(.checkRow) {
+  display: grid;
+  gap: 5px;
+}
+
+.checkRow {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+}
+
+.scopeList {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.oneTimeSecret {
+  align-items: center;
+  background: #fffbeb;
+  border: 1px solid #fbbf24;
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin: 12px 0;
+  padding: 12px;
+}
+
+.oneTimeSecret code {
+  overflow-wrap: anywhere;
+}
+
+.manualPartnerActions {
+  display: grid;
+  gap: 7px;
+  min-width: 260px;
+}
+
+.manualPartnerActions textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
 .alert {
   border-radius: 8px;
   background: #fef2f2;
@@ -1014,5 +1078,11 @@ th {
 
   .analyticsRange button:not(.analyticsRefresh) {
     flex: 1;
+  }
+
+  .partnerApiGrid,
+  .scopeList,
+  .oneTimeSecret {
+    grid-template-columns: 1fr;
   }
 }

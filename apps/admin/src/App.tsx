@@ -83,6 +83,9 @@ type User = {
   firstName?: string;
   role: "CUSTOMER" | "COLLABORATOR";
   isBlocked: boolean;
+  partnerApiEnabled?: boolean;
+  partnerReadRateLimit?: number;
+  partnerWriteRateLimit?: number;
   balance: number;
   createdAt: string;
   orders?: Order[];
@@ -114,6 +117,25 @@ type Payment = {
   user?: User;
   order?: { product?: Product };
 };
+type PartnerAdminOrder = {
+  id: string;
+  externalOrderId: string;
+  environment: "LIVE" | "TEST";
+  status: string;
+  totalAmount: number;
+  refundedAmount: number;
+  createdAt: string;
+  user: User;
+  items: Array<{
+    id: string;
+    productName: string;
+    deliveryType: string;
+    quantity: number;
+    totalAmount: number;
+    status: string;
+    deliveryText?: string | null;
+  }>;
+};
 type Broadcast = { id: string; title: string; message: string; status: string; sentCount: number; failedCount: number; createdAt: string };
 type Voucher = {
   id: string;
@@ -140,6 +162,25 @@ type VoucherAssignment = {
   createdAt: string;
   user: User;
   assignedByAdmin?: { id: string; email: string; name?: string | null } | null;
+};
+type PartnerApiCredential = {
+  id: string;
+  environment: "LIVE" | "TEST";
+  label: string;
+  keyPrefix: string;
+  scopes: string[];
+  expiresAt?: string | null;
+  revokedAt?: string | null;
+  lastUsedAt?: string | null;
+  createdAt: string;
+};
+type PartnerWebhookEndpoint = {
+  id: string;
+  environment: "LIVE" | "TEST";
+  url: string;
+  enabled: boolean;
+  events: string[];
+  updatedAt: string;
 };
 type ProductForm = {
   name: string;
@@ -1188,6 +1229,7 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
   const [filters, setFilters] = useState({ search: "", status: "all", createdFrom: "", createdTo: "" });
   const [form, setForm] = useState({ email: "", displayName: "", password: "" });
   const [promoteUserId, setPromoteUserId] = useState("");
+  const [apiUser, setApiUser] = useState<User | null>(null);
 
   async function load() {
     setLoading(true);
@@ -1377,45 +1419,226 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
         </div>
         <div className="tableWrap">
           <table>
-            <thead><tr><th>CTV</th><th>Trạng thái</th><th>Số dư</th><th>Đơn gần đây</th><th>Đặt lại mật khẩu</th><th>Thao tác</th></tr></thead>
+            <thead><tr><th>CTV</th><th>Trạng thái</th><th>API</th><th>Số dư</th><th>Đơn gần đây</th><th>Đặt lại mật khẩu</th><th>Thao tác</th></tr></thead>
             <tbody>
               {collaborators.map((user) => (
                 <tr key={user.id}>
                   <td><strong>{user.displayName ?? "Chưa có tên"}</strong><span className="tableSubtext">{user.email}</span></td>
                   <td><span className={user.isBlocked ? "statusBadge blocked" : "statusBadge active"}>{user.isBlocked ? "Đã khóa" : "Hoạt động"}</span></td>
+                  <td><span className={user.partnerApiEnabled ? "statusBadge active" : "statusBadge blocked"}>{user.partnerApiEnabled ? "Đã bật" : "Đang tắt"}</span></td>
                   <td>{formatVnd(user.balance)}</td>
                   <td>{user.orders?.length ?? 0}</td>
                   <td><div className="passwordReset"><input type="password" placeholder="Mật khẩu mới" value={passwords[user.id] ?? ""} onChange={(event) => setPasswords({ ...passwords, [user.id]: event.target.value })} /><button className="smallButton" type="button" onClick={() => void resetPassword(user)}><KeyRound size={14} /></button></div></td>
-                  <td><div className="rowActions"><button className={user.isBlocked ? "smallButton successButton" : "smallButton dangerButton"} type="button" onClick={() => void toggleBlocked(user)}>{user.isBlocked ? "Mở khóa" : "Khóa"}</button><button className="smallButton secondaryButton" type="button" onClick={() => void revoke(user)}>Thu hồi quyền</button></div></td>
+                  <td><div className="rowActions"><button className="smallButton" type="button" onClick={() => setApiUser(user)}><KeyRound size={14} /> API</button><button className={user.isBlocked ? "smallButton successButton" : "smallButton dangerButton"} type="button" onClick={() => void toggleBlocked(user)}>{user.isBlocked ? "Mở khóa" : "Khóa"}</button><button className="smallButton secondaryButton" type="button" onClick={() => void revoke(user)}>Thu hồi quyền</button></div></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
+      {apiUser ? <PartnerApiPanel api={api} user={apiUser} onClose={() => setApiUser(null)} onChanged={load} onError={onError} /> : null}
     </div>
   );
+}
+
+function PartnerApiPanel({ api, user, onClose, onChanged, onError }: { api: Api; user: User; onClose: () => void; onChanged: () => Promise<void>; onError: (error: string | null) => void }) {
+  const scopeOptions = ["catalog:read", "balance:read", "orders:read", "orders:write"];
+  const [keys, setKeys] = useState<PartnerApiCredential[]>([]);
+  const [webhooks, setWebhooks] = useState<PartnerWebhookEndpoint[]>([]);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
+  const [usdtRate, setUsdtRate] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [keyForm, setKeyForm] = useState({ environment: "TEST" as "LIVE" | "TEST", label: "Website integration", expiresInDays: 365, scopes: scopeOptions });
+  const [settings, setSettings] = useState({ enabled: Boolean(user.partnerApiEnabled), readRateLimit: user.partnerReadRateLimit ?? 120, writeRateLimit: user.partnerWriteRateLimit ?? 20 });
+  const [webhookForm, setWebhookForm] = useState({ environment: "TEST" as "LIVE" | "TEST", url: "", enabled: true });
+
+  async function loadPartner() {
+    try {
+      const [nextKeys, nextWebhooks, rateSetting] = await Promise.all([
+        api.get<PartnerApiCredential[]>(`/admin/collaborators/${user.id}/api-keys`),
+        api.get<PartnerWebhookEndpoint[]>(`/admin/collaborators/${user.id}/webhooks`),
+        api.get<{ rate: number }>("/admin/settings/usdt-vnd-rate")
+      ]);
+      setKeys(nextKeys);
+      setWebhooks(nextWebhooks);
+      setUsdtRate(rateSetting.rate);
+      const current = nextWebhooks.find((item) => item.environment === webhookForm.environment);
+      if (current) setWebhookForm({ environment: current.environment, url: current.url, enabled: current.enabled });
+    } catch (error) {
+      onError((error as Error).message);
+    }
+  }
+
+  useEffect(() => { void loadPartner(); }, [user.id]);
+
+  async function saveSettings() {
+    setBusy(true);
+    try {
+      await api.put(`/admin/collaborators/${user.id}/api-settings`, settings);
+      await onChanged();
+      onError(null);
+    } catch (error) { onError((error as Error).message); } finally { setBusy(false); }
+  }
+
+  async function createKey() {
+    setBusy(true);
+    try {
+      const result = await api.post<{ credential: PartnerApiCredential; secret: string }>(`/admin/collaborators/${user.id}/api-keys`, keyForm);
+      setSecret(result.secret);
+      await loadPartner();
+      onError(null);
+    } catch (error) { onError((error as Error).message); } finally { setBusy(false); }
+  }
+
+  async function revokeKey(key: PartnerApiCredential) {
+    if (!confirm(`Thu hồi API key ${key.keyPrefix}...?`)) return;
+    setBusy(true);
+    try { await api.delete(`/admin/collaborators/${user.id}/api-keys/${key.id}`); await loadPartner(); } catch (error) { onError((error as Error).message); } finally { setBusy(false); }
+  }
+
+  async function saveWebhook(rotateSecret = false) {
+    setBusy(true);
+    try {
+      const result = await api.put<{ endpoint: PartnerWebhookEndpoint; secret?: string | null }>(`/admin/collaborators/${user.id}/webhooks`, { ...webhookForm, rotateSecret, events: ["order.created", "order.updated", "webhook.test"] });
+      if (result.secret) setWebhookSecret(result.secret);
+      await loadPartner();
+      onError(null);
+    } catch (error) { onError((error as Error).message); } finally { setBusy(false); }
+  }
+
+  async function testWebhook() {
+    setBusy(true);
+    try { await api.post(`/admin/collaborators/${user.id}/webhooks/${webhookForm.environment}/test`); onError(null); } catch (error) { onError((error as Error).message); } finally { setBusy(false); }
+  }
+
+  async function saveUsdtRate() {
+    setBusy(true);
+    try { await api.put("/admin/settings/usdt-vnd-rate", { rate: usdtRate }); onError(null); } catch (error) { onError((error as Error).message); } finally { setBusy(false); }
+  }
+
+  function selectWebhookEnvironment(environment: "LIVE" | "TEST") {
+    const current = webhooks.find((item) => item.environment === environment);
+    setWebhookForm({ environment, url: current?.url ?? "", enabled: current?.enabled ?? true });
+  }
+
+  return (
+    <section className="panel partnerApiPanel">
+      <div className="panelHeader"><div><p className="eyebrow">Reseller API</p><h2>{user.displayName ?? user.email}</h2></div><button className="smallButton" onClick={onClose}><X size={15} /> Đóng</button></div>
+      <div className="partnerApiGrid">
+        <div className="apiCard">
+          <h3>Quyền truy cập</h3>
+          <label className="checkRow"><input type="checkbox" checked={settings.enabled} onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })} /> Bật Partner API</label>
+          <label>GET/phút<input type="number" value={settings.readRateLimit} onChange={(event) => setSettings({ ...settings, readRateLimit: Number(event.target.value) })} /></label>
+          <label>POST/phút<input type="number" value={settings.writeRateLimit} onChange={(event) => setSettings({ ...settings, writeRateLimit: Number(event.target.value) })} /></label>
+          <button className="primaryButton" disabled={busy} onClick={() => void saveSettings()}><Save size={15} /> Lưu cấu hình</button>
+        </div>
+        <div className="apiCard">
+          <h3>Cấp API key</h3>
+          <label>Môi trường<select value={keyForm.environment} onChange={(event) => setKeyForm({ ...keyForm, environment: event.target.value as "LIVE" | "TEST" })}><option value="TEST">Sandbox</option><option value="LIVE">Live</option></select></label>
+          <label>Tên key<input value={keyForm.label} onChange={(event) => setKeyForm({ ...keyForm, label: event.target.value })} /></label>
+          <label>Hết hạn sau (ngày)<input type="number" min={1} max={3650} value={keyForm.expiresInDays} onChange={(event) => setKeyForm({ ...keyForm, expiresInDays: Number(event.target.value) })} /></label>
+          <div className="scopeList">{scopeOptions.map((scope) => <label className="checkRow" key={scope}><input type="checkbox" checked={keyForm.scopes.includes(scope)} onChange={(event) => setKeyForm({ ...keyForm, scopes: event.target.checked ? [...keyForm.scopes, scope] : keyForm.scopes.filter((item) => item !== scope) })} />{scope}</label>)}</div>
+          <button className="primaryButton" disabled={busy || !keyForm.scopes.length} onClick={() => void createKey()}><KeyRound size={15} /> Tạo key</button>
+        </div>
+        <div className="apiCard">
+          <h3>Webhook</h3>
+          <label>Môi trường<select value={webhookForm.environment} onChange={(event) => selectWebhookEnvironment(event.target.value as "LIVE" | "TEST")}><option value="TEST">Sandbox</option><option value="LIVE">Live</option></select></label>
+          <label>HTTPS endpoint<input placeholder="https://partner.example/webhooks/vd-store" value={webhookForm.url} onChange={(event) => setWebhookForm({ ...webhookForm, url: event.target.value })} /></label>
+          <label className="checkRow"><input type="checkbox" checked={webhookForm.enabled} onChange={(event) => setWebhookForm({ ...webhookForm, enabled: event.target.checked })} /> Đang nhận webhook</label>
+          <div className="rowActions"><button className="primaryButton" disabled={busy || !webhookForm.url} onClick={() => void saveWebhook(false)}>Lưu</button><button className="smallButton" disabled={busy || !webhookForm.url} onClick={() => void saveWebhook(true)}>Rotate secret</button><button className="smallButton" disabled={busy} onClick={() => void testWebhook()}>Gửi test</button></div>
+        </div>
+        <div className="apiCard">
+          <h3>Nạp ví bằng USDT</h3>
+          <p className="tableSubtext">Tỷ giá này được snapshot trên từng giao dịch.</p>
+          <label>1 USDT = VND<input type="number" min={1} value={usdtRate || ""} onChange={(event) => setUsdtRate(Number(event.target.value))} /></label>
+          <button className="primaryButton" disabled={busy || usdtRate <= 0} onClick={() => void saveUsdtRate()}><Save size={15} /> Lưu tỷ giá</button>
+        </div>
+      </div>
+      {secret ? <OneTimeSecret label="API key" value={secret} /> : null}
+      {webhookSecret ? <OneTimeSecret label="Webhook secret" value={webhookSecret} /> : null}
+      <div className="tableWrap"><table><thead><tr><th>Key</th><th>Môi trường</th><th>Scopes</th><th>Dùng gần nhất</th><th>Hết hạn</th><th></th></tr></thead><tbody>{keys.map((key) => <tr key={key.id}><td><strong>{key.label}</strong><span className="tableSubtext">{key.keyPrefix}...</span></td><td>{key.environment}</td><td>{key.scopes.join(", ")}</td><td>{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString("vi-VN") : "Chưa dùng"}</td><td>{key.expiresAt ? new Date(key.expiresAt).toLocaleDateString("vi-VN") : "Không"}</td><td>{key.revokedAt ? <span className="statusBadge blocked">Đã thu hồi</span> : <button className="smallButton dangerButton" onClick={() => void revokeKey(key)}>Thu hồi</button>}</td></tr>)}</tbody></table></div>
+      <p className="tableSubtext">Tài liệu: <a href="https://api.vanhdao.io.vn/partner/docs" target="_blank" rel="noreferrer">Partner API Docs</a>. Không đặt API key trong JavaScript phía trình duyệt.</p>
+    </section>
+  );
+}
+
+function OneTimeSecret({ label, value }: { label: string; value: string }) {
+  return <div className="oneTimeSecret"><strong>{label} — chỉ hiển thị một lần</strong><code>{value}</code><button className="smallButton" onClick={() => void navigator.clipboard.writeText(value)}>Sao chép</button></div>;
 }
 
 function OrdersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [partnerOrders, setPartnerOrders] = useState<PartnerAdminOrder[]>([]);
+  const [partnerDeliveries, setPartnerDeliveries] = useState<Record<string, string>>({});
+  const [resolvingPartnerItem, setResolvingPartnerItem] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  async function loadOrders() {
     setLoading(true);
-    Promise.all([api.get<Order[]>("/admin/orders"), api.get<Payment[]>("/admin/payments")])
-      .then(([nextOrders, nextPayments]) => {
-        setOrders(nextOrders);
-        setPayments(nextPayments);
-      })
-      .catch((err) => onError((err as Error).message))
-      .finally(() => setLoading(false));
+    try {
+      const [nextOrders, nextPayments, nextPartnerOrders] = await Promise.all([
+        api.get<Order[]>("/admin/orders"),
+        api.get<Payment[]>("/admin/payments"),
+        api.get<PartnerAdminOrder[]>("/admin/partner-orders")
+      ]);
+      setOrders(nextOrders);
+      setPayments(nextPayments);
+      setPartnerOrders(nextPartnerOrders);
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadOrders();
   }, []);
+
+  async function resolvePartnerItem(itemId: string, action: "COMPLETED" | "CANCELLED") {
+    const deliveryText = partnerDeliveries[itemId]?.trim();
+    if (action === "COMPLETED" && !deliveryText) {
+      onError("Hãy nhập nội dung giao hàng trước khi hoàn tất.");
+      return;
+    }
+    if (!confirm(action === "COMPLETED" ? "Hoàn tất và gửi nội dung này qua webhook?" : "Hủy item, hoàn tiền và trả lại tồn kho?")) return;
+    setResolvingPartnerItem(itemId);
+    try {
+      await api.post(`/admin/partner-order-items/${itemId}/resolve`, { action, deliveryText });
+      setPartnerDeliveries({ ...partnerDeliveries, [itemId]: "" });
+      await loadOrders();
+      onError(null);
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setResolvingPartnerItem(null);
+    }
+  }
 
   return (
     <div className="stack">
       {loading && <LoadingBlock label="Đang tải đơn hàng và thanh toán..." />}
+      <section className="panel">
+        <div className="panelHeader"><div><p className="eyebrow">Reseller API</p><h2>Đơn hàng đối tác</h2></div><button className="smallButton" onClick={() => void loadOrders()}><RefreshCw size={14} /> Làm mới</button></div>
+        <div className="tableWrap">
+          <table>
+            <thead><tr><th>Đơn đối tác</th><th>CTV</th><th>Môi trường</th><th>Sản phẩm</th><th>Trạng thái</th><th>Thành tiền</th><th>Xử lý thủ công</th></tr></thead>
+            <tbody>{partnerOrders.flatMap((order) => order.items.map((item, index) => (
+              <tr key={item.id}>
+                <td>{index === 0 ? <><strong>{order.externalOrderId}</strong><span className="tableSubtext">{new Date(order.createdAt).toLocaleString("vi-VN")}</span></> : ""}</td>
+                <td>{index === 0 ? order.user.email : ""}</td>
+                <td>{order.environment}</td>
+                <td><strong>{item.productName}</strong><span className="tableSubtext">SL {item.quantity} · {item.deliveryType}</span></td>
+                <td><span className={item.status === "FULFILLED" ? "statusBadge active" : item.status === "CANCELLED" ? "statusBadge blocked" : "statusBadge"}>{item.status}</span></td>
+                <td>{formatVnd(item.totalAmount)}</td>
+                <td>{item.deliveryType === "MANUAL" && item.status === "PENDING_FULFILLMENT" ? <div className="manualPartnerActions"><textarea placeholder="Nội dung giao cho website CTV" value={partnerDeliveries[item.id] ?? ""} onChange={(event) => setPartnerDeliveries({ ...partnerDeliveries, [item.id]: event.target.value })} /><div className="rowActions"><button className="smallButton successButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "COMPLETED")}>Hoàn tất</button><button className="smallButton dangerButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "CANCELLED")}>Hủy & hoàn tiền</button></div></div> : item.deliveryText ? <span className="tableSubtext">Đã có nội dung giao</span> : "—"}</td>
+              </tr>
+            )))}</tbody>
+          </table>
+        </div>
+      </section>
       <DataTable
         title="Đơn hàng"
         columns={["Mã", "User", "Loại", "Sản phẩm", "SL", "Giá gốc", "Ưu đãi CTV", "Voucher", "Thực thu", "Trạng thái", "Thời gian"]}

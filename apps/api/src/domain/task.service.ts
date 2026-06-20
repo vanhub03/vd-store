@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { ShopService } from "./shop.service";
 import { TelegramNotifyService } from "./telegram-notify.service";
+import { PrismaService } from "../prisma.service";
 
 @Injectable()
 export class TaskService {
@@ -9,7 +10,8 @@ export class TaskService {
 
   constructor(
     private readonly shop: ShopService,
-    private readonly telegram: TelegramNotifyService
+    private readonly telegram: TelegramNotifyService,
+    private readonly prisma: PrismaService
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -21,5 +23,11 @@ export class TaskService {
     if (expired.length > 0) {
       this.logger.log(`Expired ${expired.length} pending payment(s).`);
     }
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async purgeExpiredPartnerIdempotency() {
+    const result = await this.prisma.apiIdempotencyRecord.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+    if (result.count > 0) this.logger.log(`Purged ${result.count} expired partner idempotency record(s).`);
   }
 }

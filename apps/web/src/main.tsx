@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  Coins,
   CreditCard,
   Headphones,
   Heart,
@@ -1002,10 +1003,10 @@ function App() {
     trackBeginCheckout([analyticsItem(product, quantity)]);
   }
 
-  async function createTopup(amount: number) {
+  async function createTopup(amount: number, method: "bank" | "usdt" = "bank") {
     if (!requireLogin()) return;
-    await runAction("topup", async () => {
-      setQr(await api.post<PaymentResult>("/store/topups", { amount }));
+    await runAction(method === "usdt" ? "topup-usdt" : "topup", async () => {
+      setQr(await api.post<PaymentResult>(method === "usdt" ? "/store/topups/usdt" : "/store/topups", { amount }));
       setQrStatus(null);
       setDelivery(null);
       setWalletOpen(false);
@@ -3529,11 +3530,12 @@ function WalletDialog({
   language: Language;
   balance: number;
   loading: string;
-  onTopup: (amount: number) => void;
+  onTopup: (amount: number, method: "bank" | "usdt") => void;
   onClose: () => void;
 }) {
   const [customAmount, setCustomAmount] = useState("");
   const [amountError, setAmountError] = useState("");
+  const [method, setMethod] = useState<"bank" | "usdt">("bank");
   const amounts = [50000, 100000, 200000, 500000];
   const { handleOverlayClick, isClosing, requestClose } = useDialogClose(onClose);
 
@@ -3545,7 +3547,7 @@ function WalletDialog({
       return;
     }
     setAmountError("");
-    onTopup(amount);
+    onTopup(amount, method);
   }
 
   return (
@@ -3555,10 +3557,14 @@ function WalletDialog({
         <p className="section-kicker"><Wallet size={16} /> {language === "vi" ? "Ví VD" : "VD Wallet"}</p>
         <h2>{formatVnd(balance)}</h2>
         <p>{language === "vi" ? "Nạp ví để mua nhanh mà không cần quét QR từng đơn." : "Top up your wallet to buy quickly without scanning a QR every time."}</p>
+        <div className="payment-methods wallet-topup-methods">
+          <button type="button" className={method === "bank" ? "active" : ""} onClick={() => setMethod("bank")}><QrCode size={16} /> VietQR</button>
+          <button type="button" className={method === "usdt" ? "active" : ""} onClick={() => setMethod("usdt")}><Coins size={16} /> USDT</button>
+        </div>
         <div className="amount-grid">
           {amounts.map((amount) => (
-            <button key={amount} onClick={() => onTopup(amount)} disabled={loading === "topup"}>
-              {loading === "topup" ? <Loader2 className="spin" size={15} /> : null}
+            <button key={amount} onClick={() => onTopup(amount, method)} disabled={loading === "topup" || loading === "topup-usdt"}>
+              {loading === "topup" || loading === "topup-usdt" ? <Loader2 className="spin" size={15} /> : null}
               {formatVnd(amount)}
             </button>
           ))}
@@ -3567,9 +3573,9 @@ function WalletDialog({
           <label htmlFor="custom-amount">{language === "vi" ? "Nạp số tiền tùy ý" : "Custom top-up amount"}</label>
           <div>
             <input id="custom-amount" inputMode="numeric" min={1000} value={customAmount} onChange={(event) => setCustomAmount(event.target.value)} placeholder="150000" />
-            <button className="primary-button" disabled={loading === "topup"}>
-              {loading === "topup" ? <Loader2 className="spin" size={17} /> : <QrCode size={17} />}
-              {language === "vi" ? "Tạo QR" : "Create QR"}
+            <button className="primary-button" disabled={loading === "topup" || loading === "topup-usdt"}>
+              {loading === "topup" || loading === "topup-usdt" ? <Loader2 className="spin" size={17} /> : method === "usdt" ? <Coins size={17} /> : <QrCode size={17} />}
+              {language === "vi" ? (method === "usdt" ? "Tạo hóa đơn USDT" : "Tạo QR") : (method === "usdt" ? "Create USDT invoice" : "Create QR")}
             </button>
           </div>
           {amountError ? <p className="field-error">{amountError}</p> : null}

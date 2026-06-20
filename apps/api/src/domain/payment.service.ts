@@ -209,6 +209,21 @@ export class PaymentService {
       return { ok: true, status: "manual_review" };
     }
 
+    if (payment.kind === PaymentKind.TOPUP) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerPaymentId: normalized.providerPaymentId ?? payment.providerPaymentId,
+          providerPayload: stripWebhookSign(payload) as Prisma.InputJsonValue
+        }
+      });
+      const result = await this.shop.creditTopup(payment.id);
+      await this.deletePendingPaymentMessage(payment.id, payment);
+      const telegramId = result.user?.telegramId;
+      if (canNotifyTelegramUser(telegramId)) await this.telegram.notifyTopup(telegramId, payment.amount, payment.code);
+      return { ok: true, status: result.outcome };
+    }
+
     if (payment.kind === PaymentKind.DIRECT_ORDER) {
       await this.prisma.payment.update({
         where: { id: payment.id },

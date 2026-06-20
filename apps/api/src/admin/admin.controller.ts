@@ -1,11 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
-import { CustomerRole, ManualOrderStatus, ProductDeliveryType, ProductStatus } from "@prisma/client";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
+import { CustomerRole, ManualOrderStatus, PartnerEnvironment, ProductDeliveryType, ProductStatus } from "@prisma/client";
 import { ArrayMinSize, IsArray, IsBoolean, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
 import { BroadcastService } from "../domain/broadcast.service";
 import { ShopService, slugify } from "../domain/shop.service";
 import { PrismaService } from "../prisma.service";
 import { AnalyticsService } from "../analytics/analytics.service";
+import { PartnerService } from "../partner/partner.service";
+import { PartnerWebhookService } from "../partner/partner-webhook.service";
 
 class CategoryDto {
   @IsString()
@@ -227,6 +229,76 @@ class UpdateCollaboratorDto {
   password?: string;
 }
 
+class CreatePartnerApiKeyDto {
+  @IsEnum(PartnerEnvironment)
+  environment!: PartnerEnvironment;
+
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  scopes?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  expiresInDays?: number;
+}
+
+class PartnerApiSettingsDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  readRateLimit?: number;
+
+  @IsOptional()
+  @IsInt()
+  writeRateLimit?: number;
+}
+
+class PartnerWebhookDto {
+  @IsEnum(PartnerEnvironment)
+  environment!: PartnerEnvironment;
+
+  @IsString()
+  url!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  events?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  rotateSecret?: boolean;
+}
+
+class PartnerItemResolutionDto {
+  @IsString()
+  action!: "COMPLETED" | "CANCELLED";
+
+  @IsOptional()
+  @IsString()
+  deliveryText?: string;
+}
+
+class UsdtRateDto {
+  @IsNumber()
+  @Min(1)
+  rate!: number;
+}
+
 @Controller("admin")
 @UseGuards(AdminAuthGuard)
 export class AdminController {
@@ -234,7 +306,9 @@ export class AdminController {
     private readonly prisma: PrismaService,
     private readonly shop: ShopService,
     private readonly broadcasts: BroadcastService,
-    private readonly analytics: AnalyticsService
+    private readonly analytics: AnalyticsService,
+    private readonly partners: PartnerService,
+    private readonly partnerWebhooks: PartnerWebhookService
   ) {}
 
   @Get("stats")
@@ -285,6 +359,81 @@ export class AdminController {
   @Put("collaborators/:id")
   updateCollaborator(@Req() request: AdminRequest, @Param("id") userId: string, @Body() body: UpdateCollaboratorDto) {
     return this.shop.updateCollaborator(request.admin!.id, userId, body);
+  }
+
+  @Get("collaborators/:id/api-keys")
+  partnerApiKeys(@Param("id") userId: string) {
+    return this.partners.listCredentials(userId);
+  }
+
+  @Post("collaborators/:id/api-keys")
+  createPartnerApiKey(@Req() request: AdminRequest, @Param("id") userId: string, @Body() body: CreatePartnerApiKeyDto) {
+    return this.partners.createCredential(request.admin!.id, userId, body);
+  }
+
+  @Delete("collaborators/:id/api-keys/:credentialId")
+  revokePartnerApiKey(@Req() request: AdminRequest, @Param("id") userId: string, @Param("credentialId") credentialId: string) {
+    return this.partners.revokeCredential(request.admin!.id, userId, credentialId);
+  }
+
+  @Put("collaborators/:id/api-settings")
+  updatePartnerApiSettings(@Req() request: AdminRequest, @Param("id") userId: string, @Body() body: PartnerApiSettingsDto) {
+    return this.partners.updateApiSettings(request.admin!.id, userId, body);
+  }
+
+  @Get("collaborators/:id/webhooks")
+  partnerWebhooksForUser(@Param("id") userId: string) {
+    return this.partnerWebhooks.listEndpoints(userId);
+  }
+
+  @Put("collaborators/:id/webhooks")
+  configurePartnerWebhook(@Req() request: AdminRequest, @Param("id") userId: string, @Body() body: PartnerWebhookDto) {
+    return this.partners.configureWebhook(request.admin!.id, userId, body);
+  }
+
+  @Post("collaborators/:id/webhooks/:environment/test")
+  testPartnerWebhook(@Param("id") userId: string, @Param("environment") environment: PartnerEnvironment) {
+    return this.partnerWebhooks.sendTest(userId, environment);
+  }
+
+  @Get("collaborators/:id/webhook-deliveries")
+  partnerWebhookDeliveries(@Param("id") userId: string) {
+    return this.partnerWebhooks.listDeliveries(userId);
+  }
+
+  @Get("partner-orders")
+  partnerOrders(@Query("take") take?: string) {
+    return this.prisma.partnerOrder.findMany({
+      orderBy: { createdAt: "desc" },
+      take: Math.min(200, Math.max(1, Number(take ?? 100))),
+      include: {
+        user: { select: { id: true, telegramId: true, email: true, displayName: true, role: true, isBlocked: true, createdAt: true } },
+        items: { orderBy: { createdAt: "asc" } }
+      }
+    });
+  }
+
+  @Post("partner-order-items/:id/resolve")
+  resolvePartnerOrderItem(@Req() request: AdminRequest, @Param("id") itemId: string, @Body() body: PartnerItemResolutionDto) {
+    if (!["COMPLETED", "CANCELLED"].includes(body.action)) throw new BadRequestException("Invalid partner item action.");
+    return this.partners.fulfillItem(request.admin!.id, itemId, body.action, body.deliveryText);
+  }
+
+  @Get("settings/usdt-vnd-rate")
+  async usdtVndRate() {
+    const setting = await this.prisma.storeSetting.findUnique({ where: { key: "USDT_VND_RATE" } });
+    return { rate: Number(setting?.value ?? process.env.USDT_VND_RATE ?? 0), updatedAt: setting?.updatedAt ?? null };
+  }
+
+  @Put("settings/usdt-vnd-rate")
+  async updateUsdtVndRate(@Req() request: AdminRequest, @Body() body: UsdtRateDto) {
+    const setting = await this.prisma.storeSetting.upsert({
+      where: { key: "USDT_VND_RATE" },
+      update: { value: String(body.rate), updatedByAdminId: request.admin!.id },
+      create: { key: "USDT_VND_RATE", value: String(body.rate), updatedByAdminId: request.admin!.id }
+    });
+    await this.prisma.auditLog.create({ data: { actorAdminId: request.admin!.id, action: "USDT_VND_RATE_UPDATE", entityType: "StoreSetting", entityId: setting.key, meta: { rate: body.rate } } });
+    return { rate: Number(setting.value), updatedAt: setting.updatedAt };
   }
 
   @Post("users/:id/wallet-adjustments")

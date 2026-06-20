@@ -17,6 +17,10 @@ import { PaymentService } from "./domain/payment.service";
 import { TaskService } from "./domain/task.service";
 import { BroadcastService } from "./domain/broadcast.service";
 import { AnalyticsService } from "./analytics/analytics.service";
+import { PartnerController } from "./partner/partner.controller";
+import { PartnerAuthGuard, PartnerRateLimitGuard } from "./partner/partner-auth.guard";
+import { PartnerService } from "./partner/partner.service";
+import { PartnerWebhookService } from "./partner/partner-webhook.service";
 
 @Module({
   imports: [
@@ -26,7 +30,7 @@ import { AnalyticsService } from "./analytics/analytics.service";
     }),
     ScheduleModule.forRoot()
   ],
-  controllers: [HealthController, AuthController, AdminController, BotInternalController, SepayController, CryptomusController, StoreController],
+  controllers: [HealthController, AuthController, AdminController, BotInternalController, SepayController, CryptomusController, StoreController, PartnerController],
   providers: [
     PrismaService,
     AuthService,
@@ -36,7 +40,11 @@ import { AnalyticsService } from "./analytics/analytics.service";
     PaymentService,
     TaskService,
     BroadcastService,
-    AnalyticsService
+    AnalyticsService,
+    PartnerService,
+    PartnerWebhookService,
+    PartnerAuthGuard,
+    PartnerRateLimitGuard
   ]
 })
 export class AppModule {}

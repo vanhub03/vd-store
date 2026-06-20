@@ -36,12 +36,43 @@ enum InventoryStatus {
 
 enum OrderStatus {
   PENDING_PAYMENT
+  PENDING_FULFILLMENT
   PAID
   FULFILLED
   EXPIRED
   CANCELLED
   CREDITED_TO_WALLET
   MANUAL_REVIEW
+}
+
+enum PartnerEnvironment {
+  LIVE
+  TEST
+}
+
+enum PartnerOrderStatus {
+  PENDING_FULFILLMENT
+  PARTIALLY_FULFILLED
+  FULFILLED
+  PARTIALLY_CANCELLED
+  CANCELLED
+}
+
+enum PartnerOrderItemStatus {
+  PENDING_FULFILLMENT
+  FULFILLED
+  CANCELLED
+}
+
+enum ApiIdempotencyStatus {
+  PENDING
+  COMPLETED
+}
+
+enum PartnerWebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
 }
 
 enum ManualOrderStatus {
@@ -108,6 +139,9 @@ model TelegramUser {
   languageCode String?
   role         CustomerRole @default(CUSTOMER)
   isBlocked    Boolean  @default(false)
+  partnerApiEnabled Boolean @default(false)
+  partnerReadRateLimit Int @default(120)
+  partnerWriteRateLimit Int @default(20)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -118,6 +152,10 @@ model TelegramUser {
   reviews             ProductReview[]
   voucherRedemptions  VoucherRedemption[]
   voucherAssignments  VoucherAssignment[]
+  partnerApiCredentials PartnerApiCredential[]
+  partnerOrders         PartnerOrder[]
+  partnerWebhookEndpoints PartnerWebhookEndpoint[]
+  apiIdempotencyRecords ApiIdempotencyRecord[]
 
   @@index([role, isBlocked])
   @@index([isBlocked, createdAt])
@@ -137,6 +175,8 @@ model Admin {
   broadcasts Broadcast[]
   vouchers   Voucher[]
   voucherAssignments VoucherAssignment[]
+  partnerApiCredentials PartnerApiCredential[]
+  updatedSettings StoreSetting[]
 }
 
 model Category {
@@ -183,6 +223,7 @@ model Product {
   inventoryItems InventoryItem[]
   orders         Order[]
   reviews        ProductReview[]
+  partnerOrderItems PartnerOrderItem[]
 
   @@index([categoryId])
   @@index([status])
@@ -257,6 +298,7 @@ model Order {
   inventoryItems    InventoryItem[]
   walletEntries     WalletLedgerEntry[]
   voucherRedemption VoucherRedemption?
+  partnerOrderItem  PartnerOrderItem?
 
   @@index([userId, createdAt])
   @@index([status, expiresAt])
@@ -352,6 +394,7 @@ model Payment {
   provider          String        @default("sepay")
   cryptoCurrency    String?
   cryptoAmount      Decimal?      @db.Decimal(18, 8)
+  quotedExchangeRate Decimal?     @db.Decimal(18, 4)
   providerPaymentId String?
   checkoutUrl       String?
   deeplink          String?
@@ -372,6 +415,161 @@ model Payment {
   @@index([provider, providerPaymentId])
   @@index([provider, status])
   @@index([createdAt])
+}
+
+model PartnerApiCredential {
+  id               String             @id @default(cuid())
+  userId           String
+  createdByAdminId String?
+  environment      PartnerEnvironment
+  label            String
+  keyPrefix        String
+  keyHash          String             @unique
+  scopes           String[]
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user      TelegramUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdBy Admin?       @relation(fields: [createdByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([userId, environment, revokedAt])
+  @@index([expiresAt])
+}
+
+model PartnerOrder {
+  id                         String             @id @default(cuid())
+  userId                     String
+  environment                PartnerEnvironment
+  externalOrderId            String
+  status                     PartnerOrderStatus
+  currency                   String             @default("VND")
+  subtotalAmount             Int
+  collaboratorDiscountAmount Int                @default(0)
+  voucherDiscountAmount      Int                @default(0)
+  totalAmount                Int
+  refundedAmount             Int                @default(0)
+  voucherCode                String?
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+
+  user          TelegramUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items         PartnerOrderItem[]
+  webhookEvents PartnerWebhookEvent[]
+
+  @@unique([userId, environment, externalOrderId])
+  @@index([userId, environment, createdAt])
+  @@index([status, createdAt])
+}
+
+model PartnerOrderItem {
+  id                         String                 @id @default(cuid())
+  partnerOrderId             String
+  productId                  String
+  sourceOrderId              String?                @unique
+  productName                String
+  deliveryType               ProductDeliveryType
+  quantity                   Int
+  unitPrice                  Int
+  subtotalAmount             Int
+  collaboratorDiscountAmount Int                    @default(0)
+  voucherDiscountAmount      Int                    @default(0)
+  totalAmount                Int
+  status                     PartnerOrderItemStatus
+  deliveryText               String?
+  refundedAt                 DateTime?
+  createdAt                  DateTime               @default(now())
+  updatedAt                  DateTime               @updatedAt
+
+  partnerOrder PartnerOrder @relation(fields: [partnerOrderId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sourceOrder  Order?       @relation(fields: [sourceOrderId], references: [id], onDelete: SetNull)
+
+  @@index([partnerOrderId, status])
+  @@index([productId])
+}
+
+model ApiIdempotencyRecord {
+  id             String               @id @default(cuid())
+  userId         String
+  environment    PartnerEnvironment
+  idempotencyKey String
+  requestHash    String
+  status         ApiIdempotencyStatus @default(PENDING)
+  responseStatus Int?
+  responseBody   Json?
+  expiresAt      DateTime
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  user TelegramUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, environment, idempotencyKey])
+  @@index([expiresAt])
+}
+
+model PartnerWebhookEndpoint {
+  id               String             @id @default(cuid())
+  userId           String
+  environment      PartnerEnvironment
+  url              String
+  secretCiphertext String
+  secretIv         String
+  secretTag        String
+  enabled          Boolean            @default(true)
+  events           String[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user   TelegramUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventsLog PartnerWebhookEvent[]
+
+  @@unique([userId, environment])
+}
+
+model PartnerWebhookEvent {
+  id             String   @id @default(cuid())
+  endpointId     String
+  partnerOrderId String?
+  type           String
+  payload        Json
+  createdAt      DateTime @default(now())
+
+  endpoint     PartnerWebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  partnerOrder PartnerOrder?          @relation(fields: [partnerOrderId], references: [id], onDelete: SetNull)
+  delivery     PartnerWebhookDelivery?
+
+  @@index([endpointId, createdAt])
+  @@index([partnerOrderId])
+}
+
+model PartnerWebhookDelivery {
+  id             String                       @id @default(cuid())
+  eventId        String                       @unique
+  status         PartnerWebhookDeliveryStatus @default(PENDING)
+  attemptCount   Int                          @default(0)
+  nextAttemptAt  DateTime?
+  responseStatus Int?
+  lastError      String?
+  deliveredAt    DateTime?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  event PartnerWebhookEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+}
+
+model StoreSetting {
+  key              String   @id
+  value            String
+  updatedByAdminId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  updatedBy Admin? @relation(fields: [updatedByAdminId], references: [id], onDelete: SetNull)
 }
 
 model WalletLedgerEntry {

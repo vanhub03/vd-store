@@ -6,6 +6,9 @@ import {
   InventoryStatus,
   ManualOrderStatus,
   OrderStatus,
+  PartnerEnvironment,
+  PartnerOrderItemStatus,
+  PartnerOrderStatus,
   PaymentKind,
   PaymentMethod,
   PaymentStatus,
@@ -278,6 +281,63 @@ export class ShopService {
     });
 
     return { payment, code, amount, expiresAt, qrImageUrl };
+  }
+
+  async createCryptomusTopup(telegramId: string, amount: number) {
+    assertPositiveVnd(amount);
+    const user = await this.requireTelegramUser(telegramId);
+    const setting = await this.prisma.storeSetting.findUnique({ where: { key: "USDT_VND_RATE" } });
+    const rate = Number(setting?.value ?? process.env.USDT_VND_RATE ?? 0);
+    if (!Number.isFinite(rate) || rate <= 0) throw new BadRequestException("Ty gia USDT/VND chua duoc cau hinh.");
+    const code = await this.createUniqueCode(TOPUP_PREFIX);
+    const expiresAt = minutesFromNow(30);
+    const cryptoAmount = roundUsdt(amount / rate);
+    const payment = await this.prisma.payment.create({
+      data: {
+        code,
+        kind: PaymentKind.TOPUP,
+        status: PaymentStatus.PENDING,
+        amount,
+        expectedAmount: amount,
+        userId: user.id,
+        expiresAt,
+        provider: "cryptomus",
+        cryptoCurrency: "USDT",
+        cryptoAmount: new Prisma.Decimal(cryptoAmount),
+        quotedExchangeRate: new Prisma.Decimal(rate)
+      }
+    });
+    try {
+      const invoice = await this.createCryptomusInvoice({ code, productName: "VD Store wallet top-up", amount: cryptoAmount, expiresAt });
+      const updatedPayment = await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerPaymentId: invoice.providerPaymentId,
+          checkoutUrl: invoice.checkoutUrl,
+          deeplink: invoice.deeplink,
+          qrImageUrl: invoice.qrImageUrl,
+          qrPayload: invoice.address ?? invoice.checkoutUrl ?? code,
+          providerPayload: invoice.rawPayload as Prisma.InputJsonValue
+        }
+      });
+      return {
+        payment: updatedPayment,
+        code,
+        amount,
+        cryptoCurrency: "USDT",
+        cryptoAmount,
+        quotedExchangeRate: rate,
+        expiresAt,
+        checkoutUrl: invoice.checkoutUrl,
+        deeplink: invoice.deeplink,
+        qrImageUrl: invoice.qrImageUrl,
+        address: invoice.address,
+        network: invoice.network
+      };
+    } catch (error) {
+      await this.prisma.payment.delete({ where: { id: payment.id } }).catch(() => undefined);
+      throw error;
+    }
   }
 
   async previewVoucher(telegramId: string, productId: string, quantity = 1, voucherCode?: string | null, channel: SalesChannel = "web", voucherClaim?: VoucherClaim | null) {
@@ -696,6 +756,151 @@ export class ShopService {
     );
     this.notifyManualOrdersInBackground(result.orders.map((order) => order.id));
     return result;
+  }
+
+  async previewPartnerCart(userId: string, items: CartOrderItemInput[], voucherCode?: string | null) {
+    const cartItems = normalizeCartItems(items);
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.telegramUser.findUnique({ where: { id: userId } });
+      if (!user || user.role !== CustomerRole.COLLABORATOR || user.isBlocked || !user.partnerApiEnabled) {
+        throw new BadRequestException("Tai khoan cong tac vien khong hop le.");
+      }
+      const lines = await this.prepareCartLines(tx, cartItems, "web", user, false);
+      const quote = await this.quoteVoucher(tx, user, summarizePricing(lines), voucherCode, null);
+      return { lines: allocateCartQuote(lines, quote), quote };
+    }, ORDER_TRANSACTION_OPTIONS);
+  }
+
+  async purchasePartnerCart(userId: string, externalOrderId: string, items: CartOrderItemInput[], voucherCode?: string | null) {
+    const cartItems = normalizeCartItems(items);
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.telegramUser.findUnique({ where: { id: userId } });
+      if (!user || user.role !== CustomerRole.COLLABORATOR || user.isBlocked || !user.partnerApiEnabled) {
+        throw new BadRequestException("Tai khoan cong tac vien khong hop le.");
+      }
+
+      const lines = await this.prepareCartLines(tx, cartItems, "web", user);
+      const quote = await this.quoteVoucher(tx, user, summarizePricing(lines), voucherCode, null);
+      const pricedLines = allocateCartQuote(lines, quote);
+      const balance = await this.getWalletBalance(user.id, tx);
+      if (balance < quote.totalAmount) throw new BadRequestException("So du khong du.");
+
+      const checkoutGroupId = crypto.randomUUID();
+      const paymentCode = await this.createUniqueCode("API", tx);
+      const partnerOrder = await tx.partnerOrder.create({
+        data: {
+          userId: user.id,
+          environment: PartnerEnvironment.LIVE,
+          externalOrderId,
+          status: PartnerOrderStatus.PENDING_FULFILLMENT,
+          subtotalAmount: quote.subtotalAmount,
+          collaboratorDiscountAmount: quote.collaboratorDiscountAmount,
+          voucherDiscountAmount: quote.voucherDiscountAmount,
+          totalAmount: quote.totalAmount,
+          voucherCode: quote.code
+        }
+      });
+
+      const sourceOrders: Array<{ id: string }> = [];
+      const partnerItems = [];
+      for (let index = 0; index < pricedLines.length; index += 1) {
+        const line = pricedLines[index];
+        const isManual = line.product.deliveryType === ProductDeliveryType.MANUAL;
+        const sourceOrder = await tx.order.create({
+          data: {
+            code: index === 0 ? paymentCode : await this.createUniqueCode("API", tx),
+            checkoutGroupId,
+            userId: user.id,
+            productId: line.product.id,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            subtotalAmount: line.subtotalAmount,
+            discountAmount: line.discountAmount,
+            collaboratorDiscountPercent: line.collaboratorDiscountPercent,
+            collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+            voucherDiscountAmount: line.voucherDiscountAmount,
+            customerRoleSnapshot: user.role,
+            totalAmount: line.totalAmount,
+            voucherId: index === 0 ? quote.voucherId : null,
+            voucherCode: index === 0 ? quote.code : null,
+            status: isManual ? OrderStatus.PENDING_FULFILLMENT : OrderStatus.PAID,
+            paymentMethod: PaymentMethod.WALLET
+          }
+        });
+        sourceOrders.push(sourceOrder);
+
+        let deliveryText: string | null = null;
+        let itemStatus: PartnerOrderItemStatus = PartnerOrderItemStatus.PENDING_FULFILLMENT;
+        if (isManual) {
+          const reserved = await tx.product.updateMany({
+            where: { id: line.product.id, manualStock: { gte: line.quantity } },
+            data: { manualStock: { decrement: line.quantity } }
+          });
+          if (reserved.count !== 1) throw new BadRequestException("San pham da het hang.");
+        } else {
+          deliveryText = await this.fulfillOrderItems(tx, sourceOrder.id, line.product, line.quantity);
+          itemStatus = PartnerOrderItemStatus.FULFILLED;
+          await tx.order.update({
+            where: { id: sourceOrder.id },
+            data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() }
+          });
+        }
+
+        partnerItems.push(await tx.partnerOrderItem.create({
+          data: {
+            partnerOrderId: partnerOrder.id,
+            productId: line.product.id,
+            sourceOrderId: sourceOrder.id,
+            productName: line.product.name,
+            deliveryType: line.product.deliveryType,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            subtotalAmount: line.subtotalAmount,
+            collaboratorDiscountAmount: line.collaboratorDiscountAmount,
+            voucherDiscountAmount: line.voucherDiscountAmount,
+            totalAmount: line.totalAmount,
+            status: itemStatus,
+            deliveryText
+          }
+        }));
+      }
+
+      const payment = await tx.payment.create({
+        data: {
+          code: paymentCode,
+          kind: PaymentKind.WALLET_PURCHASE,
+          status: PaymentStatus.SUCCEEDED,
+          amount: quote.totalAmount,
+          expectedAmount: quote.totalAmount,
+          userId: user.id,
+          orderId: sourceOrders[0].id,
+          provider: "partner-api"
+        }
+      });
+      await this.redeemVoucher(tx, quote, user.id, sourceOrders[0].id);
+      await tx.walletLedgerEntry.create({
+        data: {
+          userId: user.id,
+          amount: -quote.totalAmount,
+          type: WalletEntryType.PURCHASE,
+          referencePaymentId: payment.id,
+          referenceOrderId: sourceOrders[0].id,
+          note: `Partner API ${externalOrderId}`
+        }
+      });
+
+      const status = partnerAggregateStatus(partnerItems.map((item) => item.status));
+      const updated = await tx.partnerOrder.update({
+        where: { id: partnerOrder.id },
+        data: { status },
+        include: { items: { orderBy: { createdAt: "asc" } } }
+      });
+      return { partnerOrder: updated, balanceAfter: balance - quote.totalAmount, sourceOrderIds: sourceOrders.map((order) => order.id) };
+    }, ORDER_TRANSACTION_OPTIONS);
+
+    this.clearCatalogCache();
+    this.notifyManualOrdersInBackground(result.sourceOrderIds);
+    return { partnerOrder: result.partnerOrder, balanceAfter: result.balanceAfter };
   }
 
   async createCartBankOrder(
@@ -1789,7 +1994,8 @@ export class ShopService {
     tx: Prisma.TransactionClient,
     items: CartOrderItemInput[],
     channel: SalesChannel,
-    user: { role: CustomerRole }
+    user: { role: CustomerRole },
+    validateStock = true
   ) {
     const products = await tx.product.findMany({
       where: { id: { in: items.map((item) => item.productId) } }
@@ -1802,7 +2008,7 @@ export class ShopService {
       if (!product || !isVisibleForChannel(product, channel)) {
         throw new NotFoundException("Một sản phẩm trong giỏ không còn được bán.");
       }
-      await this.ensurePurchasable(product, item.quantity, tx);
+      if (validateStock) await this.ensurePurchasable(product, item.quantity, tx);
       lines.push(priceOrderLine(product, item.quantity, channel, user.role));
     }
     return lines;
@@ -2627,6 +2833,17 @@ function summarizePricing(lines: Array<{ subtotalAmount: number; collaboratorDis
     collaboratorDiscountAmount,
     collaboratorSubtotal: subtotalAmount - collaboratorDiscountAmount
   };
+}
+
+function partnerAggregateStatus(statuses: PartnerOrderItemStatus[]) {
+  const fulfilled = statuses.filter((status) => status === PartnerOrderItemStatus.FULFILLED).length;
+  const cancelled = statuses.filter((status) => status === PartnerOrderItemStatus.CANCELLED).length;
+  const pending = statuses.length - fulfilled - cancelled;
+  if (cancelled === statuses.length) return PartnerOrderStatus.CANCELLED;
+  if (fulfilled === statuses.length) return PartnerOrderStatus.FULFILLED;
+  if (cancelled > 0 && pending === 0) return PartnerOrderStatus.PARTIALLY_CANCELLED;
+  if (fulfilled > 0 || cancelled > 0) return PartnerOrderStatus.PARTIALLY_FULFILLED;
+  return PartnerOrderStatus.PENDING_FULFILLMENT;
 }
 
 function formatCartDelivery(orders: Array<{ product: { name: string }; deliveryText?: string | null }>) {

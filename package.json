@@ -13,12 +13,14 @@
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "smoke:prod": "node scripts/smoke-production.mjs",
+    "smoke:partner:prod": "node scripts/smoke-partner-production.mjs",
     "product-art:apply": "node scripts/apply-product-art.mjs",
     "prisma:generate": "pnpm --filter @vd-store/api prisma:generate",
     "prisma:migrate": "pnpm --filter @vd-store/api prisma:migrate",
     "prisma:seed": "pnpm --filter @vd-store/api prisma:seed"
   },
   "devDependencies": {
+    "@prisma/client": "^6.19.3",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3"
   }

@@ -273,6 +273,7 @@ export class StoreApiError extends Error {
 function isPaymentCreationPath(path: string) {
   return (
     path === "/store/topups" ||
+    path === "/store/topups/usdt" ||
     path === "/store/orders/wallet" ||
     path === "/store/orders/bank" ||
     path === "/store/orders/usdt" ||
