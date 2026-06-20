@@ -98,6 +98,7 @@ Nếu website production của CTV lỡ cấu hình key test, đơn sẽ có `li
 6. Nếu đơn trả về `FULFILLED`, website CTV giao nội dung cho khách ngay.
 7. Nếu đơn trả về `PENDING_FULFILLMENT` hoặc `PARTIALLY_FULFILLED`, website CTV hiển thị trạng thái chờ admin VD Store xử lý phần thủ công.
 8. CTV nhận webhook `order.updated` hoặc chủ động gọi `GET /orders/:id` để cập nhật kết quả cuối.
+9. Khi một đơn live của CTV được admin VD Store hoàn tất toàn bộ, hệ thống có thể cấp thêm mã voucher thưởng 10.000đ cho CTV dùng ở đơn kế tiếp.
 
 ## 4. API catalog
 
@@ -369,6 +370,7 @@ Với đơn live:
 - Nếu thiếu tiền ví, toàn bộ đơn bị từ chối, không trừ ví.
 - Nếu hết hàng, toàn bộ đơn bị từ chối, không trừ ví.
 - Nếu item thủ công bị admin hủy, hệ thống hoàn đúng phần tiền item đó và trả lại tồn.
+- Khi admin hoàn tất toàn bộ đơn CTV, hệ thống tự cấp một voucher thưởng 10.000đ dùng 1 lần cho đơn kế tiếp.
 
 Với đơn sandbox/test:
 
@@ -472,6 +474,41 @@ Payload mẫu:
   }
 }
 ```
+
+Khi đơn live được admin hoàn tất toàn bộ, webhook `order.updated` có thể kèm thêm `rewardVoucher`:
+
+```json
+{
+  "id": "evt_123",
+  "type": "order.updated",
+  "livemode": true,
+  "data": {
+    "order": {
+      "id": "po_123",
+      "externalOrderId": "CTV-ORDER-2026-0001",
+      "status": "FULFILLED"
+    },
+    "rewardVoucher": {
+      "code": "CTV10K-1A2B3C4D",
+      "amount": 10000,
+      "discountPercent": 100,
+      "maxDiscountAmount": 10000,
+      "maxUses": 1,
+      "allowCollaboratorStacking": true,
+      "expiresAt": "2026-07-20T08:00:00.000Z"
+    }
+  }
+}
+```
+
+Voucher thưởng này:
+
+- Được cấp riêng cho CTV đó.
+- Giảm tối đa 10.000đ cho đơn kế tiếp.
+- Dùng được cùng giá CTV.
+- Chỉ dùng 1 lần.
+- Mặc định hết hạn sau 30 ngày.
+- Không cấp cho đơn sandbox/test.
 
 Nếu webhook có `livemode: false`, đó là webhook sandbox/test. Website production của CTV chỉ nên ghi log hoặc cập nhật đơn test nội bộ, không giao hàng thật cho khách.
 
@@ -756,6 +793,7 @@ Trước khi dùng `vd_live_...`, CTV nên hoàn tất:
 - Đã test xử lý đơn `PENDING_FULFILLMENT`.
 - Production của CTV đã cấu hình key `vd_live_...`, không dùng key `vd_test_...`.
 - Code production của CTV đã kiểm `livemode === true` trước khi giao hàng thật.
+- Nếu muốn hiển thị voucher thưởng 10.000đ, website CTV đã xử lý trường `data.rewardVoucher` trong webhook `order.updated`.
 - Nếu dùng webhook: đã xác minh chữ ký, lưu `VD-Event-Id` và trả `2xx` nhanh.
 - Backend không log API key, webhook secret hoặc nội dung giao hàng nhạy cảm.
 - Website CTV chỉ gọi VD Store sau khi đã xác nhận khách thanh toán thành công.

@@ -258,9 +258,12 @@ export class PartnerService {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000, maxWait: 10_000 });
 
     this.shop.clearCatalogCache();
+    const rewardVoucher = action === "COMPLETED" && result.environment === PartnerEnvironment.LIVE && result.status === PartnerOrderStatus.FULFILLED
+      ? await this.shop.awardCollaboratorCompletionVoucher(adminId, result.userId, { entityType: "PartnerOrder", entityId: result.id, code: result.externalOrderId })
+      : null;
     const response = publicPartnerOrder(result);
-    await this.webhooks.emit(result.userId, result.environment, "order.updated", { order: response }, result.id).catch(() => null);
-    return response;
+    await this.webhooks.emit(result.userId, result.environment, "order.updated", { order: response, ...(rewardVoucher ? { rewardVoucher } : {}) }, result.id).catch(() => null);
+    return rewardVoucher ? { ...response, rewardVoucher } : response;
   }
 
   private async createSandboxOrder(input: { userId: string; externalOrderId: string; items: CartOrderItemInput[]; voucherCode?: string | null }) {

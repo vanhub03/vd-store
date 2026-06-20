@@ -116,6 +116,8 @@ const ORDER_TRANSACTION_OPTIONS = {
 };
 const FIRST_ORDER_VOUCHER_CODE = "FIRST20";
 const FIRST_ORDER_VOUCHER_DAYS = 30;
+const COLLABORATOR_COMPLETION_VOUCHER_AMOUNT = 10_000;
+const COLLABORATOR_COMPLETION_VOUCHER_DAYS = 30;
 const VOUCHER_CODE_PATTERN = /^[A-Z0-9_-]{3,32}$/;
 const catalogProductSelect = {
   id: true,
@@ -1709,6 +1711,77 @@ export class ShopService {
     return updated;
   }
 
+  async awardCollaboratorCompletionVoucher(adminId: string, userId: string, source: { entityType: "Order" | "PartnerOrder"; entityId: string; code?: string | null }) {
+    return this.prisma.$transaction(async (tx) => {
+      const existingAward = await tx.auditLog.findFirst({
+        where: {
+          action: "CTV_COMPLETION_VOUCHER_AWARD",
+          entityType: source.entityType,
+          entityId: source.entityId
+        },
+        select: { id: true }
+      });
+      if (existingAward) return null;
+
+      const user = await tx.telegramUser.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, isBlocked: true }
+      });
+      if (!user || user.role !== CustomerRole.COLLABORATOR || user.isBlocked) return null;
+
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + COLLABORATOR_COMPLETION_VOUCHER_DAYS * 24 * 60 * 60 * 1000);
+      let voucher: Awaited<ReturnType<typeof tx.voucher.create>> | null = null;
+      for (let attempt = 0; attempt < 10 && !voucher; attempt += 1) {
+        const code = `CTV10K-${crypto.randomBytes(4).toString("hex").toUpperCase()}`;
+        const existingCode = await tx.voucher.findUnique({ where: { code }, select: { id: true } });
+        if (existingCode) continue;
+        voucher = await tx.voucher.create({
+          data: {
+            code,
+            discountPercent: 100,
+            maxDiscountAmount: COLLABORATOR_COMPLETION_VOUCHER_AMOUNT,
+            maxDiscountUsdt: null,
+            active: true,
+            firstOrderOnly: false,
+            allowCollaboratorStacking: true,
+            maxUses: 1,
+            startsAt: now,
+            expiresAt,
+            createdByAdminId: adminId
+          }
+        });
+      }
+      if (!voucher) throw new Error("Không tạo được mã voucher thưởng duy nhất.");
+
+      await tx.voucherAssignment.create({
+        data: {
+          voucherId: voucher.id,
+          userId,
+          assignedByAdminId: adminId
+        }
+      });
+      await tx.auditLog.create({
+        data: {
+          actorAdminId: adminId,
+          action: "CTV_COMPLETION_VOUCHER_AWARD",
+          entityType: source.entityType,
+          entityId: source.entityId,
+          meta: {
+            userId,
+            voucherId: voucher.id,
+            code: voucher.code,
+            amount: COLLABORATOR_COMPLETION_VOUCHER_AMOUNT,
+            expiresAt: voucher.expiresAt,
+            sourceCode: source.code ?? null
+          }
+        }
+      });
+
+      return publicCompletionVoucher(voucher);
+    }, ORDER_TRANSACTION_OPTIONS);
+  }
+
   async listCustomerVouchers(customerId: string) {
     const user = await this.prisma.telegramUser.findUnique({ where: { id: customerId } });
     if (!user) throw new NotFoundException("Không tìm thấy tài khoản.");
@@ -1803,7 +1876,7 @@ export class ShopService {
     }
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { product: true }
+      include: { product: true, user: true }
     });
     if (!order) throw new NotFoundException("Không tìm thấy đơn hàng.");
     if (order.product.deliveryType !== ProductDeliveryType.MANUAL) {
@@ -1818,6 +1891,10 @@ export class ShopService {
       code: updated.code,
       product: updated.product.name
     });
+    const rewardVoucher = status === "COMPLETED" && order.manualStatus !== ManualOrderStatus.COMPLETED && updated.user?.role === CustomerRole.COLLABORATOR
+      ? await this.awardCollaboratorCompletionVoucher(adminId, updated.userId, { entityType: "Order", entityId: updated.id, code: updated.code })
+      : null;
+    if (rewardVoucher) return { ...updated, rewardVoucher };
     return updated;
   }
 
@@ -2752,6 +2829,31 @@ function publicCustomerVoucher(
     assignedAt: meta.assignedAt,
     usedAt: meta.usedAt,
     status: exhausted && meta.status === "AVAILABLE" ? "EXHAUSTED" : meta.status
+  };
+}
+
+function publicCompletionVoucher(voucher: {
+  id: string;
+  code: string;
+  discountPercent: number;
+  maxDiscountAmount: number | null;
+  active: boolean;
+  allowCollaboratorStacking: boolean;
+  maxUses: number | null;
+  startsAt: Date;
+  expiresAt: Date;
+}) {
+  return {
+    id: voucher.id,
+    code: voucher.code,
+    discountPercent: voucher.discountPercent,
+    maxDiscountAmount: voucher.maxDiscountAmount,
+    amount: voucher.maxDiscountAmount ?? COLLABORATOR_COMPLETION_VOUCHER_AMOUNT,
+    active: voucher.active,
+    allowCollaboratorStacking: voucher.allowCollaboratorStacking,
+    maxUses: voucher.maxUses,
+    startsAt: voucher.startsAt.toISOString(),
+    expiresAt: voucher.expiresAt.toISOString()
   };
 }
 

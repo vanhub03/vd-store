@@ -144,6 +144,88 @@ describe("ShopService", () => {
     });
   });
 
+  it("awards a one-use 10k voucher to a collaborator after a completed order", async () => {
+    const createdAt = new Date("2026-06-20T00:00:00.000Z");
+    const tx = {
+      auditLog: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({})
+      },
+      telegramUser: {
+        findUnique: vi.fn().mockResolvedValue({ id: "ctv_1", role: CustomerRole.COLLABORATOR, isBlocked: false })
+      },
+      voucher: {
+        findUnique: vi.fn().mockResolvedValue(null),
+        create: vi.fn(async ({ data }) => ({ id: "voucher_reward_1", usedCount: 0, createdAt, updatedAt: createdAt, ...data }))
+      },
+      voucherAssignment: {
+        create: vi.fn().mockResolvedValue({ id: "assignment_1" })
+      }
+    };
+    const prisma = {
+      $transaction: vi.fn((callback) => callback(tx))
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const voucher = await service.awardCollaboratorCompletionVoucher("admin_1", "ctv_1", {
+      entityType: "Order",
+      entityId: "order_1",
+      code: "DH123"
+    });
+
+    expect(voucher?.code).toMatch(/^CTV10K-[A-F0-9]{8}$/);
+    expect(voucher?.amount).toBe(10_000);
+    expect(tx.voucher.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        discountPercent: 100,
+        maxDiscountAmount: 10_000,
+        active: true,
+        firstOrderOnly: false,
+        allowCollaboratorStacking: true,
+        maxUses: 1,
+        createdByAdminId: "admin_1"
+      })
+    });
+    expect(tx.voucherAssignment.create).toHaveBeenCalledWith({
+      data: {
+        voucherId: "voucher_reward_1",
+        userId: "ctv_1",
+        assignedByAdminId: "admin_1"
+      }
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        actorAdminId: "admin_1",
+        action: "CTV_COMPLETION_VOUCHER_AWARD",
+        entityType: "Order",
+        entityId: "order_1"
+      })
+    });
+  });
+
+  it("does not award a duplicate completion voucher for the same order", async () => {
+    const tx = {
+      auditLog: {
+        findFirst: vi.fn().mockResolvedValue({ id: "audit_existing" }),
+        create: vi.fn()
+      },
+      telegramUser: { findUnique: vi.fn() },
+      voucher: { findUnique: vi.fn(), create: vi.fn() },
+      voucherAssignment: { create: vi.fn() }
+    };
+    const prisma = { $transaction: vi.fn((callback) => callback(tx)) };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const voucher = await service.awardCollaboratorCompletionVoucher("admin_1", "ctv_1", {
+      entityType: "Order",
+      entityId: "order_1"
+    });
+
+    expect(voucher).toBeNull();
+    expect(tx.voucher.create).not.toHaveBeenCalled();
+    expect(tx.voucherAssignment.create).not.toHaveBeenCalled();
+  });
+
   it("fulfills manual web wallet purchases by debiting wallet, reducing manual stock, and returning instructions", async () => {
     const user = { id: "user_1", telegramId: "web:customer_1" };
     const product = {
