@@ -664,24 +664,7 @@ function AnalyticsFunnel({ steps }: { steps: AnalyticsOverview["funnel"] }) {
 }
 
 function AnalyticsTable({ title, columns, rows }: { title: string; columns: string[]; rows: Array<Array<string | number>> }) {
-  return (
-    <section className="panel analyticsTable">
-      <h2>{title}</h2>
-      <div className="tableWrap">
-        <table>
-          <thead><tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((row, rowIndex) => (
-              <tr key={`${row[0]}-${rowIndex}`}>
-                {row.map((cell, cellIndex) => <td key={`${cellIndex}-${cell}`}>{typeof cell === "number" ? cell.toLocaleString("vi-VN") : cell}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {!rows.length ? <p className="emptyText">Chưa có dữ liệu.</p> : null}
-    </section>
-  );
+  return <DataTable className="analyticsTable" title={title} columns={columns} rows={rows.map((row) => row.map((cell) => typeof cell === "number" ? cell.toLocaleString("vi-VN") : cell))} pageSize={10} />;
 }
 
 function Products({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
@@ -699,16 +682,10 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
   const [inventoryContent, setInventoryContent] = useState("");
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
-  const [inventorySearch, setInventorySearch] = useState("");
   const [deletingInventoryItemId, setDeletingInventoryItemId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductForm>(() => emptyProductForm());
   const stockProducts = useMemo(() => products.filter((product) => product.deliveryType === "STOCK_ITEM"), [products]);
   const selectedInventoryProduct = stockProducts.find((product) => product.id === inventoryProductId);
-  const visibleInventoryItems = useMemo(() => {
-    const query = inventorySearch.trim().toLocaleLowerCase("vi-VN");
-    if (!query) return inventoryItems;
-    return inventoryItems.filter((item) => item.content.toLocaleLowerCase("vi-VN").includes(query));
-  }, [inventoryItems, inventorySearch]);
 
   async function load() {
     setLoading(true);
@@ -1088,41 +1065,29 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
         </div>
         {inventoryProductId ? (
           <>
-            <div className="inventoryToolbar">
-              <input
-                value={inventorySearch}
-                onChange={(event) => setInventorySearch(event.target.value)}
-                placeholder="Tìm item theo nội dung/account..."
-              />
-              <span className="mutedText">
-                Đang hiển thị {visibleInventoryItems.length}/{inventoryItems.length} item còn khả dụng
-              </span>
-            </div>
             {inventoryLoading ? <LoadingBlock label="Đang tải item trong kho..." /> : null}
-            {!inventoryLoading && visibleInventoryItems.length === 0 ? (
-              <p className="emptyStateText">{inventoryItems.length === 0 ? "Sản phẩm này chưa còn item khả dụng nào trong kho." : "Không tìm thấy item phù hợp."}</p>
-            ) : null}
-            {visibleInventoryItems.length > 0 ? (
-              <div className="inventoryList">
-                {visibleInventoryItems.map((item, index) => (
-                  <article className="inventoryItemCard" key={item.id}>
-                    <div>
-                      <span className="tableSubtext">#{index + 1} · Nhập {new Date(item.createdAt).toLocaleString("vi-VN")}</span>
-                      <pre>{item.content}</pre>
-                    </div>
-                    <button
-                      className="smallButton dangerButton"
-                      type="button"
-                      onClick={() => void deleteInventoryItem(item)}
-                      disabled={deletingInventoryItemId === item.id}
-                    >
-                      {deletingInventoryItemId === item.id ? <RefreshCw className="spin" size={14} /> : <Trash2 size={14} />}
-                      {deletingInventoryItemId === item.id ? "Đang xóa..." : "Xóa khỏi kho"}
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : null}
+            <DataTable
+              embedded
+              title="Item còn khả dụng"
+              columns={["#", "Nội dung item", "Ngày nhập", "Thao tác"]}
+              rows={inventoryItems.map((item, index) => [
+                index + 1,
+                <pre className="inventoryContentPreview">{item.content}</pre>,
+                new Date(item.createdAt).toLocaleString("vi-VN"),
+                <button
+                  className="smallButton dangerButton"
+                  type="button"
+                  onClick={() => void deleteInventoryItem(item)}
+                  disabled={deletingInventoryItemId === item.id}
+                >
+                  {deletingInventoryItemId === item.id ? <RefreshCw className="spin" size={14} /> : <Trash2 size={14} />}
+                  {deletingInventoryItemId === item.id ? "Đang xóa..." : "Xóa khỏi kho"}
+                </button>
+              ])}
+              searchPlaceholder="Tìm item/account/key..."
+              emptyText="Sản phẩm này chưa còn item khả dụng nào trong kho."
+              pageSize={10}
+            />
           </>
         ) : (
           <p className="emptyStateText">Chọn một sản phẩm STOCK_ITEM ở form nhập kho để xem và xóa từng item hiện có.</p>
@@ -1286,39 +1251,29 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
     <section className="panel">
       <h2>User Telegram</h2>
       {loading && <LoadingBlock label="Đang tải user..." />}
-      <div className="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>User</th>
-              <th>Telegram ID</th>
-              <th>Số dư</th>
-              <th>Điều chỉnh ví</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <td>{user.username ? `@${user.username}` : user.firstName || "Không tên"}</td>
-                <td>{user.telegramId}</td>
-                <td>{formatVnd(user.balance)}</td>
-                <td className="inlineControls">
-                  <input
-                    type="number"
-                    value={amounts[user.id] ?? 0}
-                    onChange={(event) => setAmounts({ ...amounts, [user.id]: Number(event.target.value) })}
-                  />
-                  <input value={notes[user.id] ?? ""} onChange={(event) => setNotes({ ...notes, [user.id]: event.target.value })} placeholder="Ghi chú" />
-                  <button className="smallButton" onClick={() => adjust(user.id)} disabled={adjustingUserId === user.id}>
-                    {adjustingUserId === user.id ? <RefreshCw className="spin" size={14} /> : <Wallet size={14} />}{" "}
-                    {adjustingUserId === user.id ? "Đang lưu..." : "Lưu"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        embedded
+        columns={["User", "Telegram ID", "Số dư", "Điều chỉnh ví"]}
+        rows={users.map((user) => [
+          user.username ? `@${user.username}` : user.firstName || "Không tên",
+          user.telegramId,
+          formatVnd(user.balance),
+          <div className="inlineControls">
+            <input
+              type="number"
+              value={amounts[user.id] ?? 0}
+              onChange={(event) => setAmounts({ ...amounts, [user.id]: Number(event.target.value) })}
+            />
+            <input value={notes[user.id] ?? ""} onChange={(event) => setNotes({ ...notes, [user.id]: event.target.value })} placeholder="Ghi chú" />
+            <button className="smallButton" onClick={() => adjust(user.id)} disabled={adjustingUserId === user.id}>
+              {adjustingUserId === user.id ? <RefreshCw className="spin" size={14} /> : <Wallet size={14} />}{" "}
+              {adjustingUserId === user.id ? "Đang lưu..." : "Lưu"}
+            </button>
+          </div>
+        ])}
+        searchPlaceholder="Tìm user, Telegram ID..."
+        emptyText="Chưa có user."
+      />
     </section>
   );
 }
@@ -1531,24 +1486,21 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
           <input type="date" value={filters.createdTo} onChange={(event) => setFilters({ ...filters, createdTo: event.target.value })} />
           <button className="smallButton" type="button" onClick={() => void load()}><RefreshCw size={14} /> Lọc</button>
         </div>
-        <div className="tableWrap">
-          <table>
-            <thead><tr><th>CTV</th><th>Trạng thái</th><th>API</th><th>Số dư</th><th>Đơn gần đây</th><th>Đặt lại mật khẩu</th><th>Thao tác</th></tr></thead>
-            <tbody>
-              {collaborators.map((user) => (
-                <tr key={user.id}>
-                  <td><strong>{user.displayName ?? "Chưa có tên"}</strong><span className="tableSubtext">{user.email}</span></td>
-                  <td><span className={user.isBlocked ? "statusBadge blocked" : "statusBadge active"}>{user.isBlocked ? "Đã khóa" : "Hoạt động"}</span></td>
-                  <td><span className={user.partnerApiEnabled ? "statusBadge active" : "statusBadge blocked"}>{user.partnerApiEnabled ? "Đã bật" : "Đang tắt"}</span></td>
-                  <td>{formatVnd(user.balance)}</td>
-                  <td>{user.orders?.length ?? 0}</td>
-                  <td><div className="passwordReset"><input type="password" placeholder="Mật khẩu mới" value={passwords[user.id] ?? ""} onChange={(event) => setPasswords({ ...passwords, [user.id]: event.target.value })} /><button className="smallButton" type="button" onClick={() => void resetPassword(user)}><KeyRound size={14} /></button></div></td>
-                  <td><div className="rowActions"><button className="smallButton" type="button" onClick={() => setApiUser(user)}><KeyRound size={14} /> API</button><button className={user.isBlocked ? "smallButton successButton" : "smallButton dangerButton"} type="button" onClick={() => void toggleBlocked(user)}>{user.isBlocked ? "Mở khóa" : "Khóa"}</button><button className="smallButton secondaryButton" type="button" onClick={() => void revoke(user)}>Thu hồi quyền</button></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          embedded
+          columns={["CTV", "Trạng thái", "API", "Số dư", "Đơn gần đây", "Đặt lại mật khẩu", "Thao tác"]}
+          rows={collaborators.map((user) => [
+            <><strong>{user.displayName ?? "Chưa có tên"}</strong><span className="tableSubtext">{user.email}</span></>,
+            <span className={user.isBlocked ? "statusBadge blocked" : "statusBadge active"}>{user.isBlocked ? "Đã khóa" : "Hoạt động"}</span>,
+            <span className={user.partnerApiEnabled ? "statusBadge active" : "statusBadge blocked"}>{user.partnerApiEnabled ? "Đã bật" : "Đang tắt"}</span>,
+            formatVnd(user.balance),
+            user.orders?.length ?? 0,
+            <div className="passwordReset"><input type="password" placeholder="Mật khẩu mới" value={passwords[user.id] ?? ""} onChange={(event) => setPasswords({ ...passwords, [user.id]: event.target.value })} /><button className="smallButton" type="button" onClick={() => void resetPassword(user)}><KeyRound size={14} /></button></div>,
+            <div className="rowActions"><button className="smallButton" type="button" onClick={() => setApiUser(user)}><KeyRound size={14} /> API</button><button className={user.isBlocked ? "smallButton successButton" : "smallButton dangerButton"} type="button" onClick={() => void toggleBlocked(user)}>{user.isBlocked ? "Mở khóa" : "Khóa"}</button><button className="smallButton secondaryButton" type="button" onClick={() => void revoke(user)}>Thu hồi quyền</button></div>
+          ])}
+          searchPlaceholder="Tìm trong danh sách CTV..."
+          emptyText="Chưa có cộng tác viên."
+        />
       </section>
       {apiUser ? <PartnerApiPanel api={api} user={apiUser} onClose={() => setApiUser(null)} onChanged={load} onError={onError} /> : null}
     </div>
@@ -1671,7 +1623,21 @@ function PartnerApiPanel({ api, user, onClose, onChanged, onError }: { api: Api;
       </div>
       {secret ? <OneTimeSecret label="API key" value={secret} /> : null}
       {webhookSecret ? <OneTimeSecret label="Webhook secret" value={webhookSecret} /> : null}
-      <div className="tableWrap"><table><thead><tr><th>Key</th><th>Môi trường</th><th>Scopes</th><th>Dùng gần nhất</th><th>Hết hạn</th><th></th></tr></thead><tbody>{keys.map((key) => <tr key={key.id}><td><strong>{key.label}</strong><span className="tableSubtext">{key.keyPrefix}...</span></td><td>{key.environment}</td><td>{key.scopes.join(", ")}</td><td>{key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString("vi-VN") : "Chưa dùng"}</td><td>{key.expiresAt ? new Date(key.expiresAt).toLocaleDateString("vi-VN") : "Không"}</td><td>{key.revokedAt ? <span className="statusBadge blocked">Đã thu hồi</span> : <button className="smallButton dangerButton" onClick={() => void revokeKey(key)}>Thu hồi</button>}</td></tr>)}</tbody></table></div>
+      <DataTable
+        embedded
+        title="API key đã cấp"
+        columns={["Key", "Môi trường", "Scopes", "Dùng gần nhất", "Hết hạn", "Thao tác"]}
+        rows={keys.map((key) => [
+          <><strong>{key.label}</strong><span className="tableSubtext">{key.keyPrefix}...</span></>,
+          key.environment,
+          key.scopes.join(", "),
+          key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString("vi-VN") : "Chưa dùng",
+          key.expiresAt ? new Date(key.expiresAt).toLocaleDateString("vi-VN") : "Không",
+          key.revokedAt ? <span className="statusBadge blocked">Đã thu hồi</span> : <button className="smallButton dangerButton" onClick={() => void revokeKey(key)}>Thu hồi</button>
+        ])}
+        searchPlaceholder="Tìm key, scope, môi trường..."
+        emptyText="Chưa cấp API key."
+      />
       <p className="tableSubtext">Tài liệu: <a href="https://api.vanhdao.io.vn/partner/docs" target="_blank" rel="noreferrer">Partner API Docs</a>. Không đặt API key trong JavaScript phía trình duyệt.</p>
     </section>
   );
@@ -1743,22 +1709,21 @@ function OrdersView({ api, onError }: { api: Api; onError: (error: string | null
       {loading && <LoadingBlock label="Đang tải đơn hàng và thanh toán..." />}
       <section className="panel">
         <div className="panelHeader"><div><p className="eyebrow">Reseller API</p><h2>Đơn hàng đối tác</h2></div><button className="smallButton" onClick={() => void loadOrders()}><RefreshCw size={14} /> Làm mới</button></div>
-        <div className="tableWrap">
-          <table>
-            <thead><tr><th>Đơn đối tác</th><th>CTV</th><th>Môi trường</th><th>Sản phẩm</th><th>Trạng thái</th><th>Thành tiền</th><th>Xử lý thủ công</th></tr></thead>
-            <tbody>{partnerOrders.flatMap((order) => order.items.map((item, index) => (
-              <tr key={item.id}>
-                <td>{index === 0 ? <><strong>{order.externalOrderId}</strong><span className="tableSubtext">{new Date(order.createdAt).toLocaleString("vi-VN")}</span></> : ""}</td>
-                <td>{index === 0 ? order.user.email : ""}</td>
-                <td><span className={order.environment === "LIVE" ? "statusBadge active" : "statusBadge"}>{order.environment === "LIVE" ? "LIVE" : "TEST / Sandbox"}</span></td>
-                <td><strong>{item.productName}</strong><span className="tableSubtext">SL {item.quantity} · {item.deliveryType}</span></td>
-                <td><span className={item.status === "FULFILLED" ? "statusBadge active" : item.status === "CANCELLED" ? "statusBadge blocked" : "statusBadge"}>{item.status}</span></td>
-                <td>{formatVnd(item.totalAmount)}</td>
-                <td>{item.deliveryType === "MANUAL" && item.status === "PENDING_FULFILLMENT" ? <div className="manualPartnerActions"><textarea placeholder={order.environment === "LIVE" ? "Nội dung giao thật cho website CTV" : "Sandbox: nội dung nhập ở đây sẽ không được gửi, hệ thống tự dùng nội dung test"} value={partnerDeliveries[item.id] ?? ""} onChange={(event) => setPartnerDeliveries({ ...partnerDeliveries, [item.id]: event.target.value })} /><div className="rowActions"><button className="smallButton successButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "COMPLETED", order.environment)}>Hoàn tất</button><button className="smallButton dangerButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "CANCELLED", order.environment)}>{order.environment === "LIVE" ? "Hủy & hoàn tiền" : "Hủy test"}</button></div></div> : item.deliveryText ? <span className="tableSubtext">Đã có nội dung giao</span> : "—"}</td>
-              </tr>
-            )))}</tbody>
-          </table>
-        </div>
+        <DataTable
+          embedded
+          columns={["Đơn đối tác", "CTV", "Môi trường", "Sản phẩm", "Trạng thái", "Thành tiền", "Xử lý thủ công"]}
+          rows={partnerOrders.flatMap((order) => order.items.map((item, index) => [
+            index === 0 ? <><strong>{order.externalOrderId}</strong><span className="tableSubtext">{new Date(order.createdAt).toLocaleString("vi-VN")}</span></> : "",
+            index === 0 ? order.user.email : "",
+            <span className={order.environment === "LIVE" ? "statusBadge active" : "statusBadge"}>{order.environment === "LIVE" ? "LIVE" : "TEST / Sandbox"}</span>,
+            <><strong>{item.productName}</strong><span className="tableSubtext">SL {item.quantity} · {item.deliveryType}</span></>,
+            <span className={item.status === "FULFILLED" ? "statusBadge active" : item.status === "CANCELLED" ? "statusBadge blocked" : "statusBadge"}>{item.status}</span>,
+            formatVnd(item.totalAmount),
+            item.deliveryType === "MANUAL" && item.status === "PENDING_FULFILLMENT" ? <div className="manualPartnerActions"><textarea placeholder={order.environment === "LIVE" ? "Nội dung giao thật cho website CTV" : "Sandbox: nội dung nhập ở đây sẽ không được gửi, hệ thống tự dùng nội dung test"} value={partnerDeliveries[item.id] ?? ""} onChange={(event) => setPartnerDeliveries({ ...partnerDeliveries, [item.id]: event.target.value })} /><div className="rowActions"><button className="smallButton successButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "COMPLETED", order.environment)}>Hoàn tất</button><button className="smallButton dangerButton" disabled={resolvingPartnerItem === item.id} onClick={() => void resolvePartnerItem(item.id, "CANCELLED", order.environment)}>{order.environment === "LIVE" ? "Hủy & hoàn tiền" : "Hủy test"}</button></div></div> : item.deliveryText ? <span className="tableSubtext">Đã có nội dung giao</span> : "—"
+          ]))}
+          searchPlaceholder="Tìm đơn API, CTV, sản phẩm..."
+          emptyText="Chưa có đơn đối tác."
+        />
       </section>
       <DataTable
         title="Đơn hàng"
@@ -2283,37 +2248,21 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
           </button>
         </form>
       </section>
-      <section className="panel">
-        <h2>Danh sách thông báo</h2>
-        <div className="tableWrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tiêu đề</th>
-                <th>Trạng thái</th>
-                <th>Đã gửi</th>
-                <th>Lỗi</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {broadcasts.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.title}</td>
-                  <td>{item.status}</td>
-                  <td>{item.sentCount}</td>
-                  <td>{item.failedCount}</td>
-                  <td>
-                    <button className="smallButton" onClick={() => send(item.id)} disabled={sendingId === item.id}>
-                      {sendingId === item.id ? <RefreshCw className="spin" size={14} /> : <Send size={14} />} {sendingId === item.id ? "Đang gửi..." : "Gửi"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <DataTable
+        title="Danh sách thông báo"
+        columns={["Tiêu đề", "Trạng thái", "Đã gửi", "Lỗi", "Thao tác"]}
+        rows={broadcasts.map((item) => [
+          item.title,
+          item.status,
+          item.sentCount,
+          item.failedCount,
+          <button className="smallButton" onClick={() => send(item.id)} disabled={sendingId === item.id}>
+            {sendingId === item.id ? <RefreshCw className="spin" size={14} /> : <Send size={14} />} {sendingId === item.id ? "Đang gửi..." : "Gửi"}
+          </button>
+        ])}
+        searchPlaceholder="Tìm tiêu đề, trạng thái..."
+        emptyText="Chưa có thông báo."
+      />
     </div>
   );
 }
@@ -2411,10 +2360,57 @@ function NavButton({ active, onClick, icon, children }: { active: boolean; onCli
   );
 }
 
-function DataTable({ title, columns, rows }: { title?: string; columns: string[]; rows: Array<Array<React.ReactNode>> }) {
-  return (
-    <section className="panel">
-      {title && <h2>{title}</h2>}
+function DataTable({
+  title,
+  columns,
+  rows,
+  className,
+  embedded = false,
+  searchPlaceholder = "Tìm trong bảng...",
+  emptyText = "Chưa có dữ liệu.",
+  pageSize = 10
+}: {
+  title?: string;
+  columns: string[];
+  rows: Array<Array<React.ReactNode>>;
+  className?: string;
+  embedded?: boolean;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  pageSize?: number;
+}) {
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(pageSize);
+  const normalizedQuery = query.trim().toLocaleLowerCase("vi-VN");
+  const searchableRows = useMemo(
+    () => rows.map((row) => ({ row, text: row.map(cellText).join(" ").toLocaleLowerCase("vi-VN") })),
+    [rows]
+  );
+  const filteredRows = normalizedQuery ? searchableRows.filter((item) => item.text.includes(normalizedQuery)).map((item) => item.row) : rows;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage));
+  const currentPage = Math.min(page, totalPages);
+  const start = filteredRows.length ? (currentPage - 1) * perPage : 0;
+  const pageRows = filteredRows.slice(start, start + perPage);
+  const end = start + pageRows.length;
+
+  useEffect(() => {
+    setPage(1);
+  }, [normalizedQuery, rows.length, perPage]);
+
+  const content = (
+    <>
+      <div className="dataTableHeader">
+        {title ? <h2>{title}</h2> : <span />}
+        <div className="dataTableControls">
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={searchPlaceholder} />
+          <select value={perPage} onChange={(event) => setPerPage(Number(event.target.value))}>
+            {[10, 25, 50, 100].map((value) => (
+              <option key={value} value={value}>{value}/trang</option>
+            ))}
+          </select>
+        </div>
+      </div>
       <div className="tableWrap">
         <table>
           <thead>
@@ -2425,18 +2421,54 @@ function DataTable({ title, columns, rows }: { title?: string; columns: string[]
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {pageRows.map((row, index) => (
               <tr key={index}>
                 {row.map((cell, cellIndex) => (
                   <td key={cellIndex}>{cell}</td>
                 ))}
               </tr>
             ))}
+            {!pageRows.length ? (
+              <tr>
+                <td colSpan={columns.length}>{emptyText}</td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
-    </section>
+      <div className="dataTableFooter">
+        <span>
+          Hiển thị {filteredRows.length ? start + 1 : 0}-{end} / {filteredRows.length}
+          {normalizedQuery ? ` kết quả · Tổng ${rows.length}` : ""}
+        </span>
+        <div className="dataTablePager">
+          <button className="smallButton" type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage <= 1}>
+            Trước
+          </button>
+          <span>Trang {currentPage}/{totalPages}</span>
+          <button className="smallButton" type="button" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={currentPage >= totalPages}>
+            Sau
+          </button>
+        </div>
+      </div>
+    </>
   );
+  const classNames = ["dataTablePanel", embedded ? "" : "panel", className].filter(Boolean).join(" ");
+  return embedded ? <div className={classNames}>{content}</div> : <section className={classNames}>{content}</section>;
+}
+
+function cellText(value: React.ReactNode): string {
+  if (value === null || value === undefined || typeof value === "boolean") return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map(cellText).join(" ");
+  if (typeof value === "object" && "props" in value) {
+    const props = (value as { props?: { children?: React.ReactNode; title?: unknown } }).props;
+    return [props?.children ? cellText(props.children) : "", props?.title]
+      .filter((item) => item !== undefined && item !== null)
+      .map((item) => String(item))
+      .join(" ");
+  }
+  return "";
 }
 
 function tabTitle(tab: Tab) {

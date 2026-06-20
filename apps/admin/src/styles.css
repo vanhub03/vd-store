@@ -827,30 +827,7 @@ textarea {
   gap: 16px;
 }
 
-.inventoryToolbar {
-  align-items: center;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(240px, 1fr) auto;
-}
-
-.inventoryList {
-  display: grid;
-  gap: 10px;
-}
-
-.inventoryItemCard {
-  align-items: start;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 12px;
-}
-
-.inventoryItemCard pre {
+.inventoryContentPreview {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -870,6 +847,53 @@ textarea {
   color: #64748b;
   font-size: 14px;
   margin: 0;
+}
+
+.dataTablePanel {
+  display: grid;
+  gap: 12px;
+}
+
+.dataTableHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.dataTableHeader h2 {
+  margin: 0;
+}
+
+.dataTableControls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: min(100%, 420px);
+}
+
+.dataTableControls input {
+  min-width: 220px;
+}
+
+.dataTableControls select {
+  width: 112px;
+}
+
+.dataTableFooter {
+  align-items: center;
+  color: #64748b;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.dataTablePager {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
 }
 
 .productNameCell {
@@ -1112,8 +1136,31 @@ th {
   .inlineControls,
   .dashboardGrid,
   .promotionRow,
-  .collaboratorFilters {
+  .collaboratorFilters,
+  .dataTableControls {
     grid-template-columns: 1fr;
+  }
+
+  .dataTableHeader,
+  .dataTableFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dataTableControls {
+    display: grid;
+    min-width: 0;
+  }
+
+  .dataTableControls input,
+  .dataTableControls select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .dataTablePager {
+    justify-content: space-between;
+    width: 100%;
   }
 
   .analyticsToolbar {
