@@ -74,6 +74,12 @@ type Product = {
   category?: Category;
   _count?: { inventoryItems: number };
 };
+type InventoryItem = {
+  id: string;
+  content: string;
+  status: string;
+  createdAt: string;
+};
 type User = {
   id: string;
   telegramId: string;
@@ -691,7 +697,18 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
   const [importing, setImporting] = useState(false);
   const [inventoryProductId, setInventoryProductId] = useState("");
   const [inventoryContent, setInventoryContent] = useState("");
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [deletingInventoryItemId, setDeletingInventoryItemId] = useState<string | null>(null);
   const [form, setForm] = useState<ProductForm>(() => emptyProductForm());
+  const stockProducts = useMemo(() => products.filter((product) => product.deliveryType === "STOCK_ITEM"), [products]);
+  const selectedInventoryProduct = stockProducts.find((product) => product.id === inventoryProductId);
+  const visibleInventoryItems = useMemo(() => {
+    const query = inventorySearch.trim().toLocaleLowerCase("vi-VN");
+    if (!query) return inventoryItems;
+    return inventoryItems.filter((item) => item.content.toLocaleLowerCase("vi-VN").includes(query));
+  }, [inventoryItems, inventorySearch]);
 
   async function load() {
     setLoading(true);
@@ -707,6 +724,28 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
   useEffect(() => {
     load().catch((err) => onError((err as Error).message));
   }, []);
+
+  useEffect(() => {
+    if (!inventoryProductId) {
+      setInventoryItems([]);
+      return;
+    }
+    loadInventory(inventoryProductId).catch((err) => onError((err as Error).message));
+  }, [inventoryProductId]);
+
+  async function loadInventory(productId = inventoryProductId) {
+    if (!productId) {
+      setInventoryItems([]);
+      return;
+    }
+    setInventoryLoading(true);
+    try {
+      setInventoryItems(await api.get<InventoryItem[]>(`/admin/products/${productId}/inventory`));
+      onError(null);
+    } finally {
+      setInventoryLoading(false);
+    }
+  }
 
   async function submitProduct(event: FormEvent) {
     event.preventDefault();
@@ -800,12 +839,28 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
     try {
       await api.post(`/admin/products/${inventoryProductId}/inventory/import`, { content: inventoryContent });
       setInventoryContent("");
-      await load();
+      await Promise.all([load(), loadInventory(inventoryProductId)]);
       onError(null);
     } catch (err) {
       onError((err as Error).message);
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function deleteInventoryItem(item: InventoryItem) {
+    if (!inventoryProductId) return;
+    const preview = item.content.length > 140 ? `${item.content.slice(0, 140)}...` : item.content;
+    if (!confirm(`Xóa item này khỏi kho?\n\n${preview}`)) return;
+    setDeletingInventoryItemId(item.id);
+    try {
+      await api.delete(`/admin/products/${inventoryProductId}/inventory/${item.id}`);
+      await Promise.all([load(), loadInventory(inventoryProductId)]);
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setDeletingInventoryItemId(null);
     }
   }
 
@@ -992,13 +1047,19 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       </section>
 
       <section className="panel">
-        <h2>Nhập tồn kho dạng từng dòng</h2>
+        <div className="panelHeader">
+          <div>
+            <h2>Nhập tồn kho dạng từng dòng</h2>
+            <span>Chỉ áp dụng cho sản phẩm STOCK_ITEM</span>
+          </div>
+          {selectedInventoryProduct ? <span>{selectedInventoryProduct._count?.inventoryItems ?? 0} item khả dụng</span> : null}
+        </div>
         <form className="formGrid" onSubmit={importInventory}>
           <label>
             Sản phẩm
             <select value={inventoryProductId} onChange={(event) => setInventoryProductId(event.target.value)}>
               <option value="">Chọn sản phẩm</option>
-              {products.map((product) => (
+              {stockProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name}
                 </option>
@@ -1013,6 +1074,59 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
             {importing ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {importing ? "Đang nhập..." : "Nhập kho"}
           </button>
         </form>
+      </section>
+
+      <section className="panel inventoryManager">
+        <div className="panelHeader">
+          <div>
+            <h2>Quản lý item trong kho</h2>
+            <span>Xóa item đã bán ngoài để hệ thống không giao nhầm cho khách.</span>
+          </div>
+          <button className="smallButton secondaryButton" type="button" onClick={() => void loadInventory()} disabled={!inventoryProductId || inventoryLoading}>
+            <RefreshCw className={inventoryLoading ? "spin" : ""} size={14} /> Làm mới
+          </button>
+        </div>
+        {inventoryProductId ? (
+          <>
+            <div className="inventoryToolbar">
+              <input
+                value={inventorySearch}
+                onChange={(event) => setInventorySearch(event.target.value)}
+                placeholder="Tìm item theo nội dung/account..."
+              />
+              <span className="mutedText">
+                Đang hiển thị {visibleInventoryItems.length}/{inventoryItems.length} item còn khả dụng
+              </span>
+            </div>
+            {inventoryLoading ? <LoadingBlock label="Đang tải item trong kho..." /> : null}
+            {!inventoryLoading && visibleInventoryItems.length === 0 ? (
+              <p className="emptyStateText">{inventoryItems.length === 0 ? "Sản phẩm này chưa còn item khả dụng nào trong kho." : "Không tìm thấy item phù hợp."}</p>
+            ) : null}
+            {visibleInventoryItems.length > 0 ? (
+              <div className="inventoryList">
+                {visibleInventoryItems.map((item, index) => (
+                  <article className="inventoryItemCard" key={item.id}>
+                    <div>
+                      <span className="tableSubtext">#{index + 1} · Nhập {new Date(item.createdAt).toLocaleString("vi-VN")}</span>
+                      <pre>{item.content}</pre>
+                    </div>
+                    <button
+                      className="smallButton dangerButton"
+                      type="button"
+                      onClick={() => void deleteInventoryItem(item)}
+                      disabled={deletingInventoryItemId === item.id}
+                    >
+                      {deletingInventoryItemId === item.id ? <RefreshCw className="spin" size={14} /> : <Trash2 size={14} />}
+                      {deletingInventoryItemId === item.id ? "Đang xóa..." : "Xóa khỏi kho"}
+                    </button>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="emptyStateText">Chọn một sản phẩm STOCK_ITEM ở form nhập kho để xem và xóa từng item hiện có.</p>
+        )}
       </section>
 
       <DataTable

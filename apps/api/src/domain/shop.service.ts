@@ -1569,6 +1569,9 @@ export class ShopService {
   async importInventory(productId: string, lines: string[], adminId: string) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException("Không tìm thấy sản phẩm.");
+    if (product.deliveryType !== ProductDeliveryType.STOCK_ITEM) {
+      throw new BadRequestException("Chỉ sản phẩm dạng STOCK_ITEM mới có kho từng dòng.");
+    }
 
     const cleaned = lines.map((line) => line.trim()).filter(Boolean);
     if (cleaned.length === 0) throw new BadRequestException("Danh sách tồn kho trống.");
@@ -1581,6 +1584,56 @@ export class ShopService {
     this.clearCatalogCache();
     await this.announceStockItemIncrease(product, result.count, adminId);
     return result;
+  }
+
+  async listInventoryItems(productId: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, deliveryType: true }
+    });
+    if (!product) throw new NotFoundException("Không tìm thấy sản phẩm.");
+    if (product.deliveryType !== ProductDeliveryType.STOCK_ITEM) {
+      throw new BadRequestException("Chỉ sản phẩm dạng STOCK_ITEM mới có kho từng dòng.");
+    }
+
+    return this.prisma.inventoryItem.findMany({
+      where: { productId, status: InventoryStatus.AVAILABLE },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        content: true,
+        status: true,
+        createdAt: true
+      },
+      take: 500
+    });
+  }
+
+  async deleteInventoryItem(productId: string, itemId: string, adminId: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, deliveryType: true }
+    });
+    if (!product) throw new NotFoundException("Không tìm thấy sản phẩm.");
+    if (product.deliveryType !== ProductDeliveryType.STOCK_ITEM) {
+      throw new BadRequestException("Chỉ sản phẩm dạng STOCK_ITEM mới có kho từng dòng.");
+    }
+
+    const result = await this.prisma.inventoryItem.deleteMany({
+      where: {
+        id: itemId,
+        productId,
+        status: InventoryStatus.AVAILABLE,
+        orderId: null
+      }
+    });
+    if (result.count !== 1) {
+      throw new BadRequestException("Item không còn khả dụng hoặc đã được gắn với đơn hàng.");
+    }
+
+    await this.audit(adminId, "INVENTORY_ITEM_DELETE", "InventoryItem", itemId, { productId });
+    this.clearCatalogCache();
+    return { ok: true };
   }
 
   async listVouchers(options: ListOptions = {}) {

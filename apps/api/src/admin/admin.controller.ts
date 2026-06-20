@@ -493,6 +493,16 @@ export class AdminController {
     return this.shop.importInventory(id, body.content.split(/\r?\n/), request.admin!.id);
   }
 
+  @Get("products/:id/inventory")
+  inventoryItems(@Param("id") id: string) {
+    return this.shop.listInventoryItems(id);
+  }
+
+  @Delete("products/:id/inventory/:itemId")
+  deleteInventoryItem(@Req() request: AdminRequest, @Param("id") id: string, @Param("itemId") itemId: string) {
+    return this.shop.deleteInventoryItem(id, itemId, request.admin!.id);
+  }
+
   @Get("orders")
   orders(@Query("take") take?: string, @Query("skip") skip?: string) {
     return this.shop.listOrders({ take, skip });
