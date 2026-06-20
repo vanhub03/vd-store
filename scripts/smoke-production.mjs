@@ -195,6 +195,7 @@ const checks = [
       const bundle = await storefrontBundleText();
       const requiredMarkers = [
         "/store/topups",
+        "/store/topups/usdt",
         "/store/orders/wallet",
         "/store/orders/bank",
         "/store/payments/",

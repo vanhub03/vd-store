@@ -251,6 +251,7 @@ export class PartnerService {
       return order;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 30_000, maxWait: 10_000 });
 
+    this.shop.clearCatalogCache();
     const response = publicPartnerOrder(result);
     await this.webhooks.emit(result.userId, result.environment, "order.updated", { order: response }, result.id).catch(() => null);
     return response;
