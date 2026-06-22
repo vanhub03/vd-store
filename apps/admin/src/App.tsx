@@ -2382,12 +2382,13 @@ function DataTable({
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(pageSize);
-  const normalizedQuery = query.trim().toLocaleLowerCase("vi-VN");
+  const normalizedQuery = normalizeSearchText(query);
+  const queryTerms = normalizedQuery.split(/\s+/).filter(Boolean);
   const searchableRows = useMemo(
-    () => rows.map((row) => ({ row, text: row.map(cellText).join(" ").toLocaleLowerCase("vi-VN") })),
+    () => rows.map((row) => ({ row, text: normalizeSearchText(row.map(cellText).join(" ")) })),
     [rows]
   );
-  const filteredRows = normalizedQuery ? searchableRows.filter((item) => item.text.includes(normalizedQuery)).map((item) => item.row) : rows;
+  const filteredRows = queryTerms.length ? searchableRows.filter((item) => queryTerms.every((term) => item.text.includes(term))).map((item) => item.row) : rows;
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage));
   const currentPage = Math.min(page, totalPages);
   const start = filteredRows.length ? (currentPage - 1) * perPage : 0;
@@ -2462,13 +2463,38 @@ function cellText(value: React.ReactNode): string {
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (Array.isArray(value)) return value.map(cellText).join(" ");
   if (typeof value === "object" && "props" in value) {
-    const props = (value as { props?: { children?: React.ReactNode; title?: unknown } }).props;
-    return [props?.children ? cellText(props.children) : "", props?.title]
+    const props = (value as { props?: { children?: React.ReactNode; title?: unknown; product?: Partial<Product> } }).props;
+    return [props?.children ? cellText(props.children) : "", props?.title, props?.product ? productSearchText(props.product) : ""]
       .filter((item) => item !== undefined && item !== null)
       .map((item) => String(item))
       .join(" ");
   }
   return "";
+}
+
+function productSearchText(product: Partial<Product>) {
+  return [
+    product.id,
+    product.name,
+    product.nameEn,
+    product.description,
+    product.descriptionEn,
+    product.category?.name,
+    product.deliveryType,
+    product.status
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLocaleLowerCase("vi-VN")
+    .trim();
 }
 
 function tabTitle(tab: Tab) {
