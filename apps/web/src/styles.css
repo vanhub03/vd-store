@@ -826,6 +826,41 @@ textarea {
   background: rgba(59, 130, 246, 0.18);
 }
 
+.mobile-category-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(147, 197, 253, 0.14);
+  border-radius: 18px;
+  background: rgba(8, 18, 36, 0.62);
+}
+
+.mobile-category-list > b {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mobile-category-list > button {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid rgba(147, 197, 253, 0.12);
+  border-radius: 14px;
+  background: rgba(14, 25, 48, 0.72);
+  color: var(--text);
+  text-align: left;
+}
+
+.mobile-category-list small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .primary-button,
 .secondary-button,
 .link-action,

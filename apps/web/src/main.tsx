@@ -529,6 +529,7 @@ function App() {
   const [loading, setLoading] = useState("boot");
   const [error, setError] = useState("");
   const [query, setQuery] = useState(new URLSearchParams(window.location.search).get("q") ?? "");
+  const [selectedCategory, setSelectedCategory] = useState(new URLSearchParams(window.location.search).get("category") ?? "all");
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [cartFlyItems, setCartFlyItems] = useState<CartFlyItem[]>([]);
@@ -1304,12 +1305,25 @@ function App() {
 
   function navigateTab(next: Tab) {
     setActiveTab(next);
+    setSelectedCategory("all");
     const basePath = currentStorePath();
     window.history.replaceState(null, "", next === "home" ? basePath : `${basePath}?tab=${next}`);
   }
 
+  function navigateCategory(categoryId: string, options: { clearQuery?: boolean } = { clearQuery: true }) {
+    const safeCategoryId = categoryId || "all";
+    setActiveTab("products");
+    setSelectedCategory(safeCategoryId);
+    if (options.clearQuery !== false) setQuery("");
+    const basePath = currentStorePath();
+    const params = new URLSearchParams({ tab: "products" });
+    if (safeCategoryId !== "all") params.set("category", safeCategoryId);
+    window.history.replaceState(null, "", `${basePath}?${params.toString()}`);
+  }
+
   function navigateHomeSection(sectionId: string) {
     setActiveTab("home");
+    setSelectedCategory("all");
     window.history.replaceState(null, "", `${currentStorePath()}#${sectionId}`);
     window.setTimeout(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   }
@@ -1337,6 +1351,7 @@ function App() {
         cartPulse={cartPulse}
         onCommand={() => setCommandOpen(true)}
         onSection={navigateHomeSection}
+        onCategory={navigateCategory}
       />
       <CartFlyLayer items={cartFlyItems} />
 
@@ -1352,6 +1367,7 @@ function App() {
           onAddCart={addToCart}
           onCheckout={checkoutProduct}
           onShop={() => navigateTab("products")}
+          onCategory={navigateCategory}
           onWallet={() => {
             if (token) setWalletOpen(true);
             else requestLogin();
@@ -1366,6 +1382,8 @@ function App() {
           loading={loading}
           error={error}
           onQuery={setQuery}
+          selectedCategory={selectedCategory}
+          onCategory={navigateCategory}
           onView={(product) => void openProduct(product)}
           onAddCart={addToCart}
           onCheckout={checkoutProduct}
@@ -1589,7 +1607,8 @@ function Header({
   cartButtonRef,
   cartPulse,
   onCommand,
-  onSection
+  onSection,
+  onCategory
 }: {
   customer: Session["customer"] | null;
   balance: number;
@@ -1607,6 +1626,7 @@ function Header({
   cartPulse: boolean;
   onCommand: () => void;
   onSection: (sectionId: string) => void;
+  onCategory: (categoryId: string, options?: { clearQuery?: boolean }) => void;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const copy = TEXT[language];
@@ -1654,7 +1674,7 @@ function Header({
             <div className="mega-menu">
               {headerCategories.length ? (
                 headerCategories.map((category) => (
-                  <button key={category.id} onClick={() => goTab("products")}>
+                  <button key={category.id} onClick={() => onCategory(category.id)}>
                     <span className={`category-mini ${category.tone}`}>{category.icon}</span>
                     <span>
                       <b>{category.name}</b>
@@ -1739,6 +1759,24 @@ function Header({
               <ChevronRight size={17} />
             </button>
           ))}
+          {headerCategories.length ? (
+            <div className="mobile-category-list">
+              <b>{language === "vi" ? "Danh má»¥c" : "Categories"}</b>
+              {headerCategories.map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => {
+                    setMobileOpen(false);
+                    onCategory(category.id);
+                  }}
+                >
+                  <span className={`category-mini ${category.tone}`}>{category.icon}</span>
+                  <span>{category.name}</span>
+                  <small>{category.count}</small>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <button onClick={onWalletOpen}>
             {copy.topupTitle}
             <ChevronRight size={17} />
@@ -1862,6 +1900,7 @@ function HomeTab({
   onAddCart,
   onCheckout,
   onShop,
+  onCategory,
   onWallet
 }: {
   catalog: Catalog | null;
@@ -1874,12 +1913,13 @@ function HomeTab({
   onAddCart: (product: Product, quantity?: number, origin?: Element | null) => void;
   onCheckout: (product: Product, quantity?: number) => void;
   onShop: () => void;
+  onCategory: (categoryId: string, options?: { clearQuery?: boolean }) => void;
   onWallet: () => void;
 }) {
   return (
     <>
       <Hero products={products} loading={loading} error={error} language={language} onShop={onShop} onWallet={onWallet} />
-      <CategoryRail catalog={catalog} language={language} onShop={onShop} />
+      <CategoryRail catalog={catalog} language={language} onCategory={onCategory} />
       <FeaturedProducts
         products={products.slice(0, 8)}
         loading={loading}
@@ -1980,14 +2020,14 @@ function Hero({
   );
 }
 
-function CategoryRail({ catalog, language, onShop }: { catalog: Catalog | null; language: Language; onShop: () => void }) {
+function CategoryRail({ catalog, language, onCategory }: { catalog: Catalog | null; language: Language; onCategory: (categoryId: string, options?: { clearQuery?: boolean }) => void }) {
   const tiles = buildCategoryTiles(catalog, language);
 
   return (
     <section className="category-rail shell" aria-label={language === "vi" ? "Danh mục" : "Categories"}>
       {tiles.length
         ? tiles.map((category) => (
-            <button className={`category-card ${category.tone} reveal`} key={category.id} onClick={onShop}>
+            <button className={`category-card ${category.tone} reveal`} key={category.id} onClick={() => onCategory(category.id)}>
               <span>{category.icon}</span>
               <b>{category.name}</b>
               <small>{category.count} {language === "vi" ? "sản phẩm" : "products"}</small>
@@ -2094,6 +2134,8 @@ function ProductsTab({
   loading,
   error,
   onQuery,
+  selectedCategory,
+  onCategory,
   onView,
   onAddCart,
   onCheckout,
@@ -2104,6 +2146,8 @@ function ProductsTab({
   loading: string;
   error: string;
   onQuery: (value: string) => void;
+  selectedCategory: string;
+  onCategory: (categoryId: string, options?: { clearQuery?: boolean }) => void;
   onView: (product: Product) => void;
   onAddCart: (product: Product, quantity?: number, origin?: Element | null) => void;
   onCheckout: (product: Product, quantity?: number) => void;
@@ -2113,7 +2157,6 @@ function ProductsTab({
   const vi = language === "vi";
   const [sort, setSort] = useState("popular");
   const [delivery, setDelivery] = useState("all");
-  const [category, setCategory] = useState("all");
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const [dismissedQuery, setDismissedQuery] = useState("");
   const allProducts = useMemo(() => groups.flatMap((group) => group.products), [groups]);
@@ -2124,10 +2167,10 @@ function ProductsTab({
   const visibleProducts = useMemo(() => {
     const filtered = allProducts.filter((product) => {
       const productCategoryId = product.category?.id ?? "uncategorized";
-      return (delivery === "all" || product.deliveryType === delivery) && (category === "all" || productCategoryId === category);
+      return (delivery === "all" || product.deliveryType === delivery) && (selectedCategory === "all" || productCategoryId === selectedCategory);
     });
     return sortProducts(filtered, sort);
-  }, [allProducts, category, delivery, sort]);
+  }, [allProducts, delivery, selectedCategory, sort]);
   const normalizedQuery = query.trim().toLocaleLowerCase("vi-VN");
 
   useEffect(() => {
@@ -2179,7 +2222,7 @@ function ProductsTab({
           </label>
           <label>
             {vi ? "Danh mục" : "Category"}
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            <select value={selectedCategory} onChange={(event) => onCategory(event.target.value, { clearQuery: false })}>
               <option value="all">{vi ? "Tất cả danh mục" : "All categories"}</option>
               {categoryOptions.map((option) => (
                 <option key={option.id} value={option.id}>
@@ -2228,7 +2271,7 @@ function ProductsTab({
               onAction={() => {
                 onQuery("");
                 setDelivery("all");
-                setCategory("all");
+                onCategory("all");
                 setSort("popular");
               }}
             />
@@ -4151,8 +4194,7 @@ function groupCatalogProducts(catalog: Catalog | null, query: string, language: 
       id: category.id,
       name: category.name,
       products: category.products.map((product) => ({ ...product, category: { id: category.id, name: category.name } })).filter(matches)
-    }))
-    .filter((group) => group.products.length > 0);
+    }));
   const uncategorized = catalog.uncategorized.filter(matches);
   if (uncategorized.length) {
     groups.push({
@@ -4254,7 +4296,9 @@ function readCachedSession(token: string | null): CachedSession | null {
 }
 
 function readInitialTab(): Tab {
-  const tab = new URLSearchParams(window.location.search).get("tab");
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+  if (params.get("category")) return "products";
   return tab === "products" || tab === "reviews" || tab === "history" || tab === "vouchers" ? tab : "home";
 }
 
@@ -4450,7 +4494,6 @@ function sortProducts(products: Product[], sort: string) {
 function buildCategoryTiles(catalog: Catalog | null, language: Language) {
   if (!catalog) return [];
   const apiCategories = catalog.categories
-    .filter((category) => category.products.length)
     .map((category, index) => {
       const visual = categoryVisuals[index % categoryVisuals.length];
       return {
