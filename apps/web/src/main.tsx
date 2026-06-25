@@ -346,6 +346,13 @@ type CategoryTile = {
   icon: React.ReactNode;
 };
 
+type CatalogCategoryTile = CategoryTile & {
+  id: string;
+  name: string;
+  count: number;
+  image: string | null;
+};
+
 const categoryVisuals: CategoryTile[] = [
   { tone: "cyan", icon: <Sparkles size={26} /> },
   { tone: "violet", icon: <PackageCheck size={26} /> },
@@ -1591,6 +1598,14 @@ function AuroraBackground() {
   );
 }
 
+function CategoryMedia({ category }: { category: CatalogCategoryTile }) {
+  const [failed, setFailed] = useState(false);
+  if (category.image && !failed) {
+    return <img src={category.image} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+  }
+  return <>{category.icon}</>;
+}
+
 function Header({
   customer,
   balance,
@@ -1675,7 +1690,9 @@ function Header({
               {headerCategories.length ? (
                 headerCategories.map((category) => (
                   <button key={category.id} onClick={() => onCategory(category.id)}>
-                    <span className={`category-mini ${category.tone}`}>{category.icon}</span>
+                    <span className={`category-mini ${category.tone}`}>
+                      <CategoryMedia category={category} />
+                    </span>
                     <span>
                       <b>{category.name}</b>
                       <small>{category.count} {language === "vi" ? "sản phẩm" : "products"}</small>
@@ -1770,7 +1787,9 @@ function Header({
                     onCategory(category.id);
                   }}
                 >
-                  <span className={`category-mini ${category.tone}`}>{category.icon}</span>
+                  <span className={`category-mini ${category.tone}`}>
+                    <CategoryMedia category={category} />
+                  </span>
                   <span>{category.name}</span>
                   <small>{category.count}</small>
                 </button>
@@ -2028,7 +2047,7 @@ function CategoryRail({ catalog, language, onCategory }: { catalog: Catalog | nu
       {tiles.length
         ? tiles.map((category) => (
             <button className={`category-card ${category.tone} reveal`} key={category.id} onClick={() => onCategory(category.id)}>
-              <span>{category.icon}</span>
+              <span><CategoryMedia category={category} /></span>
               <b>{category.name}</b>
               <small>{category.count} {language === "vi" ? "sản phẩm" : "products"}</small>
             </button>
@@ -4491,32 +4510,36 @@ function sortProducts(products: Product[], sort: string) {
   return copy.sort((a, b) => availableQuantity(b) - availableQuantity(a));
 }
 
-function buildCategoryTiles(catalog: Catalog | null, language: Language) {
+function buildCategoryTiles(catalog: Catalog | null, language: Language): CatalogCategoryTile[] {
   if (!catalog) return [];
   const apiCategories = catalog.categories
     .map((category, index) => {
       const visual = categoryVisuals[index % categoryVisuals.length];
+      const representativeProduct = category.products.find((product) => product.imageUrl?.trim()) ?? category.products[0];
       return {
         id: category.id,
         name: category.name,
         count: category.products.length,
         tone: visual.tone,
-        icon: visual.icon
+        icon: visual.icon,
+        image: representativeProduct ? productArtUrl(representativeProduct) : null
       };
     });
 
   if (catalog.uncategorized.length) {
     const visual = categoryVisuals[apiCategories.length % categoryVisuals.length];
+    const representativeProduct = catalog.uncategorized.find((product) => product.imageUrl?.trim()) ?? catalog.uncategorized[0];
     apiCategories.push({
       id: "uncategorized",
       name: language === "vi" ? "Chưa phân loại" : "Uncategorized",
       count: catalog.uncategorized.length,
       tone: visual.tone,
-      icon: visual.icon
+      icon: visual.icon,
+      image: representativeProduct ? productArtUrl(representativeProduct) : null
     });
   }
 
-  return apiCategories.slice(0, 6);
+  return apiCategories;
 }
 
 function buildHeroCards(products: Product[], language: Language) {
