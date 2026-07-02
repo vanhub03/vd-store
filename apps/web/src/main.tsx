@@ -3870,10 +3870,18 @@ function ReviewTab({
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [message, setMessage] = useState("");
+  const [reviewPage, setReviewPage] = useState(1);
+  const reviewsPerPage = 5;
+  const reviewPageCount = Math.max(1, Math.ceil(reviews.length / reviewsPerPage));
+  const pagedReviews = reviews.slice((reviewPage - 1) * reviewsPerPage, reviewPage * reviewsPerPage);
 
   useEffect(() => {
     if (!productId && products[0]) setProductId(products[0].id);
   }, [productId, products]);
+
+  useEffect(() => {
+    setReviewPage((current) => Math.min(current, reviewPageCount));
+  }, [reviewPageCount]);
 
   async function submitReview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -3939,8 +3947,24 @@ function ReviewTab({
         </form>
       </section>
       <section className="review-live-wall reveal" style={{ "--d": "120ms" } as React.CSSProperties}>
-        <h2>{vi ? "Đánh giá mới nhất" : "Latest reviews"}</h2>
-        {reviews.length ? reviews.slice(0, 8).map((review, index) => <ReviewCard review={review} language={language} index={index} key={review.id} />) : <EmptyState icon={<Star size={28} />} title={vi ? "Chưa có đánh giá" : "No reviews yet"} text={vi ? "Hãy là người đầu tiên chia sẻ trải nghiệm." : "Be the first to share your experience."} />}
+        <div className="review-live-head">
+          <h2>{vi ? "Đánh giá mới nhất" : "Latest reviews"}</h2>
+          <span>{reviews.length} {vi ? "đánh giá" : "reviews"}</span>
+        </div>
+        <div className="review-live-list">
+          {reviews.length ? pagedReviews.map((review, index) => <ReviewCard review={review} language={language} index={index} key={review.id} />) : <EmptyState icon={<Star size={28} />} title={vi ? "Chưa có đánh giá" : "No reviews yet"} text={vi ? "Hãy là người đầu tiên chia sẻ trải nghiệm." : "Be the first to share your experience."} />}
+        </div>
+        {reviews.length > reviewsPerPage ? (
+          <div className="review-pagination" aria-label={vi ? "Phân trang đánh giá" : "Review pagination"}>
+            <button type="button" onClick={() => setReviewPage((page) => Math.max(1, page - 1))} disabled={reviewPage <= 1}>
+              {vi ? "Trước" : "Previous"}
+            </button>
+            <span>{vi ? "Trang" : "Page"} {reviewPage}/{reviewPageCount}</span>
+            <button type="button" onClick={() => setReviewPage((page) => Math.min(reviewPageCount, page + 1))} disabled={reviewPage >= reviewPageCount}>
+              {vi ? "Sau" : "Next"}
+            </button>
+          </div>
+        ) : null}
       </section>
     </div>
   );
