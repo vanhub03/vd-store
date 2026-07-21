@@ -1,13 +1,13 @@
 import crypto from "node:crypto";
 
-export type SepayAuthMode = "none" | "api-key" | "hmac";
+export type SepayAuthMode = "none" | "api-key" | "hmac" | "auto";
 
 export function verifyApiKeyHeader(headerValue: string | undefined, expectedApiKey: string | undefined) {
   const apiKey = expectedApiKey?.trim();
   if (!apiKey) return false;
-  const prefix = "Apikey ";
-  if (!headerValue?.startsWith(prefix)) return false;
-  return timingSafeEqual(headerValue.slice(prefix.length).trim(), apiKey);
+  const match = headerValue?.match(/^Apikey\s+(.+)$/i);
+  if (!match) return false;
+  return timingSafeEqual(match[1].trim(), apiKey);
 }
 
 export function signSepayBody(timestamp: string, rawBody: Buffer | string, secret: string) {

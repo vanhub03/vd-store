@@ -23,13 +23,16 @@ export class PaymentService {
   verifySepayRequest(request: RawRequest) {
     const mode = (process.env.SEPAY_AUTH_MODE ?? "auto").toLowerCase();
     if (mode === "none") return;
+    const configuredMaxSkewSeconds = Number(process.env.SEPAY_HMAC_MAX_SKEW_SECONDS ?? 900);
+    const maxSkewSeconds = Number.isFinite(configuredMaxSkewSeconds) && configuredMaxSkewSeconds > 0 ? configuredMaxSkewSeconds : 900;
 
     const apiKeyOk = verifyApiKeyHeader(request.headers.authorization, process.env.SEPAY_API_KEY);
     const hmacOk = verifySepayHmac({
       rawBody: request.rawBody ?? Buffer.from(JSON.stringify(request.body ?? {})),
       signature: firstHeader(request.headers["x-sepay-signature"]) ?? firstHeader(request.headers["sepay-signature"]),
       timestamp: firstHeader(request.headers["x-sepay-timestamp"]) ?? firstHeader(request.headers["sepay-timestamp"]),
-      secret: process.env.SEPAY_WEBHOOK_SECRET
+      secret: process.env.SEPAY_WEBHOOK_SECRET,
+      maxSkewSeconds
     });
 
     if (mode === "api-key") {
