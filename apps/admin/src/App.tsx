@@ -1216,7 +1216,7 @@ function inferBrandIcon(name: string) {
 
 function UsersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [users, setUsers] = useState<User[]>([]);
-  const [amounts, setAmounts] = useState<Record<string, number>>({});
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [adjustingUserId, setAdjustingUserId] = useState<string | null>(null);
@@ -1235,9 +1235,16 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
   }, []);
 
   async function adjust(userId: string) {
+    const amount = Number(amounts[userId] ?? 0);
+    if (!Number.isInteger(amount) || amount === 0) {
+      onError("Số tiền điều chỉnh phải là số nguyên khác 0. Nhập số dương để cộng, số âm để trừ.");
+      return;
+    }
     setAdjustingUserId(userId);
     try {
-      await api.post(`/admin/users/${userId}/wallet-adjustments`, { amount: Number(amounts[userId] ?? 0), note: notes[userId] });
+      await api.post(`/admin/users/${userId}/wallet-adjustments`, { amount, note: notes[userId] });
+      setAmounts((current) => ({ ...current, [userId]: "" }));
+      setNotes((current) => ({ ...current, [userId]: "" }));
       await load();
       onError(null);
     } catch (err) {
@@ -1261,8 +1268,10 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
           <div className="inlineControls">
             <input
               type="number"
-              value={amounts[user.id] ?? 0}
-              onChange={(event) => setAmounts({ ...amounts, [user.id]: Number(event.target.value) })}
+              step="1000"
+              value={amounts[user.id] ?? ""}
+              onChange={(event) => setAmounts({ ...amounts, [user.id]: event.target.value })}
+              placeholder="VD: 100000 hoặc -50000"
             />
             <input value={notes[user.id] ?? ""} onChange={(event) => setNotes({ ...notes, [user.id]: event.target.value })} placeholder="Ghi chú" />
             <button className="smallButton" onClick={() => adjust(user.id)} disabled={adjustingUserId === user.id}>
