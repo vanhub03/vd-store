@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync system clock over HTTPS for VD Store webhooks
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vd-store-sync-clock-http.sh
