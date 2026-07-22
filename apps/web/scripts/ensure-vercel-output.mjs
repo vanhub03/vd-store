@@ -1,30 +1,15 @@
-import { cpSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const cwd = process.cwd();
-const candidates = [resolve(cwd, "dist"), resolve(cwd, "apps", "web", "dist"), resolve(cwd, "..", "..", "apps", "web", "dist")];
-const source = candidates.find((candidate) => existsSync(resolve(candidate, "index.html")));
+const packageJsonPath = resolve(cwd, "package.json");
+const packageName = existsSync(packageJsonPath) ? JSON.parse(readFileSync(packageJsonPath, "utf8")).name : null;
+const source = packageName === "@vd-store/web" ? resolve(cwd, "dist") : resolve(cwd, "apps", "web", "dist");
 
-if (!source) {
-  throw new Error(`Could not find Vite output. Checked: ${candidates.join(", ")}`);
-}
-
-const targets = [
-  resolve(cwd, "dist"),
-  resolve(cwd, "apps", "web", "dist"),
-  resolve(cwd, "..", "..", "dist"),
-  resolve(cwd, "..", "..", "apps", "web", "dist")
-];
-
-for (const target of targets) {
-  if (target === source) continue;
-  mkdirSync(dirname(target), { recursive: true });
-  cpSync(source, target, { recursive: true });
+if (!existsSync(resolve(source, "index.html"))) {
+  throw new Error(`Could not find Vite output at ${source}`);
 }
 
 writeFileSync(resolve(source, ".vercel-output-ok"), new Date().toISOString());
 console.log(`Vercel output confirmed at ${source}`);
 console.log(`cwd=${cwd}`);
-for (const target of targets) {
-  console.log(`${existsSync(resolve(target, "index.html")) ? "OK" : "MISSING"} ${target}`);
-}

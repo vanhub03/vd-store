@@ -75,6 +75,16 @@ import {
   trackViewItem,
   updateAnalyticsConsent
 } from "./analytics";
+import {
+  absoluteStoreUrl,
+  categoryPath,
+  findRouteCategory,
+  findRouteProduct,
+  productPath,
+  publicTabPath,
+  PublicStoreRoute,
+  readStoreRoute
+} from "./seo";
 import "./styles.css";
 
 const TOKEN_KEY = "vd_store_token";
@@ -94,7 +104,8 @@ type CachedSession = {
   savedAt: number;
 };
 
-const initialTab = readInitialTab();
+const initialRoute = readStoreRoute(window.location.pathname, window.location.search);
+const initialTab = tabForRoute(initialRoute);
 
 const TEXT = {
   vi: {
@@ -480,13 +491,18 @@ function useHeroOrbit(count: number) {
 
 function useDialogClose(onClose: () => void) {
   const closeTimerRef = useRef<number | null>(null);
+  const onCloseRef = useRef(onClose);
   const [isClosing, setIsClosing] = useState(false);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const requestClose = useCallback(() => {
     if (closeTimerRef.current !== null) return;
     setIsClosing(true);
-    closeTimerRef.current = window.setTimeout(onClose, 220);
-  }, [onClose]);
+    closeTimerRef.current = window.setTimeout(() => onCloseRef.current(), 220);
+  }, []);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -538,12 +554,15 @@ function App() {
   const [query, setQuery] = useState(new URLSearchParams(window.location.search).get("q") ?? "");
   const [selectedCategory, setSelectedCategory] = useState(new URLSearchParams(window.location.search).get("category") ?? "all");
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+  const [storeRoute, setStoreRoute] = useState<PublicStoreRoute>(initialRoute);
   const [language, setLanguage] = useState<Language>(() => readStoredLanguage());
   const [cartFlyItems, setCartFlyItems] = useState<CartFlyItem[]>([]);
   const [analyticsConsent, setAnalyticsConsent] = useState<AnalyticsConsent>(() => readAnalyticsConsent());
   const [consentPreferencesOpen, setConsentPreferencesOpen] = useState(false);
   const cartButtonRef = useRef<HTMLButtonElement>(null);
   const cartFlyTimersRef = useRef<number[]>([]);
+  const productReturnPathRef = useRef("/san-pham");
+  const productOpenedInAppRef = useRef(false);
 
   useReveal();
 
@@ -553,24 +572,114 @@ function App() {
   const cartTotal = cartItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
   useEffect(() => {
-    const title =
-      language === "vi"
-        ? "Vanhdao.io.vn | VD AI Shop - Tài khoản AI và phần mềm"
-        : "Vanhdao.io.vn | VD AI Shop - AI accounts and premium software";
-    const description =
-      language === "vi"
-        ? "Mua ChatGPT Plus, Claude Pro, Gemini Advanced, Canva Pro, Adobe, YouTube Premium và dịch vụ số. Thanh toán VietQR, ví nội bộ hoặc USDT."
-        : "Buy ChatGPT Plus, Claude Pro, Gemini Advanced, Canva Pro, Adobe, YouTube Premium and digital services with VietQR, wallet or USDT checkout.";
+    const vi = language === "vi";
+    const routeCategory = storeRoute.kind === "category" ? findRouteCategory(catalog, storeRoute.path) : null;
+    const routeProduct = storeRoute.kind === "product" ? findRouteProduct(products, storeRoute.path) : null;
+    let title = vi
+      ? "Vanhdao.io.vn | VD AI Shop - Tài khoản AI và phần mềm"
+      : "Vanhdao.io.vn | VD AI Shop - AI accounts and premium software";
+    let description = vi
+      ? "Mua ChatGPT Plus, Claude Pro, Gemini Advanced, Canva Pro, Adobe, YouTube Premium và dịch vụ số. Thanh toán VietQR, ví nội bộ hoặc USDT."
+      : "Buy ChatGPT Plus, Claude Pro, Gemini Advanced, Canva Pro, Adobe, YouTube Premium and digital services with VietQR, wallet or USDT checkout.";
+    let canonicalPath = "/";
+    let image = "/social-card.png";
+    let structuredData: Record<string, unknown> | null = null;
+    let robots = "index, follow, max-image-preview:large";
+
+    if (routeProduct) {
+      const name = localizedName(routeProduct, language);
+      const productDescription = (localizedDescription(routeProduct, language) ?? "").trim();
+      const fallbackDescription = vi
+        ? `Mua ${name} tại VD AI Shop. Xem giá, tình trạng kho và hình thức nhận hàng.`
+        : `Buy ${name} at VD AI Shop. View price, availability and delivery details.`;
+      title = vi ? `${name} - Giá và thông tin sản phẩm | VD AI Shop` : `${name} - Price and product details | VD AI Shop`;
+      description = truncateSeoText(productDescription.length >= 40 ? productDescription : `${productDescription ? `${productDescription}. ` : ""}${fallbackDescription}`);
+      canonicalPath = productPath(routeProduct);
+      image = productArtUrl(routeProduct) || image;
+      structuredData = productStructuredData(routeProduct, canonicalPath, description);
+    } else if (routeCategory) {
+      title = vi ? `${routeCategory.name} - Sản phẩm và bảng giá | VD AI Shop` : `${routeCategory.name} products and prices | VD AI Shop`;
+      description = vi
+        ? `Xem ${routeCategory.products.length} sản phẩm ${routeCategory.name}, giá bán, hình thức giao hàng và tình trạng kho tại VD AI Shop.`
+        : `Browse ${routeCategory.products.length} ${routeCategory.name} products, prices, delivery methods and availability at VD AI Shop.`;
+      canonicalPath = categoryPath(routeCategory);
+      image = routeCategory.products.find((product) => productArtUrl(product)) ? productArtUrl(routeCategory.products.find((product) => productArtUrl(product))!) || image : image;
+      structuredData = itemListStructuredData(routeCategory.name, routeCategory.products);
+    } else if (storeRoute.kind === "products") {
+      title = vi ? "Kho sản phẩm AI & phần mềm Premium | VD AI Shop" : "AI accounts and premium software catalog | VD AI Shop";
+      description = vi
+        ? `Khám phá ${products.length} sản phẩm AI, tài khoản premium, key phần mềm và dịch vụ số đang bán tại VD AI Shop.`
+        : `Browse ${products.length} AI accounts, premium software keys and digital services available at VD AI Shop.`;
+      canonicalPath = "/san-pham";
+      structuredData = itemListStructuredData(title, products);
+    } else if (storeRoute.kind === "reviews") {
+      title = vi ? "Đánh giá khách hàng | VD AI Shop" : "Customer reviews | VD AI Shop";
+      description = vi
+        ? "Xem đánh giá thực tế của khách hàng về tài khoản AI, phần mềm premium và chất lượng giao hàng tại VD AI Shop."
+        : "Read customer reviews about AI accounts, premium software and delivery quality at VD AI Shop.";
+      canonicalPath = "/danh-gia";
+      structuredData = { "@context": "https://schema.org", "@type": "CollectionPage", name: title, url: absoluteStoreUrl(canonicalPath) };
+    } else if (storeRoute.kind === "private") {
+      robots = "noindex, nofollow";
+    }
 
     document.documentElement.lang = language;
-    document.title = title;
-    document.querySelector("meta[name='description']")?.setAttribute("content", description);
-  }, [language]);
+    updateDocumentSeo({ title, description, canonicalPath, image, robots, structuredData });
+  }, [catalog, language, products, storeRoute]);
 
   useEffect(() => {
     if (analyticsConsent !== "granted") return;
-    trackPageView(analyticsPath(activeTab), document.title);
-  }, [activeTab, analyticsConsent]);
+    trackPageView(storeRoute.path, document.title);
+  }, [activeTab, analyticsConsent, storeRoute.path]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = readStoreRoute(window.location.pathname, window.location.search);
+      setStoreRoute(route);
+      setActiveTab(tabForRoute(route));
+      if (route.kind !== "product") {
+        productOpenedInAppRef.current = false;
+        setSelectedProduct(null);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (storeRoute.kind === "category") {
+      const category = findRouteCategory(catalog, storeRoute.path);
+      setActiveTab("products");
+      if (category) setSelectedCategory(category.id);
+      setSelectedProduct(null);
+      return;
+    }
+    if (storeRoute.kind === "product") {
+      const product = findRouteProduct(products, storeRoute.path);
+      setActiveTab("products");
+      if (product?.category?.id) setSelectedCategory(product.category.id);
+      if (product && selectedProduct?.id !== product.id) void openProduct(product, false);
+      return;
+    }
+    setActiveTab(tabForRoute(storeRoute));
+    if (storeRoute.kind === "products" || storeRoute.kind === "home" || storeRoute.kind === "reviews") {
+      setSelectedProduct(null);
+      if (storeRoute.kind !== "products") setSelectedCategory("all");
+    }
+  }, [catalog, products, storeRoute]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const legacyTab = params.get("tab");
+    const legacyCategoryId = params.get("category");
+    if (legacyCategoryId && catalog) {
+      const category = catalog.categories.find((item) => item.id === legacyCategoryId);
+      if (category) replaceStoreRoute(categoryPath(category));
+      return;
+    }
+    if (legacyTab === "products") replaceStoreRoute("/san-pham");
+    else if (legacyTab === "reviews") replaceStoreRoute("/danh-gia");
+  }, [catalog]);
 
   useEffect(() => {
     if (cartOpen) trackViewCart(cartItems.map((item) => analyticsItem(item.product, item.quantity)));
@@ -1280,12 +1389,23 @@ function App() {
     return false;
   }
 
-  async function openProduct(product: Product) {
+  async function openProduct(product: Product, updateUrl = true) {
+    if (updateUrl) {
+      productOpenedInAppRef.current = true;
+      const currentPath = `${window.location.pathname}${window.location.search}`;
+      productReturnPathRef.current = readStoreRoute(window.location.pathname, window.location.search).kind === "product"
+        ? product.category
+          ? categoryPath(product.category)
+          : "/san-pham"
+        : currentPath;
+      pushStoreRoute(productPath(product));
+    }
+    setSelectedQuantity(1);
+    setSelectedProduct(product);
+    trackViewItem(analyticsItem(product, 1));
     await runAction(`product:${product.id}`, async () => {
       const freshProduct = await api.get<Product>(`${token ? "/store/member/products" : "/store/products"}/${product.id}`);
-      setSelectedQuantity(1);
       setSelectedProduct({ ...product, ...freshProduct, category: freshProduct.category ?? product.category });
-      trackViewItem(analyticsItem({ ...product, ...freshProduct, category: freshProduct.category ?? product.category }, 1));
       await loadPublicData();
     });
   }
@@ -1313,26 +1433,53 @@ function App() {
   function navigateTab(next: Tab) {
     setActiveTab(next);
     setSelectedCategory("all");
-    const basePath = currentStorePath();
-    window.history.replaceState(null, "", next === "home" ? basePath : `${basePath}?tab=${next}`);
+    setSelectedProduct(null);
+    if (next === "home" || next === "products" || next === "reviews") {
+      pushStoreRoute(publicTabPath(next));
+    } else {
+      pushStoreRoute(`/?tab=${next}`);
+    }
   }
 
   function navigateCategory(categoryId: string, options: { clearQuery?: boolean } = { clearQuery: true }) {
     const safeCategoryId = categoryId || "all";
     setActiveTab("products");
     setSelectedCategory(safeCategoryId);
+    setSelectedProduct(null);
     if (options.clearQuery !== false) setQuery("");
-    const basePath = currentStorePath();
-    const params = new URLSearchParams({ tab: "products" });
-    if (safeCategoryId !== "all") params.set("category", safeCategoryId);
-    window.history.replaceState(null, "", `${basePath}?${params.toString()}`);
+    const category = catalog?.categories.find((item) => item.id === safeCategoryId);
+    pushStoreRoute(category ? categoryPath(category) : "/san-pham");
   }
 
   function navigateHomeSection(sectionId: string) {
     setActiveTab("home");
     setSelectedCategory("all");
-    window.history.replaceState(null, "", `${currentStorePath()}#${sectionId}`);
+    setSelectedProduct(null);
+    pushStoreRoute(`/#${sectionId}`);
     window.setTimeout(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
+
+  function pushStoreRoute(path: string) {
+    window.history.pushState(null, "", path);
+    setStoreRoute(readStoreRoute(window.location.pathname, window.location.search));
+  }
+
+  function replaceStoreRoute(path: string) {
+    window.history.replaceState(null, "", path);
+    setStoreRoute(readStoreRoute(window.location.pathname, window.location.search));
+  }
+
+  function closeProduct() {
+    setSelectedProduct(null);
+    if (storeRoute.kind === "product") {
+      const fallback = selectedProduct?.category ? categoryPath(selectedProduct.category) : "/san-pham";
+      if (productOpenedInAppRef.current) {
+        productOpenedInAppRef.current = false;
+        window.history.back();
+      } else {
+        replaceStoreRoute(productReturnPathRef.current || fallback);
+      }
+    }
   }
 
   return (
@@ -1489,7 +1636,7 @@ function App() {
           product={selectedProduct}
           initialQuantity={selectedQuantity}
           loading={loading}
-          onClose={() => setSelectedProduct(null)}
+          onClose={closeProduct}
           onAddCart={(quantity, origin) => addToCart(selectedProduct, quantity, origin)}
           onCheckout={(quantity) => checkoutProduct(selectedProduct, quantity)}
           language={language}
@@ -1668,19 +1815,35 @@ function Header({
         <a href="https://zalo.me/0377952999" target="_blank" rel="noreferrer">{language === "vi" ? "Liên hệ hỗ trợ" : "Support"}</a>
       </div>
       <div className="nav-shell">
-        <button className="brand-lockup" onClick={() => goTab("home")} aria-label="VD AI Shop">
+        <a
+          className="brand-lockup"
+          href="/"
+          onClick={(event) => {
+            event.preventDefault();
+            goTab("home");
+          }}
+          aria-label="VD AI Shop"
+        >
           <img src="/logo.png" alt="" />
           <span>
             <b>VD AI Shop</b>
             <small>AI. Premium. Software.</small>
           </span>
-        </button>
+        </a>
 
         <nav className="desktop-nav" aria-label={language === "vi" ? "Điều hướng chính" : "Main navigation"}>
           {navItems.slice(0, 3).map((item) => (
-            <button key={item.tab} className={activeTab === item.tab ? "active" : ""} onClick={() => goTab(item.tab)}>
+            <a
+              href={navigationHref(item.tab)}
+              key={item.tab}
+              className={activeTab === item.tab ? "active" : ""}
+              onClick={(event) => {
+                event.preventDefault();
+                goTab(item.tab);
+              }}
+            >
               {item.label}
-            </button>
+            </a>
           ))}
           <div className="nav-dropdown">
             <button type="button">
@@ -1689,7 +1852,14 @@ function Header({
             <div className="mega-menu">
               {headerCategories.length ? (
                 headerCategories.map((category) => (
-                  <button key={category.id} onClick={() => onCategory(category.id)}>
+                  <a
+                    key={category.id}
+                    href={categoryPath(category)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onCategory(category.id);
+                    }}
+                  >
                     <span className={`category-mini ${category.tone}`}>
                       <CategoryMedia category={category} />
                     </span>
@@ -1697,7 +1867,7 @@ function Header({
                       <b>{category.name}</b>
                       <small>{category.count} {language === "vi" ? "sản phẩm" : "products"}</small>
                     </span>
-                  </button>
+                  </a>
                 ))
               ) : (
                 <button onClick={() => goTab("products")}>
@@ -1756,13 +1926,20 @@ function Header({
       {mobileOpen ? (
         <div className="mobile-menu-panel">
           <div>
-            <button className="brand-lockup" onClick={() => goTab("home")}>
+            <a
+              className="brand-lockup"
+              href="/"
+              onClick={(event) => {
+                event.preventDefault();
+                goTab("home");
+              }}
+            >
               <img src="/logo.png" alt="" />
               <span>
                 <b>VD AI Shop</b>
                 <small>AI. Premium. Software.</small>
               </span>
-            </button>
+            </a>
             <button className="icon-button" onClick={() => setMobileOpen(false)} aria-label="Close menu">
               <X size={19} />
             </button>
@@ -1771,18 +1948,28 @@ function Header({
             <Search size={16} /> {copy.searchPlaceholder}
           </button>
           {navItems.map((item) => (
-            <button key={item.tab} className={activeTab === item.tab ? "active" : ""} onClick={() => goTab(item.tab)}>
+            <a
+              href={navigationHref(item.tab)}
+              key={item.tab}
+              className={activeTab === item.tab ? "active" : ""}
+              onClick={(event) => {
+                event.preventDefault();
+                goTab(item.tab);
+              }}
+            >
               {item.label}
               <ChevronRight size={17} />
-            </button>
+            </a>
           ))}
           {headerCategories.length ? (
             <div className="mobile-category-list">
               <b>{language === "vi" ? "Danh má»¥c" : "Categories"}</b>
               {headerCategories.map((category) => (
-                <button
+                <a
                   key={category.id}
-                  onClick={() => {
+                  href={categoryPath(category)}
+                  onClick={(event) => {
+                    event.preventDefault();
                     setMobileOpen(false);
                     onCategory(category.id);
                   }}
@@ -1792,7 +1979,7 @@ function Header({
                   </span>
                   <span>{category.name}</span>
                   <small>{category.count}</small>
-                </button>
+                </a>
               ))}
             </div>
           ) : null}
@@ -2046,11 +2233,19 @@ function CategoryRail({ catalog, language, onCategory }: { catalog: Catalog | nu
     <section className="category-rail shell" aria-label={language === "vi" ? "Danh mục" : "Categories"}>
       {tiles.length
         ? tiles.map((category) => (
-            <button className={`category-card ${category.tone} reveal`} key={category.id} onClick={() => onCategory(category.id)}>
+            <a
+              className={`category-card ${category.tone} reveal`}
+              href={categoryPath(category)}
+              key={category.id}
+              onClick={(event) => {
+                event.preventDefault();
+                onCategory(category.id);
+              }}
+            >
               <span><CategoryMedia category={category} /></span>
               <b>{category.name}</b>
               <small>{category.count} {language === "vi" ? "sản phẩm" : "products"}</small>
-            </button>
+            </a>
           ))
         : Array.from({ length: 4 }, (_, index) => (
             <div className="category-card category-skeleton reveal" key={index}>
@@ -2183,6 +2378,7 @@ function ProductsTab({
     () => groups.map((group) => ({ id: group.id, name: group.name, count: group.products.length })),
     [groups]
   );
+  const activeCategory = selectedCategory === "all" ? null : groups.find((group) => group.id === selectedCategory) ?? null;
   const visibleProducts = useMemo(() => {
     const filtered = allProducts.filter((product) => {
       const productCategoryId = product.category?.id ?? "uncategorized";
@@ -2216,8 +2412,16 @@ function ProductsTab({
           <ChevronRight size={13} />
           <b>{copy.navProducts}</b>
         </div>
-        <h1>{vi ? "Kho sản phẩm AI & Premium" : "AI & Premium product catalog"}</h1>
-        <p>{vi ? "Tìm kiếm, lọc theo kiểu giao hàng và thanh toán bằng ví, VietQR hoặc USDT." : "Search, filter by delivery type and checkout with wallet, VietQR or USDT."}</p>
+        <h1>{activeCategory ? activeCategory.name : vi ? "Kho sản phẩm AI & Premium" : "AI & Premium product catalog"}</h1>
+        <p>
+          {activeCategory
+            ? vi
+              ? `${activeCategory.products.length} sản phẩm trong danh mục ${activeCategory.name}. Xem giá, tình trạng kho và hình thức giao hàng.`
+              : `${activeCategory.products.length} products in ${activeCategory.name}. View prices, availability and delivery methods.`
+            : vi
+              ? "Tìm kiếm, lọc theo kiểu giao hàng và thanh toán bằng ví, VietQR hoặc USDT."
+              : "Search, filter by delivery type and checkout with wallet, VietQR or USDT."}
+        </p>
       </div>
 
       <div className="catalog-layout">
@@ -2415,9 +2619,17 @@ function ProductCard({
         {hasCollaboratorPrice ? <em className="collaborator-badge">-{product.collaboratorDiscountPercent}% CTV</em> : null}
         {disabled ? <em>{language === "vi" ? "Hết hàng" : "Sold out"}</em> : null}
       </div>
-      <button className="product-image-button" onClick={onView} aria-label={`${copy.detail}: ${localizedName(product, language)}`}>
+      <a
+        className="product-image-button"
+        href={productPath(product)}
+        onClick={(event) => {
+          event.preventDefault();
+          onView();
+        }}
+        aria-label={`${copy.detail}: ${localizedName(product, language)}`}
+      >
         {imageSrc ? <img src={imageSrc} alt={`${localizedName(product, language)} - VD AI Shop`} loading="lazy" referrerPolicy="no-referrer" /> : <span>{brandGlyph(product.name)}</span>}
-      </button>
+      </a>
       <div className="product-copy">
         <small>{product.category?.name ?? copy.categoryFallback}</small>
         <h3>{localizedName(product, language)}</h3>
@@ -4338,24 +4550,21 @@ function readCachedSession(token: string | null): CachedSession | null {
   }
 }
 
-function readInitialTab(): Tab {
-  const params = new URLSearchParams(window.location.search);
-  const tab = params.get("tab");
-  if (params.get("category")) return "products";
-  return tab === "products" || tab === "reviews" || tab === "history" || tab === "vouchers" ? tab : "home";
+function tabForRoute(route: PublicStoreRoute): Tab {
+  if (route.kind === "products" || route.kind === "category" || route.kind === "product") return "products";
+  if (route.kind === "reviews") return "reviews";
+  if (route.kind === "private") return route.tab;
+  return "home";
+}
+
+function navigationHref(tab: Tab) {
+  if (tab === "home" || tab === "products" || tab === "reviews") return publicTabPath(tab);
+  return `/?tab=${tab}`;
 }
 
 function isAuthPath(pathname: string) {
   const normalized = pathname.replace(/\/+$/, "").toLowerCase();
   return normalized === "/login" || normalized === "/signin" || normalized === "/sign-in" || normalized === "/dang-nhap";
-}
-
-function currentStorePath() {
-  return isAuthPath(window.location.pathname) ? "/" : window.location.pathname || "/";
-}
-
-function analyticsPath(tab: Tab) {
-  return tab === "home" ? "/" : `/?tab=${tab}`;
 }
 
 function analyticsItem(product: Product, quantity: number): AnalyticsItem {
@@ -4364,6 +4573,91 @@ function analyticsItem(product: Product, quantity: number): AnalyticsItem {
     item_name: product.name,
     item_category: product.category?.name,
     quantity: Math.max(1, quantity)
+  };
+}
+
+function updateDocumentSeo({
+  title,
+  description,
+  canonicalPath,
+  image,
+  robots,
+  structuredData
+}: {
+  title: string;
+  description: string;
+  canonicalPath: string;
+  image: string;
+  robots: string;
+  structuredData: Record<string, unknown> | null;
+}) {
+  const canonical = absoluteStoreUrl(canonicalPath);
+  const absoluteImage = new URL(image, absoluteStoreUrl("/")).toString();
+  document.title = title;
+  setMetaContent("meta[name='description']", description);
+  setMetaContent("meta[name='robots']", robots);
+  setMetaContent("meta[property='og:title']", title);
+  setMetaContent("meta[property='og:description']", description);
+  setMetaContent("meta[property='og:url']", canonical);
+  setMetaContent("meta[property='og:image']", absoluteImage);
+  setMetaContent("meta[property='og:image:secure_url']", absoluteImage);
+  setMetaContent("meta[name='twitter:title']", title);
+  setMetaContent("meta[name='twitter:description']", description);
+  setMetaContent("meta[name='twitter:image']", absoluteImage);
+  document.querySelector("link[rel='canonical']")?.setAttribute("href", canonical);
+
+  document.getElementById("vd-client-structured-data")?.remove();
+  if (structuredData) {
+    const script = document.createElement("script");
+    script.id = "vd-client-structured-data";
+    script.type = "application/ld+json";
+    script.textContent = JSON.stringify(structuredData);
+    document.head.appendChild(script);
+  }
+}
+
+function setMetaContent(selector: string, value: string) {
+  document.querySelector(selector)?.setAttribute("content", value);
+}
+
+function truncateSeoText(value: string, maxLength = 160) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 1).trim()}…`;
+}
+
+function itemListStructuredData(name: string, products: Product[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name,
+    numberOfItems: products.length,
+    itemListElement: products.map((product, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: product.name,
+      url: absoluteStoreUrl(productPath(product))
+    }))
+  };
+}
+
+function productStructuredData(product: Product, path: string, description: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description,
+    image: productArtUrl(product) || absoluteStoreUrl("/social-card.png"),
+    sku: product.id,
+    category: product.category?.name || "Sản phẩm số",
+    brand: { "@type": "Brand", name: "VD AI Shop" },
+    offers: {
+      "@type": "Offer",
+      url: absoluteStoreUrl(path),
+      priceCurrency: "VND",
+      price: product.price,
+      availability: availableQuantity(product) > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      seller: { "@type": "Organization", name: "VD AI Shop" }
+    }
   };
 }
 

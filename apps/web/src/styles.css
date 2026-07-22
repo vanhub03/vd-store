@@ -296,6 +296,7 @@ textarea {
 }
 
 .desktop-nav > button,
+.desktop-nav > a,
 .nav-dropdown > button {
   min-height: 42px;
   padding: 0 12px;
@@ -309,8 +310,10 @@ textarea {
 }
 
 .desktop-nav > button:hover,
+.desktop-nav > a:hover,
 .nav-dropdown:hover > button,
-.desktop-nav > button.active {
+.desktop-nav > button.active,
+.desktop-nav > a.active {
   color: #fff;
   background: rgba(125, 211, 252, 0.1);
 }
@@ -353,7 +356,8 @@ textarea {
   transform: translate3d(-50%, 0, 0) scale(1);
 }
 
-.mega-menu button {
+.mega-menu button,
+.mega-menu a {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   gap: 10px;
@@ -817,6 +821,7 @@ textarea {
 }
 
 .mobile-menu-panel > button,
+.mobile-menu-panel > a,
 .mobile-command {
   min-height: 52px;
   display: flex;
@@ -831,7 +836,8 @@ textarea {
   font-weight: 800;
 }
 
-.mobile-menu-panel button.active {
+.mobile-menu-panel button.active,
+.mobile-menu-panel a.active {
   border-color: var(--line-strong);
   background: rgba(59, 130, 246, 0.18);
 }
@@ -852,7 +858,8 @@ textarea {
   text-transform: uppercase;
 }
 
-.mobile-category-list > button {
+.mobile-category-list > button,
+.mobile-category-list > a {
   min-height: 46px;
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -4235,6 +4242,7 @@ textarea {
   }
 
   .desktop-nav > button,
+  .desktop-nav > a,
   .nav-dropdown > button {
     padding-inline: 10px;
   }
@@ -4710,6 +4718,7 @@ textarea {
   }
 
   .mobile-menu-panel > button,
+  .mobile-menu-panel > a,
   .mobile-command {
     min-height: 48px;
     border-radius: 14px;

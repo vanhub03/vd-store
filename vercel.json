@@ -1,9 +1,26 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm install --frozen-lockfile",
   "buildCommand": "corepack enable && corepack prepare pnpm@11.3.0 --activate && pnpm --filter @vd-store/web build:vercel",
   "outputDirectory": "apps/web/dist",
   "framework": "vite",
   "rewrites": [
+    {
+      "source": "/san-pham",
+      "destination": "/san-pham/index.html"
+    },
+    {
+      "source": "/san-pham/:slug",
+      "destination": "/san-pham/:slug/index.html"
+    },
+    {
+      "source": "/danh-muc/:slug",
+      "destination": "/danh-muc/:slug/index.html"
+    },
+    {
+      "source": "/danh-gia",
+      "destination": "/danh-gia/index.html"
+    },
     {
       "source": "/(.*)",
       "destination": "/index.html"

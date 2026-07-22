@@ -20,6 +20,11 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
    VITE_GA_MEASUREMENT_ID=G-CFYXXY4CYJ
    ```
 
+   The production build fetches the public catalog from this API to prerender
+   `/san-pham`, `/danh-gia`, every `/danh-muc/...` page, every
+   `/san-pham/...` page, and `sitemap.xml`. If the catalog API is unavailable,
+   the build intentionally fails instead of deploying an empty SEO snapshot.
+
    The measurement ID is also compiled as a safe fallback because it is a public
    website identifier, but keeping it in Vercel makes future property changes
    explicit.
@@ -72,3 +77,17 @@ Deploy only the public storefront to Vercel and point `vanhdao.io.vn` there.
 8. Wait for DNS propagation, then click Verify in Vercel.
 
 The storefront calls the VPS API, so SePay, wallet, products, and orders use the same PostgreSQL database as admin and the Telegram bot.
+
+## Search Console after deployment
+
+1. Submit `https://www.vanhdao.io.vn/sitemap.xml` in Search Console.
+2. Inspect `/`, `/san-pham`, `/danh-gia`, one category URL, and one product URL.
+3. Request indexing for those sample URLs. Google will discover the remaining
+   category and product pages from the sitemap.
+4. Old `/?tab=products`, `/?tab=reviews`, and `/?category=...` links are
+   converted to the corresponding clean URL by the storefront and are not
+   included in the sitemap.
+
+The sitemap and prerendered product pages are refreshed on every storefront
+deployment. After a large catalog change, redeploy the Vercel storefront so the
+SEO snapshot reflects the latest catalog.

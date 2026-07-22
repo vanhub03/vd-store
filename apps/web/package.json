@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
-    "build:vercel": "tsc -b && vite build && node scripts/ensure-vercel-output.mjs",
+    "build": "tsc -b && vite build && node scripts/generate-seo-pages.mjs",
+    "build:vercel": "tsc -b && vite build && node scripts/generate-seo-pages.mjs && node scripts/ensure-vercel-output.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "echo \"No web tests yet\""
+    "test": "pnpm build && pnpm test:seo",
+    "test:seo": "node scripts/test-seo-output.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.1",
