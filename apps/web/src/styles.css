@@ -3676,6 +3676,39 @@ textarea {
   gap: 12px;
 }
 
+.history-sections {
+  display: grid;
+  gap: 30px;
+}
+
+.history-section {
+  display: grid;
+  gap: 14px;
+}
+
+.history-section-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.history-section-head h2 {
+  margin-top: 5px;
+  color: #fff;
+  font-size: clamp(20px, 2.4vw, 28px);
+}
+
+.history-section-head > span {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid rgba(147, 197, 253, 0.14);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .history-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -3699,6 +3732,14 @@ textarea {
 .history-row strong {
   color: var(--cyan);
   white-space: nowrap;
+}
+
+.history-row .history-amount.is-credit {
+  color: #5eead4;
+}
+
+.history-row .history-amount.is-debit {
+  color: #fb7185;
 }
 
 .history-row > span {
@@ -4495,6 +4536,12 @@ textarea {
 
   .history-row {
     grid-template-columns: 1fr;
+  }
+
+  .history-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .cart-item {

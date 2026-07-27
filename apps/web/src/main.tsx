@@ -113,7 +113,7 @@ const TEXT = {
     navProducts: "Sản phẩm",
     navReviews: "Đánh giá",
     navVouchers: "Voucher của tôi",
-    navHistory: "Kiểm tra đơn",
+    navHistory: "Lịch sử giao dịch",
     login: "Đăng nhập",
     logout: "Đăng xuất",
     topupTitle: "Nạp ví",
@@ -157,9 +157,9 @@ const TEXT = {
     cryptoWarning: "Chỉ chuyển USDT qua mạng {network}. Chuyển sai network có thể mất tiền và hệ thống không thể tự đối soát.",
     qrNote: "VND được đối soát qua SePay. USDT được đối soát qua Cryptomus webhook. Thông tin nhận hàng chỉ mở sau khi đơn đã thanh toán thành công.",
     refreshStatus: "Kiểm tra trạng thái",
-    historyTitle: "Kiểm tra đơn hàng",
-    historySub: "Đơn hàng, mã thanh toán và biến động ví gần nhất.",
-    historyLogin: "Đăng nhập để xem lịch sử mua hàng.",
+    historyTitle: "Lịch sử giao dịch",
+    historySub: "Nạp tiền, mua hàng, hoàn tiền và biến động ví gần nhất.",
+    historyLogin: "Đăng nhập để xem lịch sử giao dịch.",
     orderCode: "Mã đơn",
     loginTitle: "Đăng nhập",
     registerTitle: "Tạo tài khoản",
@@ -186,7 +186,7 @@ const TEXT = {
     navProducts: "Products",
     navReviews: "Reviews",
     navVouchers: "My vouchers",
-    navHistory: "Track order",
+    navHistory: "Transaction history",
     login: "Sign in",
     logout: "Sign out",
     topupTitle: "Top up",
@@ -230,9 +230,9 @@ const TEXT = {
     cryptoWarning: "Only send USDT through {network}. Sending through the wrong network may permanently lose funds and cannot be reconciled automatically.",
     qrNote: "VND payments are reconciled by SePay. USDT payments are reconciled by Cryptomus webhook. Delivery is shown only after successful payment.",
     refreshStatus: "Check status",
-    historyTitle: "Track orders",
-    historySub: "Recent orders, payment codes and wallet activity.",
-    historyLogin: "Sign in to view your order history.",
+    historyTitle: "Transaction history",
+    historySub: "Recent top-ups, purchases, refunds and wallet activity.",
+    historyLogin: "Sign in to view your transaction history.",
     orderCode: "Order code",
     loginTitle: "Sign in",
     registerTitle: "Create account",
@@ -1434,6 +1434,7 @@ function App() {
     setActiveTab(next);
     setSelectedCategory("all");
     setSelectedProduct(null);
+    if (next === "history" && token) void loadPrivateData(false);
     if (next === "home" || next === "products" || next === "reviews") {
       pushStoreRoute(publicTabPath(next));
     } else {
@@ -1895,7 +1896,12 @@ function Header({
             {language === "vi" ? "EN" : "VI"}
           </button>
           {customer ? (
-            <button className="wallet-button" onClick={onWalletOpen}>
+            <button
+              className="wallet-button"
+              onClick={() => goTab("history")}
+              aria-label={language === "vi" ? "Xem lịch sử giao dịch" : "View transaction history"}
+              title={language === "vi" ? "Xem lịch sử giao dịch" : "View transaction history"}
+            >
               <Wallet size={16} />
               <span>{formatVnd(balance)}</span>
             </button>
@@ -4184,36 +4190,80 @@ function ReviewTab({
 
 function HistoryPanel({ language, history, onRefresh, loading }: { language: Language; history: StoreHistory | null; onRefresh: () => void; loading: boolean }) {
   const copy = TEXT[language];
+  const vi = language === "vi";
   return (
     <section className="history-panel reveal">
       <div className="history-head">
         <div>
           <p className="section-kicker"><History size={16} /> {copy.historyTitle}</p>
-          <h1>{language === "vi" ? "Theo dõi đơn hàng và ví" : "Track orders and wallet"}</h1>
+          <h1>{vi ? "Hoạt động tài khoản gần đây" : "Recent account activity"}</h1>
           <p>{copy.historySub}</p>
         </div>
         <button className="secondary-button" onClick={onRefresh} disabled={loading}>
           <RefreshCw className={loading ? "spin" : ""} size={17} />
-          {language === "vi" ? "Làm mới" : "Refresh"}
+          {vi ? "Làm mới" : "Refresh"}
         </button>
       </div>
-      <div className="history-list">
-        {history?.orders.length ? (
-          history.orders.slice(0, 10).map((order) => (
-            <article className="history-row" key={order.code}>
+      {history ? (
+        <div className="history-sections">
+          <section className="history-section">
+            <div className="history-section-head">
               <div>
-                <h3>{order.product.name}</h3>
-                <p>{copy.orderCode}: <b>{order.code}</b> · SL: {order.quantity} · {new Date(order.createdAt).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}</p>
-                {order.deliveryText ? <pre>{order.deliveryText}</pre> : null}
+                <p className="section-kicker"><Wallet size={16} /> {vi ? "Biến động ví" : "Wallet activity"}</p>
+                <h2>{vi ? "Nạp tiền, thanh toán và hoàn tiền" : "Top-ups, payments and refunds"}</h2>
               </div>
-              <strong>{formatVnd(order.totalAmount)}</strong>
-              <span>{order.status}</span>
-            </article>
-          ))
-        ) : (
-          <EmptyState icon={<History size={30} />} title={copy.historyLogin} text={language === "vi" ? "Sau khi đăng nhập, các đơn gần nhất sẽ hiển thị tại đây." : "After signing in, recent orders will appear here."} />
-        )}
-      </div>
+              <span>{history.ledger.length} {vi ? "giao dịch gần nhất" : "recent transactions"}</span>
+            </div>
+            <div className="history-list">
+              {history.ledger.length ? (
+                history.ledger.map((entry, index) => (
+                  <article className="history-row ledger-row" key={`${entry.createdAt}:${entry.type}:${index}`}>
+                    <div>
+                      <h3>{walletEntryLabel(entry.type, language)}</h3>
+                      <p>{entry.note || (vi ? "Biến động số dư ví" : "Wallet balance activity")} · {new Date(entry.createdAt).toLocaleString(vi ? "vi-VN" : "en-US")}</p>
+                    </div>
+                    <strong className={`history-amount ${entry.amount >= 0 ? "is-credit" : "is-debit"}`}>
+                      {entry.amount > 0 ? "+" : ""}{formatVnd(entry.amount)}
+                    </strong>
+                    <span>{walletEntryLabel(entry.type, language)}</span>
+                  </article>
+                ))
+              ) : (
+                <EmptyState icon={<Wallet size={30} />} title={vi ? "Chưa có biến động ví" : "No wallet activity yet"} text={vi ? "Các lần nạp tiền, mua hàng bằng ví và hoàn tiền sẽ hiển thị tại đây." : "Wallet top-ups, purchases and refunds will appear here."} />
+              )}
+            </div>
+          </section>
+
+          <section className="history-section">
+            <div className="history-section-head">
+              <div>
+                <p className="section-kicker"><ShoppingBag size={16} /> {vi ? "Lịch sử mua hàng" : "Order history"}</p>
+                <h2>{vi ? "Đơn VietQR, ví và USDT" : "VietQR, wallet and USDT orders"}</h2>
+              </div>
+              <span>{history.orders.length} {vi ? "đơn gần nhất" : "recent orders"}</span>
+            </div>
+            <div className="history-list">
+              {history.orders.length ? (
+                history.orders.map((order) => (
+                  <article className="history-row" key={order.code}>
+                    <div>
+                      <h3>{order.product.name}</h3>
+                      <p>{copy.orderCode}: <b>{order.code}</b> · SL: {order.quantity} · {new Date(order.createdAt).toLocaleString(vi ? "vi-VN" : "en-US")}</p>
+                      {order.deliveryText ? <pre>{order.deliveryText}</pre> : null}
+                    </div>
+                    <strong>{formatVnd(order.totalAmount)}</strong>
+                    <span>{orderStatusLabel(order.status, language)}</span>
+                  </article>
+                ))
+              ) : (
+                <EmptyState icon={<ShoppingBag size={30} />} title={vi ? "Chưa có đơn hàng" : "No orders yet"} text={vi ? "Đơn hàng thanh toán bằng VietQR, ví hoặc USDT sẽ hiển thị tại đây." : "Orders paid by VietQR, wallet or USDT will appear here."} />
+              )}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <EmptyState icon={<History size={30} />} title={copy.historyLogin} text={vi ? "Sau khi đăng nhập, các giao dịch gần nhất sẽ hiển thị tại đây." : "After signing in, recent transactions will appear here."} />
+      )}
     </section>
   );
 }
@@ -4555,6 +4605,31 @@ function tabForRoute(route: PublicStoreRoute): Tab {
   if (route.kind === "reviews") return "reviews";
   if (route.kind === "private") return route.tab;
   return "home";
+}
+
+function walletEntryLabel(type: string, language: Language) {
+  const labels: Record<string, { vi: string; en: string }> = {
+    TOPUP: { vi: "Nạp tiền", en: "Top-up" },
+    PURCHASE: { vi: "Mua hàng bằng ví", en: "Wallet purchase" },
+    REFUND: { vi: "Hoàn tiền", en: "Refund" },
+    DIRECT_PAYMENT_CREDIT: { vi: "Tiền đơn được cộng vào ví", en: "Order credited to wallet" },
+    ADMIN_ADJUSTMENT: { vi: "Admin điều chỉnh", en: "Admin adjustment" }
+  };
+  return labels[type]?.[language] ?? type;
+}
+
+function orderStatusLabel(status: string, language: Language) {
+  const labels: Record<string, { vi: string; en: string }> = {
+    PENDING_PAYMENT: { vi: "Chờ thanh toán", en: "Pending payment" },
+    PAID: { vi: "Đã thanh toán", en: "Paid" },
+    PENDING_FULFILLMENT: { vi: "Chờ admin giao", en: "Pending fulfillment" },
+    FULFILLED: { vi: "Hoàn thành", en: "Fulfilled" },
+    CANCELLED: { vi: "Đã hủy", en: "Cancelled" },
+    EXPIRED: { vi: "Hết hạn", en: "Expired" },
+    CREDITED_TO_WALLET: { vi: "Đã cộng vào ví", en: "Credited to wallet" },
+    MANUAL_REVIEW: { vi: "Cần kiểm tra", en: "Manual review" }
+  };
+  return labels[status]?.[language] ?? status;
 }
 
 function navigationHref(tab: Tab) {
