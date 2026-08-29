@@ -8,6 +8,7 @@ import { PrismaService } from "../prisma.service";
 import { AnalyticsService } from "../analytics/analytics.service";
 import { PartnerService } from "../partner/partner.service";
 import { PartnerWebhookService } from "../partner/partner-webhook.service";
+import { SoldProductSubscriptionService } from "../domain/sold-product-subscription.service";
 
 class CategoryDto {
   @IsString()
@@ -299,6 +300,69 @@ class UsdtRateDto {
   rate!: number;
 }
 
+class SoldProductSubscriptionDto {
+  @IsString()
+  productId!: string;
+
+  @IsString()
+  customerName!: string;
+
+  @IsOptional()
+  @IsString()
+  zaloLink?: string | null;
+
+  @IsString()
+  startDate!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  durationMonths!: number;
+
+  @IsOptional()
+  @IsString()
+  accountNote?: string | null;
+}
+
+class UpdateSoldProductSubscriptionDto {
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsOptional()
+  @IsString()
+  customerName?: string;
+
+  @IsOptional()
+  @IsString()
+  zaloLink?: string | null;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  durationMonths?: number;
+
+  @IsOptional()
+  @IsString()
+  accountNote?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
+}
+
+class RenewSoldProductSubscriptionDto {
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  durationMonths!: number;
+}
+
 @Controller("admin")
 @UseGuards(AdminAuthGuard)
 export class AdminController {
@@ -308,7 +372,8 @@ export class AdminController {
     private readonly broadcasts: BroadcastService,
     private readonly analytics: AnalyticsService,
     private readonly partners: PartnerService,
-    private readonly partnerWebhooks: PartnerWebhookService
+    private readonly partnerWebhooks: PartnerWebhookService,
+    private readonly soldSubscriptions: SoldProductSubscriptionService
   ) {}
 
   @Get("stats")
@@ -471,6 +536,36 @@ export class AdminController {
   @Get("products")
   products(@Query("take") take?: string, @Query("skip") skip?: string) {
     return this.shop.listProducts({ take, skip });
+  }
+
+  @Get("sold-product-subscriptions")
+  soldProductSubscriptions() {
+    return this.soldSubscriptions.list();
+  }
+
+  @Post("sold-product-subscriptions")
+  createSoldProductSubscription(@Req() request: AdminRequest, @Body() body: SoldProductSubscriptionDto) {
+    return this.soldSubscriptions.create(request.admin!.id, body);
+  }
+
+  @Put("sold-product-subscriptions/:id")
+  updateSoldProductSubscription(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: UpdateSoldProductSubscriptionDto) {
+    return this.soldSubscriptions.update(request.admin!.id, id, body);
+  }
+
+  @Post("sold-product-subscriptions/:id/renew")
+  renewSoldProductSubscription(@Req() request: AdminRequest, @Param("id") id: string, @Body() body: RenewSoldProductSubscriptionDto) {
+    return this.soldSubscriptions.renew(request.admin!.id, id, body.durationMonths);
+  }
+
+  @Delete("sold-product-subscriptions/:id")
+  deactivateSoldProductSubscription(@Req() request: AdminRequest, @Param("id") id: string) {
+    return this.soldSubscriptions.deactivate(request.admin!.id, id);
+  }
+
+  @Post("sold-product-subscriptions/reminders/run")
+  runSoldProductSubscriptionReminders() {
+    return this.soldSubscriptions.dispatchDueRenewalReminders();
   }
 
   @Post("products")

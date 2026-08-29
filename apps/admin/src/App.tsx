@@ -1,8 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Activity, Ban, BarChart3, Bell, Boxes, CheckCircle2, Download, KeyRound, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, UserPlus, Users, Wallet, X } from "lucide-react";
+import { Activity, Ban, BarChart3, Bell, Boxes, CalendarClock, CheckCircle2, Download, KeyRound, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, UserPlus, Users, Wallet, X } from "lucide-react";
 import { AdminSession, Api, formatVnd } from "./api";
 
-type Tab = "overview" | "analytics" | "products" | "users" | "collaborators" | "orders" | "vouchers" | "broadcasts";
+type Tab = "overview" | "analytics" | "products" | "sold-products" | "users" | "collaborators" | "orders" | "vouchers" | "broadcasts";
 
 type RevenuePoint = { key: string; label: string; revenue: number; orders: number };
 type Dashboard = {
@@ -79,6 +79,29 @@ type InventoryItem = {
   content: string;
   status: string;
   createdAt: string;
+};
+type SoldProductSubscription = {
+  id: string;
+  productId: string;
+  productName: string;
+  customerName: string;
+  zaloLink?: string | null;
+  startedAt: string;
+  durationMonths: number;
+  expiresAt: string;
+  accountNote?: string | null;
+  active: boolean;
+  renewalReminderSentAt?: string | null;
+  createdAt: string;
+};
+type SoldProductSubscriptionForm = {
+  productId: string;
+  customerName: string;
+  zaloLink: string;
+  startDate: string;
+  durationMonths: number;
+  accountNote: string;
+  active: boolean;
 };
 type User = {
   id: string;
@@ -283,6 +306,9 @@ export function App() {
           <NavButton active={tab === "products"} onClick={() => setTab("products")} icon={<Boxes />}>
             Sản phẩm
           </NavButton>
+          <NavButton active={tab === "sold-products"} onClick={() => setTab("sold-products")} icon={<CalendarClock />}>
+            Sản phẩm đã bán
+          </NavButton>
           <NavButton active={tab === "users"} onClick={() => setTab("users")} icon={<Users />}>
             User
           </NavButton>
@@ -325,6 +351,7 @@ export function App() {
         {tab === "overview" && <Overview api={api} onError={setError} />}
         {tab === "analytics" && <AnalyticsView api={api} onError={setError} />}
         {tab === "products" && <Products api={api} onError={setError} />}
+        {tab === "sold-products" && <SoldProducts api={api} onError={setError} />}
         {tab === "users" && <UsersView api={api} onError={setError} />}
         {tab === "collaborators" && <CollaboratorsView api={api} onError={setError} />}
         {tab === "orders" && <OrdersView api={api} onError={setError} />}
@@ -1202,6 +1229,248 @@ function channelVisibilityLabel(product: Product) {
   if (product.showInBot) return "Bot";
   if (product.showInWeb) return "Web";
   return "Ẩn cả hai";
+}
+
+function SoldProducts({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
+  const [items, setItems] = useState<SoldProductSubscription[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [runningReminders, setRunningReminders] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [workingId, setWorkingId] = useState<string | null>(null);
+  const [form, setForm] = useState<SoldProductSubscriptionForm>(() => emptySoldProductSubscriptionForm());
+  const expirationPreview = useMemo(() => calculateExpirationDate(form.startDate, form.durationMonths), [form.startDate, form.durationMonths]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [nextItems, nextProducts] = await Promise.all([
+        api.get<SoldProductSubscription[]>("/admin/sold-product-subscriptions"),
+        api.get<Product[]>("/admin/products?take=500")
+      ]);
+      setItems(nextItems);
+      setProducts(nextProducts);
+      onError(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load().catch((error) => onError((error as Error).message));
+  }, []);
+
+  function resetForm() {
+    setEditingId(null);
+    setForm(emptySoldProductSubscriptionForm());
+  }
+
+  function edit(item: SoldProductSubscription) {
+    setEditingId(item.id);
+    setForm({
+      productId: item.productId,
+      customerName: item.customerName,
+      zaloLink: item.zaloLink ?? "",
+      startDate: toDateInputValue(item.startedAt),
+      durationMonths: item.durationMonths,
+      accountNote: item.accountNote ?? "",
+      active: item.active
+    });
+    onError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!form.productId) {
+      onError("Hãy chọn sản phẩm đã bán.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        productId: form.productId,
+        customerName: form.customerName,
+        zaloLink: form.zaloLink || null,
+        startDate: form.startDate,
+        durationMonths: Number(form.durationMonths),
+        accountNote: form.accountNote || null,
+        active: form.active
+      };
+      if (editingId) {
+        await api.put(`/admin/sold-product-subscriptions/${editingId}`, payload);
+      } else {
+        await api.post("/admin/sold-product-subscriptions", payload);
+      }
+      resetForm();
+      await load();
+      onError(null);
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function renew(item: SoldProductSubscription) {
+    if (!confirm(`Gia hạn ${item.durationMonths} tháng cho ${item.customerName}? Hạn mới được tính nối tiếp từ hạn hiện tại.`)) return;
+    setWorkingId(item.id);
+    try {
+      await api.post(`/admin/sold-product-subscriptions/${item.id}/renew`, { durationMonths: item.durationMonths });
+      await load();
+      onError(null);
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  async function setActive(item: SoldProductSubscription, active: boolean) {
+    const message = active
+      ? `Bật lại theo dõi gia hạn cho ${item.customerName}?`
+      : `Dừng theo dõi ${item.customerName}? Hệ thống sẽ không gửi nhắc gia hạn nữa.`;
+    if (!confirm(message)) return;
+    setWorkingId(item.id);
+    try {
+      if (active) {
+        await api.put(`/admin/sold-product-subscriptions/${item.id}`, { active: true });
+      } else {
+        await api.delete(`/admin/sold-product-subscriptions/${item.id}`);
+      }
+      await load();
+      onError(null);
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setWorkingId(null);
+    }
+  }
+
+  async function runReminders() {
+    setRunningReminders(true);
+    try {
+      const result = await api.post<{ checked: number; sent: number; failed: number }>("/admin/sold-product-subscriptions/reminders/run");
+      await load();
+      onError(result.failed ? `Có ${result.failed} thông báo chưa gửi được; hệ thống sẽ tự thử lại mỗi giờ.` : result.sent ? `Đã gửi ${result.sent} thông báo gia hạn tới Telegram.` : "Không có sản phẩm nào đến hạn cần nhắc.");
+    } catch (error) {
+      onError((error as Error).message);
+    } finally {
+      setRunningReminders(false);
+    }
+  }
+
+  return (
+    <div className="stack">
+      {loading ? <LoadingBlock label="Đang tải danh sách sản phẩm đã bán..." /> : null}
+      <section className="panel soldProductIntro">
+        <div>
+          <h2>Theo dõi sản phẩm đã bán & gia hạn</h2>
+          <p>Nhập cả đơn bán ngoài website. Đến ngày hết hạn, Admin Telegram tự nhận một thông báo; nếu Telegram tạm lỗi, hệ thống tự thử lại mỗi giờ.</p>
+        </div>
+        <button className="smallButton secondaryButton" type="button" disabled={runningReminders} onClick={() => void runReminders()}>
+          <Bell size={14} /> {runningReminders ? "Đang kiểm tra..." : "Kiểm tra nhắc hạn"}
+        </button>
+      </section>
+      <section className="panel">
+        <div className="panelHeader">
+          <h2>{editingId ? "Cập nhật gói đã bán" : "Nhập sản phẩm đã bán"}</h2>
+          {editingId ? <button className="smallButton secondaryButton" type="button" onClick={resetForm}><X size={14} /> Hủy sửa</button> : null}
+        </div>
+        <form className="formGrid soldProductForm" onSubmit={submit}>
+          <label>
+            Sản phẩm
+            <select value={form.productId} onChange={(event) => setForm({ ...form, productId: event.target.value })} required>
+              <option value="">Chọn sản phẩm</option>
+              {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.status === "INACTIVE" ? " (đang ẩn)" : ""}</option>)}
+            </select>
+          </label>
+          <label>
+            Tên khách hàng
+            <input value={form.customerName} onChange={(event) => setForm({ ...form, customerName: event.target.value })} placeholder="VD: Nguyễn Văn A" required />
+          </label>
+          <label>
+            Link Zalo
+            <input type="url" value={form.zaloLink} onChange={(event) => setForm({ ...form, zaloLink: event.target.value })} placeholder="https://zalo.me/..." />
+          </label>
+          <label>
+            Bắt đầu từ ngày
+            <input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} required />
+          </label>
+          <label>
+            Số tháng sử dụng
+            <input type="number" min={1} max={120} value={form.durationMonths} onChange={(event) => setForm({ ...form, durationMonths: Number(event.target.value) })} required />
+            <span className="fieldHint">Tự tính hết hạn: <b>{formatDateOnly(expirationPreview)}</b></span>
+          </label>
+          <label className="wide">
+            Tên tài khoản / ghi chú
+            <textarea value={form.accountNote} onChange={(event) => setForm({ ...form, accountNote: event.target.value })} rows={3} placeholder="VD: account đã giao, mật khẩu, tình trạng gia hạn..." />
+          </label>
+          {editingId ? <label className="checkboxLabel wide"><input type="checkbox" checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} /> Đang theo dõi và gửi nhắc gia hạn</label> : null}
+          <button className="primaryButton" disabled={saving}>
+            {saving ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {saving ? "Đang lưu..." : editingId ? "Cập nhật" : "Lưu sản phẩm đã bán"}
+          </button>
+        </form>
+      </section>
+      <DataTable
+        title="Danh sách theo dõi"
+        columns={["Sản phẩm", "Khách hàng", "Bắt đầu", "Gói", "Hết hạn", "Tài khoản / ghi chú", "Trạng thái", "Thao tác"]}
+        rows={items.map((item) => [
+          <strong>{item.productName}</strong>,
+          <><strong>{item.customerName}</strong>{item.zaloLink ? <a className="tableSubtext" href={item.zaloLink} target="_blank" rel="noreferrer">Mở Zalo</a> : null}</>,
+          formatDateOnly(item.startedAt),
+          `${item.durationMonths} tháng`,
+          <><strong className={isExpired(item.expiresAt) && item.active ? "expiredDate" : ""}>{formatDateOnly(item.expiresAt)}</strong>{item.renewalReminderSentAt ? <span className="tableSubtext">Đã nhắc {new Date(item.renewalReminderSentAt).toLocaleString("vi-VN")}</span> : null}</>,
+          item.accountNote ? <span className="notePreview" title={item.accountNote}>{item.accountNote}</span> : "—",
+          item.active ? <span className="statusBadge active">Đang theo dõi</span> : <span className="statusBadge blocked">Đã dừng</span>,
+          <div className="rowActions soldProductActions">
+            <button className="smallButton secondaryButton" type="button" onClick={() => edit(item)}><Pencil size={14} /> Sửa</button>
+            <button className="smallButton successButton" type="button" disabled={workingId === item.id} onClick={() => void renew(item)}><CalendarClock size={14} /> Gia hạn</button>
+            <button className={item.active ? "smallButton dangerButton" : "smallButton successButton"} type="button" disabled={workingId === item.id} onClick={() => void setActive(item, !item.active)}>{item.active ? <Ban size={14} /> : <CheckCircle2 size={14} />}{item.active ? "Dừng" : "Bật lại"}</button>
+          </div>
+        ])}
+        searchPlaceholder="Tìm sản phẩm, khách hàng, Zalo, tài khoản..."
+        emptyText="Chưa có sản phẩm đã bán nào được lưu."
+        pageSize={10}
+      />
+    </div>
+  );
+}
+
+function emptySoldProductSubscriptionForm(): SoldProductSubscriptionForm {
+  return { productId: "", customerName: "", zaloLink: "", startDate: todayDateInput(), durationMonths: 1, accountNote: "", active: true };
+}
+
+function todayDateInput() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function toDateInputValue(value: string) {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function calculateExpirationDate(startDate: string, durationMonths: number) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !Number.isInteger(durationMonths) || durationMonths < 1) return null;
+  const [year, month, day] = startDate.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month - 1 + durationMonths + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month - 1 + durationMonths, Math.min(day, lastDay)));
+}
+
+function formatDateOnly(value: string | Date | null) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+}
+
+function isExpired(value: string) {
+  return new Date(value).getTime() <= new Date(`${todayDateInput()}T00:00:00.000Z`).getTime();
 }
 
 function shouldAutoIcon(currentIcon: string) {
@@ -2511,6 +2780,7 @@ function tabTitle(tab: Tab) {
     overview: "Tổng quan",
     analytics: "Phân tích lưu lượng",
     products: "Sản phẩm",
+    "sold-products": "Sản phẩm đã bán",
     users: "User Telegram",
     collaborators: "Cộng tác viên",
     orders: "Đơn hàng & thanh toán",

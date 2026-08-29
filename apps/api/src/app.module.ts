@@ -21,6 +21,7 @@ import { PartnerController } from "./partner/partner.controller";
 import { PartnerAuthGuard, PartnerRateLimitGuard } from "./partner/partner-auth.guard";
 import { PartnerService } from "./partner/partner.service";
 import { PartnerWebhookService } from "./partner/partner-webhook.service";
+import { SoldProductSubscriptionService } from "./domain/sold-product-subscription.service";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { PartnerWebhookService } from "./partner/partner-webhook.service";
     AnalyticsService,
     PartnerService,
     PartnerWebhookService,
+    SoldProductSubscriptionService,
     PartnerAuthGuard,
     PartnerRateLimitGuard
   ]

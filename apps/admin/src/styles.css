@@ -300,6 +300,46 @@ button:disabled {
   color: #047857;
 }
 
+.soldProductIntro {
+  align-items: center;
+  background: #f8fbff;
+  border-color: #cfe3f7;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.soldProductIntro h2 {
+  margin-bottom: 6px;
+}
+
+.soldProductIntro p {
+  color: #475569;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 780px;
+}
+
+.soldProductForm {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.soldProductActions {
+  flex-wrap: wrap;
+}
+
+.expiredDate {
+  color: #b91c1c;
+}
+
+.notePreview {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chartPanel {
   min-width: 0;
 }
@@ -1180,5 +1220,10 @@ th {
   .scopeList,
   .oneTimeSecret {
     grid-template-columns: 1fr;
+  }
+
+  .soldProductIntro {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

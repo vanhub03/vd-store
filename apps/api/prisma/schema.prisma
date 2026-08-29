@@ -224,6 +224,7 @@ model Product {
   orders         Order[]
   reviews        ProductReview[]
   partnerOrderItems PartnerOrderItem[]
+  soldSubscriptions SoldProductSubscription[]
 
   @@index([categoryId])
   @@index([status])
@@ -263,6 +264,33 @@ model InventoryItem {
   order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([productId, status])
+}
+
+// A record maintained by the admin for a product/account already sold.  It is
+// intentionally independent from Order because it also covers sales made
+// outside the storefront.
+model SoldProductSubscription {
+  id                     String    @id @default(cuid())
+  productId              String
+  productName            String
+  customerName           String
+  zaloLink               String?
+  startedAt              DateTime
+  durationMonths         Int
+  expiresAt              DateTime
+  accountNote            String?
+  active                 Boolean   @default(true)
+  renewalReminderFor     DateTime?
+  renewalReminderClaimedAt DateTime?
+  renewalReminderSentAt  DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([active, expiresAt])
+  @@index([productId])
+  @@index([createdAt])
 }
 
 model Order {

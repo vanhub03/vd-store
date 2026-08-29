@@ -21,11 +21,11 @@ export class TelegramNotifyService {
   }
 
   async sendMessage(chatId: string, message: string) {
-    await this.sendWithTelegram(this.telegram, "TELEGRAM_BOT_TOKEN", chatId, message);
+    return this.sendWithTelegram(this.telegram, "TELEGRAM_BOT_TOKEN", chatId, message);
   }
 
   async sendAdminMessage(chatId: string, message: string) {
-    await this.sendWithTelegram(
+    return this.sendWithTelegram(
       this.adminTelegram,
       "ADMIN_TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN",
       chatId,
@@ -35,17 +35,20 @@ export class TelegramNotifyService {
 
   private async sendWithTelegram(telegram: Telegram | undefined, tokenLabel: string, chatId: string, message: string) {
     if (!telegram) {
-      this.logger.warn(`Telegram token missing (${tokenLabel}). Would send to ${chatId}: ${message}`);
-      return;
+      this.logger.warn(`Telegram token missing (${tokenLabel}); notification was not sent.`);
+      return false;
     }
 
+    let delivered = true;
     for (const chunk of splitTelegramMessage(message)) {
       try {
         await telegram.sendMessage(chatId, chunk, { parse_mode: "HTML" });
       } catch (error) {
+        delivered = false;
         this.logger.warn(`Could not send Telegram message to ${chatId}: ${(error as Error).message}`);
       }
     }
+    return delivered;
   }
 
   async deleteMessage(chatId?: string | null, messageId?: number | null) {
@@ -107,9 +110,36 @@ export class TelegramNotifyService {
       this.logger.warn(
         `ADMIN_TELEGRAM_CHAT_ID missing. Manual order remains visible in admin dashboard. Notification payload: ${message}`
       );
-      return;
+      return false;
     }
-    await this.sendAdminMessage(adminChatId, message);
+    return this.sendAdminMessage(adminChatId, message);
+  }
+
+  async notifyAdminSubscriptionRenewal(input: {
+    productName: string;
+    customerName: string;
+    zaloLink?: string | null;
+    accountNote?: string | null;
+    expiresAt: Date;
+  }) {
+    const adminChatId = configuredChatId(process.env.ADMIN_TELEGRAM_CHAT_ID);
+    if (!adminChatId) {
+      this.logger.warn("ADMIN_TELEGRAM_CHAT_ID missing; subscription renewal notification was not sent.");
+      return false;
+    }
+    const expiresAt = input.expiresAt.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+    const message = [
+      "⚠️ <b>Sản phẩm cần gia hạn</b>",
+      `Sản phẩm: <b>${escapeHtml(input.productName)}</b>`,
+      `Khách hàng: <b>${escapeHtml(input.customerName)}</b>`,
+      `Hết hạn: <b>${expiresAt}</b>`,
+      input.zaloLink ? `Zalo: ${escapeHtml(input.zaloLink)}` : null,
+      input.accountNote ? `Tài khoản / ghi chú: <pre>${escapeHtml(input.accountNote)}</pre>` : null,
+      "Vào Admin → Sản phẩm đã bán để gia hạn hoặc ngừng theo dõi."
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return this.sendAdminMessage(adminChatId, message);
   }
 }
 
