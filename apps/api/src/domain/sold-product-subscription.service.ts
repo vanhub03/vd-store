@@ -4,7 +4,9 @@ import { PrismaService } from "../prisma.service";
 import { TelegramNotifyService } from "./telegram-notify.service";
 
 export type SoldProductSubscriptionInput = {
-  productId: string;
+  productId?: string | null;
+  productName: string;
+  saleAmount?: number | null;
   customerName: string;
   zaloLink?: string | null;
   startDate: string;
@@ -33,12 +35,13 @@ export class SoldProductSubscriptionService {
 
   async create(adminId: string, input: SoldProductSubscriptionInput) {
     const normalized = normalizeInput(input);
-    const product = await this.requireProduct(normalized.productId);
+    const product = await this.resolveProduct(normalized.productId, normalized.productName);
     const expiresAt = addCalendarMonths(normalized.startedAt, normalized.durationMonths);
     const subscription = await this.prisma.soldProductSubscription.create({
       data: {
-        productId: product.id,
-        productName: product.name,
+        product: product.productId ? { connect: { id: product.productId } } : undefined,
+        productName: product.productName,
+        saleAmount: normalized.saleAmount,
         customerName: normalized.customerName,
         zaloLink: normalized.zaloLink,
         startedAt: normalized.startedAt,
@@ -48,7 +51,9 @@ export class SoldProductSubscriptionService {
       }
     });
     await this.audit(adminId, "SOLD_SUBSCRIPTION_CREATE", subscription.id, {
-      productId: product.id,
+      productId: subscription.productId,
+      productName: subscription.productName,
+      saleAmount: subscription.saleAmount,
       customerName: subscription.customerName,
       expiresAt
     });
@@ -59,15 +64,18 @@ export class SoldProductSubscriptionService {
     const current = await this.prisma.soldProductSubscription.findUnique({ where: { id } });
     if (!current) throw new NotFoundException("Không tìm thấy sản phẩm đã bán.");
 
-    const product = input.productId === undefined ? null : await this.requireProduct(input.productId);
+    const product = input.productId === undefined && input.productName === undefined
+      ? null
+      : await this.resolveProduct(input.productId, input.productName ?? current.productName);
     const startedAt = input.startDate === undefined ? current.startedAt : parseDateOnly(input.startDate, "Ngày bắt đầu");
     const durationMonths = input.durationMonths === undefined ? current.durationMonths : normalizeDuration(input.durationMonths);
     const expiresAt = addCalendarMonths(startedAt, durationMonths);
     const expirationChanged = expiresAt.getTime() !== current.expiresAt.getTime();
     const restored = input.active === true && !current.active;
     const data: Prisma.SoldProductSubscriptionUpdateInput = {
-      product: product ? { connect: { id: product.id } } : undefined,
-      productName: product?.name,
+      product: product ? product.productId ? { connect: { id: product.productId } } : { disconnect: true } : undefined,
+      productName: product?.productName,
+      saleAmount: input.saleAmount === undefined ? undefined : normalizeSaleAmount(input.saleAmount),
       customerName: input.customerName === undefined ? undefined : normalizeRequiredText(input.customerName, "Tên khách hàng"),
       zaloLink: input.zaloLink === undefined ? undefined : normalizeZaloLink(input.zaloLink),
       startedAt,
@@ -203,15 +211,15 @@ export class SoldProductSubscriptionService {
     });
   }
 
-  private async requireProduct(productId: string) {
+  private async resolveProduct(productId: string | null | undefined, productName: string) {
     const id = productId?.trim();
-    if (!id) throw new BadRequestException("Hãy chọn sản phẩm.");
+    if (!id) return { productId: null, productName: normalizeRequiredText(productName, "Tên sản phẩm") };
     const product = await this.prisma.product.findUnique({
       where: { id },
       select: { id: true, name: true }
     });
     if (!product) throw new BadRequestException("Sản phẩm đã chọn không tồn tại.");
-    return product;
+    return { productId: product.id, productName: product.name };
   }
 
   private audit(adminId: string | null, action: string, entityId: string, meta: Prisma.InputJsonValue) {
@@ -223,13 +231,24 @@ export class SoldProductSubscriptionService {
 
 function normalizeInput(input: SoldProductSubscriptionInput) {
   return {
-    productId: input.productId?.trim(),
+    productId: input.productId?.trim() || null,
+    productName: normalizeRequiredText(input.productName, "Tên sản phẩm"),
+    saleAmount: normalizeSaleAmount(input.saleAmount),
     customerName: normalizeRequiredText(input.customerName, "Tên khách hàng"),
     zaloLink: normalizeZaloLink(input.zaloLink),
     startedAt: parseDateOnly(input.startDate, "Ngày bắt đầu"),
     durationMonths: normalizeDuration(input.durationMonths),
     accountNote: normalizeOptionalText(input.accountNote)
   };
+}
+
+function normalizeSaleAmount(value: number | null | undefined) {
+  if (value === null || value === undefined) return null;
+  const amount = Number(value);
+  if (!Number.isInteger(amount) || amount < 0 || amount > 2_000_000_000) {
+    throw new BadRequestException("Giá thực tế bán phải là số nguyên từ 0 đến 2.000.000.000.");
+  }
+  return amount;
 }
 
 function normalizeRequiredText(value: string, label: string) {

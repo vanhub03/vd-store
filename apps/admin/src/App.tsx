@@ -82,8 +82,9 @@ type InventoryItem = {
 };
 type SoldProductSubscription = {
   id: string;
-  productId: string;
+  productId?: string | null;
   productName: string;
+  saleAmount?: number | null;
   customerName: string;
   zaloLink?: string | null;
   startedAt: string;
@@ -96,6 +97,8 @@ type SoldProductSubscription = {
 };
 type SoldProductSubscriptionForm = {
   productId: string;
+  productName: string;
+  saleAmount: string;
   customerName: string;
   zaloLink: string;
   startDate: string;
@@ -1269,7 +1272,9 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
   function edit(item: SoldProductSubscription) {
     setEditingId(item.id);
     setForm({
-      productId: item.productId,
+      productId: item.productId ?? "",
+      productName: item.productName,
+      saleAmount: item.saleAmount === null || item.saleAmount === undefined ? "" : String(item.saleAmount),
       customerName: item.customerName,
       zaloLink: item.zaloLink ?? "",
       startDate: toDateInputValue(item.startedAt),
@@ -1283,14 +1288,16 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!form.productId) {
-      onError("Hãy chọn sản phẩm đã bán.");
+    if (!form.productName.trim()) {
+      onError("Hãy nhập tên sản phẩm.");
       return;
     }
     setSaving(true);
     try {
       const payload = {
-        productId: form.productId,
+        productId: form.productId || null,
+        productName: form.productName,
+        saleAmount: form.saleAmount === "" ? null : Number(form.saleAmount),
         customerName: form.customerName,
         zaloLink: form.zaloLink || null,
         startDate: form.startDate,
@@ -1380,11 +1387,26 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
         </div>
         <form className="formGrid soldProductForm" onSubmit={submit}>
           <label>
-            Sản phẩm
-            <select value={form.productId} onChange={(event) => setForm({ ...form, productId: event.target.value })} required>
-              <option value="">Chọn sản phẩm</option>
-              {products.map((product) => <option key={product.id} value={product.id}>{product.name}{product.status === "INACTIVE" ? " (đang ẩn)" : ""}</option>)}
-            </select>
+            Tên sản phẩm
+            <input
+              list="sold-product-name-suggestions"
+              value={form.productName}
+              onChange={(event) => {
+                const productName = event.target.value;
+                const matchedProduct = findProductByName(products, productName);
+                setForm({ ...form, productName, productId: matchedProduct?.id ?? "" });
+              }}
+              placeholder="Chọn gợi ý hoặc nhập sản phẩm mới"
+              required
+            />
+            <datalist id="sold-product-name-suggestions">
+              {products.map((product) => <option key={product.id} value={product.name}>{product.status === "INACTIVE" ? "Đang ẩn" : ""}</option>)}
+            </datalist>
+            <span className="fieldHint">Có thể nhập tên mới; tên trùng danh sách sẽ tự liên kết với sản phẩm hiện có.</span>
+          </label>
+          <label>
+            Giá thực tế bán (VND)
+            <input type="number" min={0} step={1} value={form.saleAmount} onChange={(event) => setForm({ ...form, saleAmount: event.target.value })} placeholder="VD: 99000" />
           </label>
           <label>
             Tên khách hàng
@@ -1415,10 +1437,11 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
       </section>
       <DataTable
         title="Danh sách theo dõi"
-        columns={["Sản phẩm", "Khách hàng", "Bắt đầu", "Gói", "Hết hạn", "Tài khoản / ghi chú", "Trạng thái", "Thao tác"]}
+        columns={["Sản phẩm", "Khách hàng", "Giá bán", "Bắt đầu", "Gói", "Hết hạn", "Tài khoản / ghi chú", "Trạng thái", "Thao tác"]}
         rows={items.map((item) => [
           <strong>{item.productName}</strong>,
           <><strong>{item.customerName}</strong>{safeExternalUrl(item.zaloLink) ? <a className="tableSubtext" href={safeExternalUrl(item.zaloLink)!} target="_blank" rel="noreferrer">Mở Zalo</a> : null}</>,
+          item.saleAmount === null || item.saleAmount === undefined ? "—" : formatVnd(item.saleAmount),
           formatDateOnly(item.startedAt),
           `${item.durationMonths} tháng`,
           <><strong className={isExpired(item.expiresAt) && item.active ? "expiredDate" : ""}>{formatDateOnly(item.expiresAt)}</strong>{item.renewalReminderSentAt ? <span className="tableSubtext">Đã nhắc {new Date(item.renewalReminderSentAt).toLocaleString("vi-VN")}</span> : null}</>,
@@ -1439,7 +1462,12 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
 }
 
 function emptySoldProductSubscriptionForm(): SoldProductSubscriptionForm {
-  return { productId: "", customerName: "", zaloLink: "", startDate: todayDateInput(), durationMonths: 1, accountNote: "", active: true };
+  return { productId: "", productName: "", saleAmount: "", customerName: "", zaloLink: "", startDate: todayDateInput(), durationMonths: 1, accountNote: "", active: true };
+}
+
+function findProductByName(products: Product[], productName: string) {
+  const normalizedName = productName.trim().toLocaleLowerCase("vi-VN");
+  return products.find((product) => product.name.trim().toLocaleLowerCase("vi-VN") === normalizedName);
 }
 
 function todayDateInput() {

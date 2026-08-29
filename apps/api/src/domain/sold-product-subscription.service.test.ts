@@ -13,6 +13,8 @@ describe("SoldProductSubscriptionService", () => {
 
     await service.create("admin-1", {
       productId: "product-1",
+      productName: "Canva Pro",
+      saleAmount: 99000,
       customerName: "Vanh Dao",
       startDate: "2026-01-31",
       durationMonths: 1
@@ -21,6 +23,7 @@ describe("SoldProductSubscriptionService", () => {
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         productName: "Canva Pro",
+        saleAmount: 99000,
         expiresAt: new Date("2026-02-28T00:00:00.000Z")
       })
     }));
@@ -36,11 +39,39 @@ describe("SoldProductSubscriptionService", () => {
 
     await expect(service.create("admin-1", {
       productId: "product-1",
+      productName: "Canva Pro",
       customerName: "Vanh Dao",
       zaloLink: "javascript:alert(1)",
       startDate: "2026-01-31",
       durationMonths: 1
     })).rejects.toThrow("Link Zalo");
+  });
+
+  it("keeps a newly entered product name without creating a catalog product", async () => {
+    const create = vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "subscription-1", ...data }));
+    const prisma = {
+      product: { findUnique: vi.fn() },
+      soldProductSubscription: { create },
+      auditLog: { create: vi.fn().mockResolvedValue({}) }
+    };
+    const service = new SoldProductSubscriptionService(prisma as never, {} as never);
+
+    await service.create("admin-1", {
+      productName: "Tài khoản mới bán ngoài",
+      saleAmount: 125000,
+      customerName: "Vanh Dao",
+      startDate: "2026-01-31",
+      durationMonths: 1
+    });
+
+    expect(prisma.product.findUnique).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        product: undefined,
+        productName: "Tài khoản mới bán ngoài",
+        saleAmount: 125000
+      })
+    }));
   });
 
   it("claims a due reminder before sending so a concurrent worker cannot send it twice", async () => {

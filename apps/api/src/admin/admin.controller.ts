@@ -301,8 +301,17 @@ class UsdtRateDto {
 }
 
 class SoldProductSubscriptionDto {
+  @IsOptional()
   @IsString()
-  productId!: string;
+  productId?: string | null;
+
+  @IsString()
+  productName!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  saleAmount?: number | null;
 
   @IsString()
   customerName!: string;
@@ -327,7 +336,16 @@ class SoldProductSubscriptionDto {
 class UpdateSoldProductSubscriptionDto {
   @IsOptional()
   @IsString()
-  productId?: string;
+  productId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  productName?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  saleAmount?: number | null;
 
   @IsOptional()
   @IsString()
