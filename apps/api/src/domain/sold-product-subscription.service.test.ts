@@ -26,6 +26,23 @@ describe("SoldProductSubscriptionService", () => {
     }));
   });
 
+  it("rejects a Zalo link that cannot be opened safely from the admin page", async () => {
+    const prisma = {
+      product: { findUnique: vi.fn().mockResolvedValue({ id: "product-1", name: "Canva Pro" }) },
+      soldProductSubscription: { create: vi.fn() },
+      auditLog: { create: vi.fn() }
+    };
+    const service = new SoldProductSubscriptionService(prisma as never, {} as never);
+
+    await expect(service.create("admin-1", {
+      productId: "product-1",
+      customerName: "Vanh Dao",
+      zaloLink: "javascript:alert(1)",
+      startDate: "2026-01-31",
+      durationMonths: 1
+    })).rejects.toThrow("Link Zalo");
+  });
+
   it("claims a due reminder before sending so a concurrent worker cannot send it twice", async () => {
     const dueSubscription = {
       id: "subscription-1",

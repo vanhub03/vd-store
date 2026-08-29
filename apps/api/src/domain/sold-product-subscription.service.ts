@@ -69,7 +69,7 @@ export class SoldProductSubscriptionService {
       product: product ? { connect: { id: product.id } } : undefined,
       productName: product?.name,
       customerName: input.customerName === undefined ? undefined : normalizeRequiredText(input.customerName, "Tên khách hàng"),
-      zaloLink: input.zaloLink === undefined ? undefined : normalizeOptionalText(input.zaloLink),
+      zaloLink: input.zaloLink === undefined ? undefined : normalizeZaloLink(input.zaloLink),
       startedAt,
       durationMonths,
       expiresAt,
@@ -225,7 +225,7 @@ function normalizeInput(input: SoldProductSubscriptionInput) {
   return {
     productId: input.productId?.trim(),
     customerName: normalizeRequiredText(input.customerName, "Tên khách hàng"),
-    zaloLink: normalizeOptionalText(input.zaloLink),
+    zaloLink: normalizeZaloLink(input.zaloLink),
     startedAt: parseDateOnly(input.startDate, "Ngày bắt đầu"),
     durationMonths: normalizeDuration(input.durationMonths),
     accountNote: normalizeOptionalText(input.accountNote)
@@ -241,6 +241,18 @@ function normalizeRequiredText(value: string, label: string) {
 function normalizeOptionalText(value: string | null | undefined) {
   const result = value?.trim();
   return result ? result.slice(0, 4_000) : null;
+}
+
+function normalizeZaloLink(value: string | null | undefined) {
+  const link = normalizeOptionalText(value);
+  if (!link) return null;
+  try {
+    const url = new URL(link);
+    if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("Unsupported protocol");
+    return url.toString();
+  } catch {
+    throw new BadRequestException("Link Zalo phải là đường dẫn http hoặc https hợp lệ.");
+  }
 }
 
 function normalizeDuration(value: number) {

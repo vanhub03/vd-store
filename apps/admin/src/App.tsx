@@ -1418,7 +1418,7 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
         columns={["Sản phẩm", "Khách hàng", "Bắt đầu", "Gói", "Hết hạn", "Tài khoản / ghi chú", "Trạng thái", "Thao tác"]}
         rows={items.map((item) => [
           <strong>{item.productName}</strong>,
-          <><strong>{item.customerName}</strong>{item.zaloLink ? <a className="tableSubtext" href={item.zaloLink} target="_blank" rel="noreferrer">Mở Zalo</a> : null}</>,
+          <><strong>{item.customerName}</strong>{safeExternalUrl(item.zaloLink) ? <a className="tableSubtext" href={safeExternalUrl(item.zaloLink)!} target="_blank" rel="noreferrer">Mở Zalo</a> : null}</>,
           formatDateOnly(item.startedAt),
           `${item.durationMonths} tháng`,
           <><strong className={isExpired(item.expiresAt) && item.active ? "expiredDate" : ""}>{formatDateOnly(item.expiresAt)}</strong>{item.renewalReminderSentAt ? <span className="tableSubtext">Đã nhắc {new Date(item.renewalReminderSentAt).toLocaleString("vi-VN")}</span> : null}</>,
@@ -1471,6 +1471,16 @@ function formatDateOnly(value: string | Date | null) {
 
 function isExpired(value: string) {
   return new Date(value).getTime() <= new Date(`${todayDateInput()}T00:00:00.000Z`).getTime();
+}
+
+function safeExternalUrl(value?: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function shouldAutoIcon(currentIcon: string) {
@@ -2741,8 +2751,8 @@ function cellText(value: React.ReactNode): string {
   if (typeof value === "string" || typeof value === "number") return String(value);
   if (Array.isArray(value)) return value.map(cellText).join(" ");
   if (typeof value === "object" && "props" in value) {
-    const props = (value as { props?: { children?: React.ReactNode; title?: unknown; product?: Partial<Product> } }).props;
-    return [props?.children ? cellText(props.children) : "", props?.title, props?.product ? productSearchText(props.product) : ""]
+    const props = (value as { props?: { children?: React.ReactNode; title?: unknown; href?: unknown; product?: Partial<Product> } }).props;
+    return [props?.children ? cellText(props.children) : "", props?.title, props?.href, props?.product ? productSearchText(props.product) : ""]
       .filter((item) => item !== undefined && item !== null)
       .map((item) => String(item))
       .join(" ");
