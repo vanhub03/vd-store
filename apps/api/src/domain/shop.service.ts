@@ -2578,7 +2578,7 @@ export class ShopService {
     }
 
     const baseUrl = (process.env.CRYPTOMUS_API_BASE_URL ?? "https://api.cryptomus.com").replace(/\/+$/, "");
-    const network = (process.env.CRYPTOMUS_NETWORK ?? "tron").trim().toLowerCase();
+    const network = (process.env.CRYPTOMUS_NETWORK ?? "bsc").trim().toLowerCase();
     const body = {
       amount: input.amount,
       currency: "USDT",

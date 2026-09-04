@@ -13,6 +13,49 @@ import { describe, expect, it, vi } from "vitest";
 import { ShopService } from "../src/domain/shop.service";
 
 describe("ShopService", () => {
+  it("defaults new Cryptomus USDT invoices to BSC when no network override is configured", async () => {
+    const previous = {
+      merchantId: process.env.CRYPTOMUS_MERCHANT_ID,
+      apiKey: process.env.CRYPTOMUS_PAYMENT_API_KEY,
+      apiBaseUrl: process.env.CRYPTOMUS_API_BASE_URL,
+      network: process.env.CRYPTOMUS_NETWORK
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        state: 0,
+        result: { uuid: "cryptomus_1", url: "https://pay.example/cryptomus_1", address: "0xabc", network: "bsc" }
+      })
+    });
+    process.env.CRYPTOMUS_MERCHANT_ID = "merchant_1";
+    process.env.CRYPTOMUS_PAYMENT_API_KEY = "api_key_1";
+    process.env.CRYPTOMUS_API_BASE_URL = "https://cryptomus.example";
+    delete process.env.CRYPTOMUS_NETWORK;
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const service = new ShopService({} as never, {} as never, {} as never);
+      const result = await (service as unknown as {
+        createCryptomusInvoice: (input: { code: string; productName: string; amount: string; expiresAt: Date }) => Promise<{ network: string }>;
+      }).createCryptomusInvoice({
+        code: "DHUSDTBSC1",
+        productName: "USDT BSC test",
+        amount: "5.00",
+        expiresAt: new Date(Date.now() + 15 * 60_000)
+      });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({ currency: "USDT", network: "bsc" });
+      expect(result.network).toBe("bsc");
+    } finally {
+      vi.unstubAllGlobals();
+      process.env.CRYPTOMUS_MERCHANT_ID = previous.merchantId;
+      process.env.CRYPTOMUS_PAYMENT_API_KEY = previous.apiKey;
+      process.env.CRYPTOMUS_API_BASE_URL = previous.apiBaseUrl;
+      if (previous.network === undefined) delete process.env.CRYPTOMUS_NETWORK;
+      else process.env.CRYPTOMUS_NETWORK = previous.network;
+    }
+  });
+
   it("searches every admin user in the database and accepts a Telegram @username", async () => {
     const user = {
       id: "user_vanhdao99",
