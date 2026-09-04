@@ -27,6 +27,10 @@ export class Api {
     return this.request<T>("POST", path, body);
   }
 
+  postForm<T>(path: string, body: FormData) {
+    return this.request<T>("POST", path, body);
+  }
+
   put<T>(path: string, body?: unknown) {
     return this.request<T>("PUT", path, body);
   }
@@ -36,13 +40,14 @@ export class Api {
   }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const isFormData = body instanceof FormData;
     const response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers: {
-        "content-type": "application/json",
+        ...(isFormData ? {} : { "content-type": "application/json" }),
         ...(this.token ? { authorization: `Bearer ${this.token}` } : {})
       },
-      body: body === undefined ? undefined : JSON.stringify(body)
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body)
     });
     const text = await response.text();
     const data = text ? JSON.parse(text) : null;

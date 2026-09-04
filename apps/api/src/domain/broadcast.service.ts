@@ -5,6 +5,16 @@ import IORedis from "ioredis";
 import { PrismaService } from "../prisma.service";
 import { TelegramNotifyService } from "./telegram-notify.service";
 
+const MAX_BROADCAST_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_PHOTO_CAPTION_CHARACTERS = 1024;
+
+export type BroadcastImageUpload = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+};
+
 type BroadcastJob = {
   broadcastId: string;
   deliveryId: string;
@@ -42,14 +52,23 @@ export class BroadcastService implements OnModuleInit, OnModuleDestroy {
     await this.connection?.quit();
   }
 
-  async createBroadcast(adminId: string, title: string, message: string) {
-    if (!title.trim() || !message.trim()) {
+  async createBroadcast(adminId: string, title: string, message: string, image?: BroadcastImageUpload) {
+    const normalizedTitle = title?.trim();
+    const normalizedMessage = message?.trim();
+    if (!normalizedTitle || !normalizedMessage) {
       throw new BadRequestException("Tiêu đề và nội dung thông báo là bắt buộc.");
+    }
+    const normalizedImage = normalizeBroadcastImage(image);
+    if (normalizedImage && normalizedMessage.length > MAX_PHOTO_CAPTION_CHARACTERS) {
+      throw new BadRequestException(`Thông báo có ảnh tối đa ${MAX_PHOTO_CAPTION_CHARACTERS} ký tự để Telegram gửi ảnh và caption trong cùng một tin nhắn.`);
     }
     return this.prisma.broadcast.create({
       data: {
-        title: title.trim(),
-        message: message.trim(),
+        title: normalizedTitle,
+        message: normalizedMessage,
+        imageData: normalizedImage?.data,
+        imageMimeType: normalizedImage?.mimeType,
+        imageFileName: normalizedImage?.fileName,
         createdByAdminId: adminId,
         status: BroadcastStatus.DRAFT
       }
@@ -80,11 +99,21 @@ export class BroadcastService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listBroadcasts() {
-    return this.prisma.broadcast.findMany({
+    const broadcasts = await this.prisma.broadcast.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
-      include: { createdBy: true }
+      select: {
+        id: true,
+        title: true,
+        message: true,
+        imageMimeType: true,
+        status: true,
+        sentCount: true,
+        failedCount: true,
+        createdAt: true
+      }
     });
+    return broadcasts.map(({ imageMimeType, ...broadcast }) => ({ ...broadcast, hasImage: Boolean(imageMimeType) }));
   }
 
   async queueBroadcast(broadcastId: string) {
@@ -123,7 +152,14 @@ export class BroadcastService implements OnModuleInit, OnModuleDestroy {
     });
 
     try {
-      await this.telegram.sendMessage(delivery.user.telegramId, delivery.broadcast.message);
+      const delivered = delivery.broadcast.imageData && delivery.broadcast.imageMimeType && delivery.broadcast.imageFileName
+        ? await this.telegram.sendPhotoWithCaption(
+            delivery.user.telegramId,
+            { data: Buffer.from(delivery.broadcast.imageData), fileName: delivery.broadcast.imageFileName },
+            delivery.broadcast.message
+          )
+        : await this.telegram.sendMessage(delivery.user.telegramId, delivery.broadcast.message);
+      if (!delivered) throw new Error("Telegram rejected the broadcast delivery.");
       await this.prisma.broadcastDelivery.update({
         where: { id: delivery.id },
         data: { status: BroadcastDeliveryStatus.SENT, sentAt: new Date() }
@@ -158,4 +194,37 @@ export class BroadcastService implements OnModuleInit, OnModuleDestroy {
       data: { status: failed > 0 ? BroadcastStatus.PARTIAL : BroadcastStatus.SENT }
     });
   }
+}
+
+function normalizeBroadcastImage(image?: BroadcastImageUpload) {
+  if (!image) return undefined;
+  if (!Buffer.isBuffer(image.buffer) || image.size <= 0 || image.buffer.length === 0) {
+    throw new BadRequestException("Ảnh thông báo không hợp lệ.");
+  }
+  if (image.size > MAX_BROADCAST_IMAGE_BYTES || image.buffer.length > MAX_BROADCAST_IMAGE_BYTES) {
+    throw new BadRequestException("Ảnh thông báo tối đa 2 MB.");
+  }
+
+  const detected = detectImageType(image.buffer);
+  if (!detected) {
+    throw new BadRequestException("Chỉ hỗ trợ ảnh PNG, JPEG hoặc WebP.");
+  }
+  return {
+    data: Buffer.from(image.buffer),
+    mimeType: detected.mimeType,
+    fileName: `broadcast.${detected.extension}`
+  };
+}
+
+function detectImageType(buffer: Buffer): { mimeType: string; extension: string } | undefined {
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return { mimeType: "image/png", extension: "png" };
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { mimeType: "image/jpeg", extension: "jpg" };
+  }
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
+    return { mimeType: "image/webp", extension: "webp" };
+  }
+  return undefined;
 }

@@ -73,4 +73,24 @@ describe("TelegramNotifyService", () => {
 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("ADMIN_TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN"));
   });
+
+  it("sends a broadcast image and caption through a single Telegram sendPhoto request", async () => {
+    const service = new TelegramNotifyService();
+    const sendPhoto = vi.fn().mockResolvedValue({});
+    (service as unknown as { telegram?: { sendPhoto: typeof sendPhoto } }).telegram = { sendPhoto };
+
+    const result = await service.sendPhotoWithCaption(
+      "123456789",
+      { data: Buffer.from("image"), fileName: "broadcast.png" },
+      "<b>Khuyến mãi</b>"
+    );
+
+    expect(result).toBe(true);
+    expect(sendPhoto).toHaveBeenCalledTimes(1);
+    expect(sendPhoto).toHaveBeenCalledWith(
+      "123456789",
+      expect.objectContaining({ source: Buffer.from("image"), filename: "broadcast.png" }),
+      { caption: "<b>Khuyến mãi</b>", parse_mode: "HTML" }
+    );
+  });
 });

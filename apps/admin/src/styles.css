@@ -745,6 +745,27 @@ label.wide {
   font-size: 12px;
 }
 
+.broadcastImageField input[type="file"] {
+  max-width: 480px;
+}
+
+.broadcastImagePreview {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.broadcastImagePreview img {
+  background: #f1f5f9;
+  border: 1px solid #d8dee7;
+  border-radius: 8px;
+  display: block;
+  max-height: 220px;
+  max-width: min(100%, 360px);
+  object-fit: contain;
+}
+
 .checkboxGroup {
   display: flex;
   flex-wrap: wrap;

@@ -1,6 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Telegram } from "telegraf";
+import { Input, Telegram } from "telegraf";
 import { formatVnd } from "./money";
+
+const TELEGRAM_PHOTO_CAPTION_LIMIT = 1024;
 
 @Injectable()
 export class TelegramNotifyService {
@@ -31,6 +33,28 @@ export class TelegramNotifyService {
       chatId,
       message
     );
+  }
+
+  async sendPhotoWithCaption(chatId: string, image: { data: Buffer; fileName: string }, caption: string) {
+    if (!this.telegram) {
+      this.logger.warn("Telegram token missing (TELEGRAM_BOT_TOKEN); broadcast photo was not sent.");
+      return false;
+    }
+    if (!caption.trim() || caption.length > TELEGRAM_PHOTO_CAPTION_LIMIT) {
+      this.logger.warn(`Broadcast photo caption is invalid or exceeds ${TELEGRAM_PHOTO_CAPTION_LIMIT} characters.`);
+      return false;
+    }
+
+    try {
+      await this.telegram.sendPhoto(chatId, Input.fromBuffer(image.data, image.fileName), {
+        caption,
+        parse_mode: "HTML"
+      });
+      return true;
+    } catch (error) {
+      this.logger.warn(`Could not send Telegram photo to ${chatId}: ${(error as Error).message}`);
+      return false;
+    }
   }
 
   private async sendWithTelegram(telegram: Telegram | undefined, tokenLabel: string, chatId: string, message: string) {

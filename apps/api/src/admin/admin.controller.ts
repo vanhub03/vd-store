@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { CustomerRole, ManualOrderStatus, PartnerEnvironment, ProductDeliveryType, ProductStatus } from "@prisma/client";
 import { ArrayMinSize, IsArray, IsBoolean, IsEmail, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, Min, MinLength } from "class-validator";
 import { AdminAuthGuard, AdminRequest } from "../common/admin-auth.guard";
@@ -667,8 +668,17 @@ export class AdminController {
   }
 
   @Post("broadcasts")
-  createBroadcast(@Req() request: AdminRequest, @Body() body: BroadcastDto) {
-    return this.broadcasts.createBroadcast(request.admin!.id, body.title, body.message);
+  @UseInterceptors(
+    FileInterceptor("image", {
+      limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 2, parts: 3, fieldSize: 8 * 1024 }
+    })
+  )
+  createBroadcast(
+    @Req() request: AdminRequest,
+    @Body() body: BroadcastDto,
+    @UploadedFile() image?: { buffer: Buffer; mimetype: string; originalname: string; size: number }
+  ) {
+    return this.broadcasts.createBroadcast(request.admin!.id, body.title, body.message, image);
   }
 
   @Post("broadcasts/:id/send")

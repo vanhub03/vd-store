@@ -412,7 +412,8 @@ server {
     listen [::]:80;
     server_name api.<domain>;
 
-    client_max_body_size 2m;
+    # Broadcast images are capped by the application at 2 MB; leave room for multipart overhead.
+    client_max_body_size 3m;
 
     location / {
         proxy_pass http://127.0.0.1:3000;

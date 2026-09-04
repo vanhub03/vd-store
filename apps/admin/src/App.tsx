@@ -168,7 +168,7 @@ type PartnerAdminOrder = {
     deliveryText?: string | null;
   }>;
 };
-type Broadcast = { id: string; title: string; message: string; status: string; sentCount: number; failedCount: number; createdAt: string };
+type Broadcast = { id: string; title: string; message: string; hasImage: boolean; status: string; sentCount: number; failedCount: number; createdAt: string };
 type Voucher = {
   id: string;
   code: string;
@@ -2515,6 +2515,9 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageInputKey, setImageInputKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -2532,13 +2535,47 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
     load().catch((err) => onError((err as Error).message));
   }, []);
 
+  useEffect(() => () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
+
+  function selectImage(file?: File) {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      onError("Chỉ hỗ trợ ảnh PNG, JPEG hoặc WebP.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      onError("Ảnh thông báo tối đa 2 MB.");
+      return;
+    }
+    setImage(file);
+    setImagePreview(URL.createObjectURL(file));
+    onError(null);
+  }
+
+  function clearImage() {
+    setImage(null);
+    setImagePreview(null);
+    setImageInputKey((value) => value + 1);
+  }
+
   async function create(event: FormEvent) {
     event.preventDefault();
+    if (image && message.trim().length > 1024) {
+      onError("Thông báo có ảnh tối đa 1.024 ký tự để ảnh và caption được gửi trong cùng một tin nhắn Telegram.");
+      return;
+    }
     setCreating(true);
     try {
-      await api.post("/admin/broadcasts", { title, message });
+      const payload = new FormData();
+      payload.set("title", title);
+      payload.set("message", message);
+      if (image) payload.set("image", image);
+      await api.postForm("/admin/broadcasts", payload);
       setTitle("");
       setMessage("");
+      clearImage();
       await load();
       onError(null);
     } catch (err) {
@@ -2573,7 +2610,23 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
           </label>
           <label className="wide">
             Nội dung gửi bot
-            <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} required />
+            <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={5} required maxLength={image ? 1024 : undefined} />
+            <span className="fieldHint">
+              {image ? `${message.length}/1.024 ký tự · Ảnh và caption sẽ được gửi trong cùng một tin nhắn.` : "Có thể đính kèm ảnh để gửi ảnh và caption trong cùng một tin nhắn."}
+            </span>
+          </label>
+          <label className="wide broadcastImageField">
+            Ảnh đính kèm (tuỳ chọn)
+            <input key={imageInputKey} type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => selectImage(event.target.files?.[0])} />
+            <span className="fieldHint">Hỗ trợ PNG, JPEG, WebP · tối đa 2 MB. Ảnh được lưu cùng thông báo và gửi trực tiếp từ Bot.</span>
+            {imagePreview ? (
+              <div className="broadcastImagePreview">
+                <img src={imagePreview} alt="Xem trước ảnh thông báo" />
+                <button className="smallButton dangerButton" type="button" onClick={clearImage}>
+                  <X size={14} /> Bỏ ảnh
+                </button>
+              </div>
+            ) : null}
           </label>
           <button className="primaryButton" disabled={creating}>
             {creating ? <RefreshCw className="spin" size={16} /> : <Save size={16} />} {creating ? "Đang lưu..." : "Lưu nháp"}
@@ -2582,9 +2635,10 @@ function Broadcasts({ api, onError }: { api: Api; onError: (error: string | null
       </section>
       <DataTable
         title="Danh sách thông báo"
-        columns={["Tiêu đề", "Trạng thái", "Đã gửi", "Lỗi", "Thao tác"]}
+        columns={["Tiêu đề", "Đính kèm", "Trạng thái", "Đã gửi", "Lỗi", "Thao tác"]}
         rows={broadcasts.map((item) => [
           item.title,
+          item.hasImage ? "Ảnh + caption" : "Chỉ chữ",
           item.status,
           item.sentCount,
           item.failedCount,

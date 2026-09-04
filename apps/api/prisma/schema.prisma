@@ -650,6 +650,9 @@ model Broadcast {
   id               String          @id @default(cuid())
   title            String
   message          String
+  imageData        Bytes?
+  imageMimeType    String?
+  imageFileName    String?
   status           BroadcastStatus @default(DRAFT)
   target           String          @default("all")
   sentCount        Int             @default(0)

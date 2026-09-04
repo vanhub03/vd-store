@@ -46,7 +46,7 @@ const fieldMap: Record<string, string[]> = {
   WalletLedgerEntry: ["id", "userId", "amount", "type", "referencePaymentId", "referenceOrderId", "note", "createdAt"],
   BankTransaction: ["id", "provider", "providerTransactionId", "gateway", "transactionDate", "accountNumber", "subAccount", "code", "content", "transferType", "transferAmount", "accumulated", "referenceCode", "rawPayload", "paymentId", "createdAt"],
   ProductReview: ["id", "userId", "productId", "rating", "title", "content", "createdAt", "updatedAt"],
-  Broadcast: ["id", "title", "message", "status", "target", "sentCount", "failedCount", "createdByAdminId", "createdAt", "updatedAt"],
+  Broadcast: ["id", "title", "message", "imageData", "imageMimeType", "imageFileName", "status", "target", "sentCount", "failedCount", "createdByAdminId", "createdAt", "updatedAt"],
   BroadcastDelivery: ["id", "broadcastId", "userId", "status", "error", "sentAt", "createdAt"],
   PartnerApiCredential: ["id", "userId", "createdByAdminId", "environment", "label", "keyPrefix", "keyHash", "scopes", "expiresAt", "revokedAt", "lastUsedAt", "createdAt", "updatedAt"],
   PartnerOrder: ["id", "userId", "environment", "externalOrderId", "status", "currency", "subtotalAmount", "collaboratorDiscountAmount", "voucherDiscountAmount", "totalAmount", "refundedAmount", "voucherCode", "createdAt", "updatedAt"],
@@ -277,10 +277,23 @@ function sanitize(model: string, row: Record<string, unknown>) {
     if (!(field in row)) continue;
     const value = row[field];
     if (value === undefined) continue;
+    if (model === "Broadcast" && field === "imageData" && value !== null) {
+      data[field] = normalizeBinary(value);
+      continue;
+    }
     data[field] = dateFields.has(field) && value !== null ? new Date(String(value)) : value;
   }
   applyDefaults(model, data);
   return data;
+}
+
+function normalizeBinary(value: unknown) {
+  if (typeof value === "string") return Buffer.from(value, "base64");
+  if (value && typeof value === "object") {
+    const candidate = value as { type?: unknown; data?: unknown };
+    if (candidate.type === "Buffer" && Array.isArray(candidate.data)) return Buffer.from(candidate.data);
+  }
+  throw new Error("Broadcast.imageData must be a base64 string or JSON Buffer object.");
 }
 
 function applyDefaults(model: string, data: Record<string, unknown>) {
