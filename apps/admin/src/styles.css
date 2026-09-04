@@ -340,6 +340,14 @@ button:disabled {
   white-space: nowrap;
 }
 
+.userSearchHeader {
+  margin: 0 0 14px;
+}
+
+.userSearchInput {
+  min-width: min(360px, 100%);
+}
+
 .chartPanel {
   min-width: 0;
 }
@@ -1225,5 +1233,10 @@ th {
   .soldProductIntro {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .userSearchInput {
+    min-width: 0;
+    width: 100%;
   }
 }

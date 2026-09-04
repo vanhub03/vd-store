@@ -107,6 +107,7 @@ type PricingSummary = {
 type ListOptions = {
   take?: number | string;
   skip?: number | string;
+  search?: string;
 };
 
 const ORDER_TRANSACTION_OPTIONS = {
@@ -1332,7 +1333,20 @@ export class ShopService {
 
   async listAdminUsers(options: ListOptions = {}) {
     const pagination = normalizeListOptions(options);
+    const search = normalizeAdminUserSearch(options.search);
     const users = await this.prisma.telegramUser.findMany({
+      where: search
+        ? {
+            OR: [
+              { username: { contains: search, mode: "insensitive" } },
+              { firstName: { contains: search, mode: "insensitive" } },
+              { lastName: { contains: search, mode: "insensitive" } },
+              { displayName: { contains: search, mode: "insensitive" } },
+              { email: { contains: search, mode: "insensitive" } },
+              { telegramId: { contains: search, mode: "insensitive" } }
+            ]
+          }
+        : undefined,
       orderBy: { createdAt: "desc" },
       take: pagination.take,
       skip: pagination.skip
@@ -2929,6 +2943,11 @@ function normalizeListOptions(options: ListOptions) {
   const take = Math.min(500, Math.max(1, Number(options.take ?? 200) || 200));
   const skip = Math.max(0, Number(options.skip ?? 0) || 0);
   return { take, skip };
+}
+
+function normalizeAdminUserSearch(value?: string) {
+  const normalized = value?.trim().replace(/^@+/, "").slice(0, 100);
+  return normalized || undefined;
 }
 
 function allocateCartQuote<T extends { subtotalAmount: number }>(lines: T[], quote: VoucherQuote) {

@@ -415,8 +415,8 @@ export class AdminController {
   }
 
   @Get("users")
-  users(@Query("take") take?: string, @Query("skip") skip?: string) {
-    return this.shop.listAdminUsers({ take, skip });
+  users(@Query("take") take?: string, @Query("skip") skip?: string, @Query("search") search?: string) {
+    return this.shop.listAdminUsers({ take, skip, search });
   }
 
   @Get("collaborators")

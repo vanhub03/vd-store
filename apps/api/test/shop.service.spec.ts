@@ -13,6 +13,36 @@ import { describe, expect, it, vi } from "vitest";
 import { ShopService } from "../src/domain/shop.service";
 
 describe("ShopService", () => {
+  it("searches every admin user in the database and accepts a Telegram @username", async () => {
+    const user = {
+      id: "user_vanhdao99",
+      telegramId: "1387412987",
+      username: "vanhdao99",
+      firstName: "Vanh",
+      lastName: "Đào",
+      email: null,
+      passwordHash: "hidden"
+    };
+    const prisma = {
+      telegramUser: { findMany: vi.fn().mockResolvedValue([user]) },
+      walletLedgerEntry: { groupBy: vi.fn().mockResolvedValue([{ userId: user.id, _sum: { amount: 50000 } }]) }
+    };
+    const service = new ShopService(prisma as never, {} as never, {} as never);
+
+    const result = await service.listAdminUsers({ take: "500", search: "@vanhdao99" });
+
+    expect(prisma.telegramUser.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        OR: expect.arrayContaining([
+          { username: { contains: "vanhdao99", mode: "insensitive" } }
+        ])
+      },
+      take: 500,
+      skip: 0
+    }));
+    expect(result).toEqual([expect.objectContaining({ id: user.id, balance: 50000, passwordHash: undefined })]);
+  });
+
   it("returns only active web-visible catalog products and maps prices to webPrice", async () => {
     const categoryProduct = {
       id: "product_web_category_1",

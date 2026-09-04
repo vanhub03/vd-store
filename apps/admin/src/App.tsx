@@ -1523,23 +1523,28 @@ function inferBrandIcon(name: string) {
 
 function UsersView({ api, onError }: { api: Api; onError: (error: string | null) => void }) {
   const [users, setUsers] = useState<User[]>([]);
+  const [search, setSearch] = useState("");
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [adjustingUserId, setAdjustingUserId] = useState<string | null>(null);
 
-  async function load() {
+  async function load(nextSearch = search) {
     setLoading(true);
     try {
-      setUsers(await api.get<User[]>("/admin/users"));
+      const query = nextSearch.trim();
+      setUsers(await api.get<User[]>(`/admin/users?take=500${query ? `&search=${encodeURIComponent(query)}` : ""}`));
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    load().catch((err) => onError((err as Error).message));
-  }, []);
+    const handle = window.setTimeout(() => {
+      void load(search).catch((err) => onError((err as Error).message));
+    }, search ? 250 : 0);
+    return () => window.clearTimeout(handle);
+  }, [search]);
 
   async function adjust(userId: string) {
     const amount = Number(amounts[userId] ?? 0);
@@ -1565,6 +1570,17 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
     <section className="panel">
       <h2>User Telegram</h2>
       {loading && <LoadingBlock label="Đang tải user..." />}
+      <div className="dataTableHeader userSearchHeader">
+        <span className="tableSubtext">Tìm trực tiếp toàn bộ database theo username, tên, email hoặc Telegram ID.</span>
+        <input
+          className="userSearchInput"
+          type="search"
+          autoComplete="off"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="VD: @vanhdao99, Vanh, email, Telegram ID"
+        />
+      </div>
       <DataTable
         embedded
         columns={["User", "Telegram ID", "Số dư", "Điều chỉnh ví"]}
@@ -1587,7 +1603,7 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
             </button>
           </div>
         ])}
-        searchPlaceholder="Tìm user, Telegram ID..."
+        searchPlaceholder="Lọc trong kết quả đang hiển thị..."
         emptyText="Chưa có user."
       />
     </section>
