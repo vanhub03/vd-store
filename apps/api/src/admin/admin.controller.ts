@@ -670,7 +670,9 @@ export class AdminController {
   @Post("broadcasts")
   @UseInterceptors(
     FileInterceptor("image", {
-      limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 2, parts: 3, fieldSize: 8 * 1024 }
+      // Multer emits LIMIT_PART_COUNT when the count reaches the configured limit,
+      // so leave room above title + message + one image while still bounding input.
+      limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 3, parts: 5, fieldSize: 8 * 1024 }
     })
   )
   createBroadcast(
