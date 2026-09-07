@@ -1321,10 +1321,23 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
   }
 
   async function renew(item: SoldProductSubscription) {
-    if (!confirm(`Gia hạn ${item.durationMonths} tháng cho ${item.customerName}? Hạn mới được tính nối tiếp từ hạn hiện tại.`)) return;
+    const input = window.prompt(
+      `Nhập số tháng gia hạn cho ${item.customerName} (1–120 tháng):`,
+      String(item.durationMonths)
+    );
+    if (input === null) return;
+
+    const normalizedMonths = input.trim();
+    const durationMonths = /^\d+$/.test(normalizedMonths) ? Number(normalizedMonths) : NaN;
+    if (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 120) {
+      window.alert("Số tháng gia hạn phải là số nguyên từ 1 đến 120.");
+      return;
+    }
+
+    if (!confirm(`Gia hạn ${durationMonths} tháng cho ${item.customerName}? Hạn mới được tính nối tiếp từ hạn hiện tại.`)) return;
     setWorkingId(item.id);
     try {
-      await api.post(`/admin/sold-product-subscriptions/${item.id}/renew`, { durationMonths: item.durationMonths });
+      await api.post(`/admin/sold-product-subscriptions/${item.id}/renew`, { durationMonths });
       await load();
       onError(null);
     } catch (error) {
