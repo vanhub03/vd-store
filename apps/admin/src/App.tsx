@@ -1678,6 +1678,9 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
   const [filters, setFilters] = useState({ search: "", status: "all", createdFrom: "", createdTo: "" });
   const [form, setForm] = useState({ email: "", displayName: "", password: "" });
   const [promoteUserId, setPromoteUserId] = useState("");
+  const [promotionSearch, setPromotionSearch] = useState("");
+  const [promotionResults, setPromotionResults] = useState<User[]>([]);
+  const [promotionSearching, setPromotionSearching] = useState(false);
   const [apiUser, setApiUser] = useState<User | null>(null);
 
   async function load() {
@@ -1707,6 +1710,40 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
   useEffect(() => {
     void load();
   }, []);
+
+  useEffect(() => {
+    const query = promotionSearch.trim();
+    if (!query) {
+      setPromotionResults([]);
+      setPromotionSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      setPromotionSearching(true);
+      api
+        .get<User[]>(`/admin/users?take=100&search=${encodeURIComponent(query)}`)
+        .then((users) => {
+          if (!cancelled) {
+            setPromotionResults(users.filter((user) => user.role === "CUSTOMER"));
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) onError((err as Error).message);
+        })
+        .finally(() => {
+          if (!cancelled) setPromotionSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [api, onError, promotionSearch]);
+
+  const promotionCustomers = promotionSearch.trim() ? promotionResults : customers;
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -1834,10 +1871,31 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
         </div>
         <div className="panel">
           <h2>Chuyển khách hàng hiện có</h2>
+          <label className="promotionSearch">
+            <span>Tìm tài khoản Telegram</span>
+            <input
+              name="promotion-user-search"
+              type="search"
+              autoComplete="off"
+              value={promotionSearch}
+              onChange={(event) => {
+                setPromotionSearch(event.target.value);
+                setPromoteUserId("");
+              }}
+              placeholder="Nhập tên, @username, email hoặc Telegram ID"
+            />
+            <small>
+              {promotionSearching
+                ? "Đang tìm..."
+                : promotionSearch.trim()
+                  ? `${promotionCustomers.length} tài khoản khớp`
+                  : `${promotionCustomers.length} tài khoản khách hàng`}
+            </small>
+          </label>
           <div className="promotionRow">
             <select value={promoteUserId} onChange={(event) => setPromoteUserId(event.target.value)}>
-              <option value="">Chọn tài khoản khách hàng</option>
-              {customers.map((user) => <option key={user.id} value={user.id}>{user.email ?? displayUser(user)} · {user.telegramId}</option>)}
+              <option value="">{promotionSearch.trim() ? "Chọn tài khoản từ kết quả tìm kiếm" : "Chọn tài khoản khách hàng"}</option>
+              {promotionCustomers.map((user) => <option key={user.id} value={user.id}>{user.email ?? displayUser(user)} · {user.telegramId}</option>)}
             </select>
             <button className="primaryButton" type="button" onClick={promote} disabled={!promoteUserId || savingId === promoteUserId}>Chuyển thành CTV</button>
           </div>

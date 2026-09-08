@@ -1053,6 +1053,23 @@ th {
   gap: 8px;
 }
 
+.promotionSearch {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.promotionSearch span {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.promotionSearch small {
+  color: #64748b;
+  font-size: 12px;
+}
+
 .promotionRow {
   grid-template-columns: minmax(0, 1fr) auto;
 }
