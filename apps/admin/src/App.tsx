@@ -1541,6 +1541,7 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [adjustingUserId, setAdjustingUserId] = useState<string | null>(null);
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState<string | null>(null);
 
   async function load(nextSearch = search) {
     setLoading(true);
@@ -1579,6 +1580,26 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
     }
   }
 
+  async function toggleCollaborator(user: User) {
+    const promote = user.role !== "COLLABORATOR";
+    const account = displayUser(user);
+    const confirmation = promote
+      ? `Cấp quyền cộng tác viên cho ${account}? Tài khoản này sẽ mua theo giá CTV trên web và bot.`
+      : `Thu hồi quyền cộng tác viên của ${account}? Tài khoản này sẽ mua theo giá thường.`;
+    if (!confirm(confirmation)) return;
+
+    setUpdatingRoleUserId(user.id);
+    try {
+      await api.put(`/admin/collaborators/${user.id}`, { role: promote ? "COLLABORATOR" : "CUSTOMER" });
+      await load();
+      onError(null);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setUpdatingRoleUserId(null);
+    }
+  }
+
   return (
     <section className="panel">
       <h2>User Telegram</h2>
@@ -1596,10 +1617,24 @@ function UsersView({ api, onError }: { api: Api; onError: (error: string | null)
       </div>
       <DataTable
         embedded
-        columns={["User", "Telegram ID", "Số dư", "Điều chỉnh ví"]}
+        columns={["User", "Telegram ID", "Quyền mua", "Số dư", "Điều chỉnh ví"]}
         rows={users.map((user) => [
           user.username ? `@${user.username}` : user.firstName || "Không tên",
           user.telegramId,
+          <div className="rowActions">
+            <span className={user.role === "COLLABORATOR" ? "statusBadge active" : "statusBadge"}>
+              {user.role === "COLLABORATOR" ? "CTV · giá sỉ" : "Khách thường"}
+            </span>
+            <button
+              className={user.role === "COLLABORATOR" ? "smallButton secondaryButton" : "smallButton successButton"}
+              type="button"
+              onClick={() => void toggleCollaborator(user)}
+              disabled={updatingRoleUserId === user.id}
+            >
+              {updatingRoleUserId === user.id ? <RefreshCw className="spin" size={14} /> : null}
+              {updatingRoleUserId === user.id ? "Đang lưu..." : user.role === "COLLABORATOR" ? "Thu hồi CTV" : "Cấp CTV"}
+            </button>
+          </div>,
           formatVnd(user.balance),
           <div className="inlineControls">
             <input
@@ -1659,7 +1694,7 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
         api.get<CollaboratorReport>("/admin/collaborators/report")
       ]);
       setCollaborators(nextCollaborators);
-      setCustomers(nextUsers.filter((user) => user.role === "CUSTOMER" && user.email));
+      setCustomers(nextUsers.filter((user) => user.role === "CUSTOMER"));
       setReport(nextReport);
       onError(null);
     } catch (err) {
@@ -1802,7 +1837,7 @@ function CollaboratorsView({ api, onError }: { api: Api; onError: (error: string
           <div className="promotionRow">
             <select value={promoteUserId} onChange={(event) => setPromoteUserId(event.target.value)}>
               <option value="">Chọn tài khoản khách hàng</option>
-              {customers.map((user) => <option key={user.id} value={user.id}>{user.email} · {user.displayName ?? "Chưa có tên"}</option>)}
+              {customers.map((user) => <option key={user.id} value={user.id}>{user.email ?? displayUser(user)} · {user.telegramId}</option>)}
             </select>
             <button className="primaryButton" type="button" onClick={promote} disabled={!promoteUserId || savingId === promoteUserId}>Chuyển thành CTV</button>
           </div>

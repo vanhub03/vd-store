@@ -220,6 +220,10 @@ export class ShopService {
     return value;
   }
 
+  async getCatalogForTelegramUser(telegramId?: string) {
+    return this.getCatalog("bot", await this.getTelegramUserRole(telegramId));
+  }
+
   clearCatalogCache() {
     this.catalogCache.clear();
   }
@@ -236,6 +240,20 @@ export class ShopService {
       throw new NotFoundException("Không tìm thấy sản phẩm.");
     }
     return applyChannelPrice(product, channel, customerRole);
+  }
+
+  async getProductForTelegramUser(productId: string, telegramId?: string) {
+    return this.getProduct(productId, "bot", await this.getTelegramUserRole(telegramId));
+  }
+
+  private async getTelegramUserRole(telegramId?: string) {
+    const normalizedTelegramId = telegramId?.trim();
+    if (!normalizedTelegramId) return CustomerRole.CUSTOMER;
+    const user = await this.prisma.telegramUser.findUnique({
+      where: { telegramId: normalizedTelegramId },
+      select: { role: true }
+    });
+    return user?.role ?? CustomerRole.CUSTOMER;
   }
 
   async getWalletBalanceByTelegramId(telegramId: string) {

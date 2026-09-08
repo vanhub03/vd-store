@@ -410,7 +410,7 @@ async function showCatalog(ctx: Context) {
   await upsertUser(ctx);
   clearPendingQuantity(ctx);
   const lang = currentLanguage(ctx);
-  const catalog = await api.get<CatalogResponse>("/bot/catalog");
+  const catalog = await api.get<CatalogResponse>(botCatalogPath(ctx));
   const groups = catalogGroups(catalog, lang);
   const buttons = groups.map((group) => [Markup.button.callback(groupButtonLabel(group), `cat:${group.id}`)]);
   buttons.push([Markup.button.callback(BOT_TEXT[lang].back, "home")]);
@@ -421,7 +421,7 @@ async function showCategoryProducts(ctx: Context, categoryId: string) {
   await upsertUser(ctx);
   clearPendingQuantity(ctx);
   const lang = currentLanguage(ctx);
-  const catalog = await api.get<CatalogResponse>("/bot/catalog");
+  const catalog = await api.get<CatalogResponse>(botCatalogPath(ctx));
   const group = catalogGroups(catalog, lang).find((item) => item.id === categoryId);
   if (!group) {
     await renderScreen(ctx, BOT_TEXT[lang].noProducts, Markup.inlineKeyboard([[Markup.button.callback(BOT_TEXT[lang].back, "catalog")]]));
@@ -492,7 +492,7 @@ async function showHome(ctx: Context, message?: string) {
 }
 
 async function showProduct(ctx: Context, productId: string) {
-  const product = await api.get<ProductDetail>(`/bot/products/${productId}`);
+  const product = await api.get<ProductDetail>(botProductPath(ctx, productId));
   await showProductDetail(ctx, product);
 }
 
@@ -529,7 +529,7 @@ async function showQuantitySelection(ctx: Context, productId: string, quantity: 
   const lang = currentLanguage(ctx);
   const text = BOT_TEXT[lang];
   const normalizedMethod = lang === "en" && !preferredMethod ? "usdt" : preferredMethod;
-  const product = await api.get<ProductDetail>(`/bot/products/${productId}`);
+  const product = await api.get<ProductDetail>(botProductPath(ctx, productId));
   const available = productAvailableQuantity(product);
   if (available === 0) {
     await renderScreen(
@@ -586,7 +586,7 @@ async function handlePendingQuantityText(ctx: Context, rawText: string) {
     return true;
   }
 
-  const product = await api.get<ProductDetail>(`/bot/products/${pending.productId}`);
+  const product = await api.get<ProductDetail>(botProductPath(ctx, pending.productId));
   const available = productAvailableQuantity(product);
   if (available === 0) {
     clearPendingQuantity(ctx);
@@ -652,7 +652,7 @@ async function showProductByCommand(ctx: Context) {
   if (!reference) return showCatalog(ctx);
 
   await upsertUser(ctx);
-  const product = await findProductByReference(reference);
+  const product = await findProductByReference(ctx, reference);
   if (!product) {
     await ctx.reply(`${BOT_TEXT[lang].notFoundPrefix} "${reference}". ${BOT_TEXT[lang].useCatalog}`, mainKeyboard(lang));
     return;
@@ -670,7 +670,7 @@ async function purchaseByCommand(ctx: Context) {
   }
 
   await upsertUser(ctx);
-  const product = await findProductByReference(parsed.productReference);
+  const product = await findProductByReference(ctx, parsed.productReference);
   if (!product) {
     await ctx.reply(`${BOT_TEXT[lang].notFoundPrefix} "${parsed.productReference}". ${BOT_TEXT[lang].useCatalog}`, mainKeyboard(lang));
     return;
@@ -1156,14 +1156,25 @@ function clampQuantity(quantity: number, product: ProductSummary | ProductDetail
   return Math.min(Math.max(1, Math.trunc(quantity)), max);
 }
 
-async function findProductByReference(reference: string) {
-  const catalog = await api.get<CatalogResponse>("/bot/catalog");
+function botCatalogPath(ctx: Context) {
+  const telegramId = ctx.from?.id;
+  return telegramId ? `/bot/catalog?telegramId=${encodeURIComponent(String(telegramId))}` : "/bot/catalog";
+}
+
+function botProductPath(ctx: Context, productId: string) {
+  const telegramId = ctx.from?.id;
+  const query = telegramId ? `?telegramId=${encodeURIComponent(String(telegramId))}` : "";
+  return `/bot/products/${encodeURIComponent(productId)}${query}`;
+}
+
+async function findProductByReference(ctx: Context, reference: string) {
+  const catalog = await api.get<CatalogResponse>(botCatalogPath(ctx));
   const products = flattenProducts(catalog);
   const trimmed = reference.trim();
   const index = Number(trimmed);
   const summary = Number.isInteger(index) && index >= 1 ? products[index - 1] : findProductByNameOrId(products, trimmed);
   if (!summary) return null;
-  return api.get<ProductDetail>(`/bot/products/${summary.id}`);
+  return api.get<ProductDetail>(botProductPath(ctx, summary.id));
 }
 
 function findProductByNameOrId(products: ProductSummary[], reference: string) {

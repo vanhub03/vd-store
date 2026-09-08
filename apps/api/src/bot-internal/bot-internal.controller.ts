@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { IsInt, IsOptional, IsString, Min } from "class-validator";
 import { BotInternalGuard } from "../common/bot-internal.guard";
 import { ShopService } from "../domain/shop.service";
@@ -65,13 +65,13 @@ export class BotInternalController {
   }
 
   @Get("catalog")
-  catalog() {
-    return this.shop.getCatalog("bot");
+  catalog(@Query("telegramId") telegramId?: string) {
+    return this.shop.getCatalogForTelegramUser(telegramId);
   }
 
   @Get("products/:id")
-  product(@Param("id") id: string) {
-    return this.shop.getProduct(id, "bot");
+  product(@Param("id") id: string, @Query("telegramId") telegramId?: string) {
+    return this.shop.getProductForTelegramUser(id, telegramId);
   }
 
   @Get("wallet/:telegramId")
