@@ -281,7 +281,7 @@ export class ShopService {
   }
 
   async createTopup(telegramId: string, amount: number) {
-    assertPositiveVnd(amount);
+    assertValidTopupAmount(amount);
     const user = await this.requireTelegramUser(telegramId);
     const code = await this.createUniqueCode(TOPUP_PREFIX);
     const expiresAt = minutesFromNow(10);
@@ -305,7 +305,7 @@ export class ShopService {
   }
 
   async createCryptomusTopup(telegramId: string, amount: number) {
-    assertPositiveVnd(amount);
+    assertValidTopupAmount(amount);
     const user = await this.requireTelegramUser(telegramId);
     const setting = await this.prisma.storeSetting.findUnique({ where: { key: "USDT_VND_RATE" } });
     const rate = Number(setting?.value ?? process.env.USDT_VND_RATE ?? 0);
@@ -3058,6 +3058,12 @@ function assertCollaboratorDiscount(value?: number) {
 
 function assertActiveUser(user: { isBlocked?: boolean }) {
   if (user.isBlocked) throw new BadRequestException("Tài khoản đã bị khóa.");
+}
+
+function assertValidTopupAmount(amount: number) {
+  if (!Number.isSafeInteger(amount) || amount < 1_000) {
+    throw new BadRequestException("Số tiền nạp tối thiểu là 1.000đ.");
+  }
 }
 
 function normalizeProductPrices(input: Partial<ProductInput>, required: boolean) {

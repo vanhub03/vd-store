@@ -29,7 +29,7 @@ class TopupDto {
   telegramId!: string;
 
   @IsInt()
-  @Min(1)
+  @Min(1000)
   amount!: number;
 }
 
