@@ -18,6 +18,7 @@ type Dashboard = {
   totalWalletDebit: number;
   revenueByDay: RevenuePoint[];
   revenueByMonth: RevenuePoint[];
+  topCustomers: Array<{ totalSpent: number; purchaseCount: number; user?: User }>;
   topWallets: Array<{ balance: number; user?: User }>;
   recentWalletEntries: Array<{ id: string; amount: number; type: string; note?: string; createdAt: string; user?: User }>;
   manualOrderAlerts: Order[];
@@ -445,6 +446,14 @@ function Overview({ api, onError }: { api: Api; onError: (error: string | null) 
 
       <section className="dashboardGrid">
         <WalletPanel
+          title="Top 10 khách hàng mua nhiều nhất"
+          rows={(dashboard?.topCustomers ?? []).map((customer, index) => ({
+            name: `#${index + 1} ${displayUser(customer.user)}`,
+            detail: `${customer.purchaseCount.toLocaleString("vi-VN")} lượt thanh toán · ${customer.user?.role === "COLLABORATOR" ? "CTV" : "Khách thường"}`,
+            amount: customer.totalSpent
+          }))}
+        />
+        <WalletPanel
           title="Top ví user"
           rows={(dashboard?.topWallets ?? []).map((wallet) => ({
             name: displayUser(wallet.user),
@@ -452,6 +461,9 @@ function Overview({ api, onError }: { api: Api; onError: (error: string | null) 
             amount: wallet.balance
           }))}
         />
+      </section>
+
+      <section className="dashboardGrid dashboardSinglePanel">
         <WalletPanel
           title="Biến động ví gần đây"
           rows={(dashboard?.recentWalletEntries ?? []).map((entry) => ({

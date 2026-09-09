@@ -2028,6 +2028,7 @@ export class ShopService {
       walletTotal,
       walletCredits,
       walletDebits,
+      topCustomerGroups,
       topWalletGroups,
       recentWalletEntries,
       manualOrderAlerts
@@ -2045,6 +2046,14 @@ export class ShopService {
         this.prisma.walletLedgerEntry.aggregate({ _sum: { amount: true } }),
         this.prisma.walletLedgerEntry.aggregate({ where: { amount: { gt: 0 } }, _sum: { amount: true } }),
         this.prisma.walletLedgerEntry.aggregate({ where: { amount: { lt: 0 } }, _sum: { amount: true } }),
+        this.prisma.payment.groupBy({
+          by: ["userId"],
+          where: { ...saleWhere, userId: { not: null } },
+          _sum: { amount: true },
+          _count: { id: true },
+          orderBy: { _sum: { amount: "desc" } },
+          take: 10
+        }),
         this.prisma.walletLedgerEntry.groupBy({
           by: ["userId"],
           _sum: { amount: true }
@@ -2071,10 +2080,17 @@ export class ShopService {
       .filter((group) => group.balance !== 0)
       .sort((a, b) => b.balance - a.balance)
       .slice(0, 10);
-    const topWalletUsers = await this.prisma.telegramUser.findMany({
-      where: { id: { in: topWallets.map((wallet) => wallet.userId) } }
+    const topCustomers = topCustomerGroups
+      .filter((group): group is typeof group & { userId: string } => Boolean(group.userId))
+      .map((group) => ({
+        userId: group.userId,
+        totalSpent: group._sum.amount ?? 0,
+        purchaseCount: group._count.id
+      }));
+    const dashboardUsers = await this.prisma.telegramUser.findMany({
+      where: { id: { in: [...new Set([...topWallets.map((wallet) => wallet.userId), ...topCustomers.map((customer) => customer.userId)])] } }
     });
-    const usersById = new Map(topWalletUsers.map((user) => [user.id, user]));
+    const usersById = new Map(dashboardUsers.map((user) => [user.id, user]));
 
     const revenueByDay = buildDailyRevenueSeries(14, dailyPayments);
     const revenueByMonth = buildMonthlyRevenueSeries(12, monthlyPayments);
@@ -2090,6 +2106,11 @@ export class ShopService {
       totalWalletDebit: Math.abs(walletDebits._sum.amount ?? 0),
       revenueByDay,
       revenueByMonth,
+      topCustomers: topCustomers.map((customer) => ({
+        totalSpent: customer.totalSpent,
+        purchaseCount: customer.purchaseCount,
+        user: usersById.get(customer.userId)
+      })),
       topWallets: topWallets.map((wallet) => ({
         balance: wallet.balance,
         user: usersById.get(wallet.userId)

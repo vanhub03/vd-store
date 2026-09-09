@@ -170,6 +170,10 @@ button:disabled {
   gap: 18px;
 }
 
+.dashboardSinglePanel {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .metric,
 .panel,
 .loginBox {
