@@ -16,6 +16,7 @@ type Dashboard = {
   totalWalletBalance: number;
   totalWalletCredit: number;
   totalWalletDebit: number;
+  dailyRevenue: RevenuePoint[];
   revenueByDay: RevenuePoint[];
   revenueByMonth: RevenuePoint[];
   topCustomers: Array<{ totalSpent: number; purchaseCount: number; user?: User }>;
@@ -443,6 +444,19 @@ function Overview({ api, onError }: { api: Api; onError: (error: string | null) 
         <BarSeries title="Doanh thu 14 ngày gần nhất" points={dashboard?.revenueByDay ?? []} compactLabel />
         <BarSeries title="Doanh thu 12 tháng gần nhất" points={dashboard?.revenueByMonth ?? []} />
       </section>
+
+      <DataTable
+        title="Tổng doanh thu từng ngày · 30 ngày gần nhất"
+        columns={["Ngày", "Giao dịch thành công", "Doanh thu"]}
+        rows={[...(dashboard?.dailyRevenue ?? [])].reverse().map((point) => [
+          point.label,
+          `${point.orders.toLocaleString("vi-VN")} giao dịch`,
+          formatVnd(point.revenue)
+        ])}
+        pageSize={10}
+        searchPlaceholder="Tìm theo ngày hoặc doanh thu..."
+        emptyText="Chưa có dữ liệu doanh thu."
+      />
 
       <section className="dashboardGrid">
         <WalletPanel

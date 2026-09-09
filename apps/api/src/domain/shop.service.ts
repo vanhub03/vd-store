@@ -2014,7 +2014,7 @@ export class ShopService {
 
   async getDashboard() {
     const now = new Date();
-    const dailyCutoff = new Date(now.getTime() - 13 * 24 * 60 * 60 * 1000);
+    const dailyCutoff = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000);
     const monthlyCutoff = new Date(now.getTime() - 370 * 24 * 60 * 60 * 1000);
     const saleWhere = {
       status: PaymentStatus.SUCCEEDED,
@@ -2092,18 +2092,20 @@ export class ShopService {
     });
     const usersById = new Map(dashboardUsers.map((user) => [user.id, user]));
 
-    const revenueByDay = buildDailyRevenueSeries(14, dailyPayments);
+    const dailyRevenue = buildDailyRevenueSeries(30, dailyPayments);
+    const revenueByDay = dailyRevenue.slice(-14);
     const revenueByMonth = buildMonthlyRevenueSeries(12, monthlyPayments);
     const currentDayKey = dayKey(now);
     const currentMonthKey = monthKey(now);
 
     return {
       ...stats,
-      todayRevenue: revenueByDay.find((point) => point.key === currentDayKey)?.revenue ?? 0,
+      todayRevenue: dailyRevenue.find((point) => point.key === currentDayKey)?.revenue ?? 0,
       monthRevenue: revenueByMonth.find((point) => point.key === currentMonthKey)?.revenue ?? 0,
       totalWalletBalance: walletTotal._sum.amount ?? 0,
       totalWalletCredit: walletCredits._sum.amount ?? 0,
       totalWalletDebit: Math.abs(walletDebits._sum.amount ?? 0),
+      dailyRevenue,
       revenueByDay,
       revenueByMonth,
       topCustomers: topCustomers.map((customer) => ({

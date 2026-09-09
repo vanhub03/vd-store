@@ -37,5 +37,7 @@ describe("ShopService dashboard", () => {
       { user: users[0], totalSpent: 900_000, purchaseCount: 5 },
       { user: users[1], totalSpent: 500_000, purchaseCount: 8 }
     ]);
+    expect(dashboard.dailyRevenue).toHaveLength(30);
+    expect(dashboard.revenueByDay).toHaveLength(14);
   });
 });
