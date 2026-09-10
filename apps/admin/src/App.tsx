@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Activity, Ban, BarChart3, Bell, Boxes, CalendarClock, CheckCircle2, Download, KeyRound, LogOut, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, UserPlus, Users, Wallet, X } from "lucide-react";
+import { Activity, Ban, BarChart3, Bell, Boxes, CalendarClock, CheckCircle2, Download, KeyRound, LogOut, Menu, PackagePlus, Pencil, RefreshCw, Save, Send, ShoppingCart, TicketPercent, Trash2, UserPlus, Users, Wallet, X } from "lucide-react";
 import { AdminSession, Api, formatVnd } from "./api";
 
 type Tab = "overview" | "analytics" | "products" | "sold-products" | "users" | "collaborators" | "orders" | "vouchers" | "broadcasts";
@@ -266,6 +266,7 @@ export function App() {
   const [token, setToken] = useState(() => localStorage.getItem(tokenKey));
   const [session, setSession] = useState<AdminSession["admin"] | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const api = useMemo(() => new Api(token), [token]);
 
@@ -281,10 +282,37 @@ export function App() {
       });
   }, [api, token]);
 
+  useEffect(() => {
+    if (!sidebarOpen) return;
+
+    const media = window.matchMedia("(max-width: 900px)");
+    const previousOverflow = document.body.style.overflow;
+    const syncScrollLock = () => {
+      document.body.style.overflow = media.matches ? "hidden" : previousOverflow;
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
+    };
+
+    syncScrollLock();
+    media.addEventListener("change", syncScrollLock);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      media.removeEventListener("change", syncScrollLock);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [sidebarOpen]);
+
   function onLogin(next: AdminSession) {
     localStorage.setItem(tokenKey, next.token);
     setToken(next.token);
     setSession(next.admin);
+  }
+
+  function selectTab(nextTab: Tab) {
+    setTab(nextTab);
+    setSidebarOpen(false);
   }
 
   if (!token || !session) {
@@ -293,7 +321,17 @@ export function App() {
 
   return (
     <div className="appShell">
-      <aside className="sidebar">
+      <button
+        className={sidebarOpen ? "sidebarBackdrop visible" : "sidebarBackdrop"}
+        type="button"
+        aria-label="Đóng menu quản trị"
+        tabIndex={sidebarOpen ? 0 : -1}
+        onClick={() => setSidebarOpen(false)}
+      />
+      <aside id="admin-sidebar" className={sidebarOpen ? "sidebar open" : "sidebar"}>
+        <button className="sidebarCloseButton" type="button" aria-label="Đóng menu" onClick={() => setSidebarOpen(false)}>
+          <X size={22} />
+        </button>
         <div className="brand">
           <div className="brandMark">VD</div>
           <div>
@@ -301,32 +339,32 @@ export function App() {
             <span>{session.email}</span>
           </div>
         </div>
-        <nav>
-          <NavButton active={tab === "overview"} onClick={() => setTab("overview")} icon={<ShoppingCart />}>
+        <nav aria-label="Menu quản trị">
+          <NavButton active={tab === "overview"} onClick={() => selectTab("overview")} icon={<ShoppingCart />}>
             Tổng quan
           </NavButton>
-          <NavButton active={tab === "analytics"} onClick={() => setTab("analytics")} icon={<BarChart3 />}>
+          <NavButton active={tab === "analytics"} onClick={() => selectTab("analytics")} icon={<BarChart3 />}>
             Phân tích
           </NavButton>
-          <NavButton active={tab === "products"} onClick={() => setTab("products")} icon={<Boxes />}>
+          <NavButton active={tab === "products"} onClick={() => selectTab("products")} icon={<Boxes />}>
             Sản phẩm
           </NavButton>
-          <NavButton active={tab === "sold-products"} onClick={() => setTab("sold-products")} icon={<CalendarClock />}>
+          <NavButton active={tab === "sold-products"} onClick={() => selectTab("sold-products")} icon={<CalendarClock />}>
             Sản phẩm đã bán
           </NavButton>
-          <NavButton active={tab === "users"} onClick={() => setTab("users")} icon={<Users />}>
+          <NavButton active={tab === "users"} onClick={() => selectTab("users")} icon={<Users />}>
             User
           </NavButton>
-          <NavButton active={tab === "collaborators"} onClick={() => setTab("collaborators")} icon={<UserPlus />}>
+          <NavButton active={tab === "collaborators"} onClick={() => selectTab("collaborators")} icon={<UserPlus />}>
             Cộng tác viên
           </NavButton>
-          <NavButton active={tab === "orders"} onClick={() => setTab("orders")} icon={<Wallet />}>
+          <NavButton active={tab === "orders"} onClick={() => selectTab("orders")} icon={<Wallet />}>
             Đơn & tiền
           </NavButton>
-          <NavButton active={tab === "vouchers"} onClick={() => setTab("vouchers")} icon={<TicketPercent />}>
+          <NavButton active={tab === "vouchers"} onClick={() => selectTab("vouchers")} icon={<TicketPercent />}>
             Voucher
           </NavButton>
-          <NavButton active={tab === "broadcasts"} onClick={() => setTab("broadcasts")} icon={<Bell />}>
+          <NavButton active={tab === "broadcasts"} onClick={() => selectTab("broadcasts")} icon={<Bell />}>
             Thông báo
           </NavButton>
         </nav>
@@ -343,6 +381,16 @@ export function App() {
       </aside>
 
       <main className="content">
+        <button
+          className="mobileMenuButton"
+          type="button"
+          aria-label="Mở menu quản trị"
+          aria-controls="admin-sidebar"
+          aria-expanded={sidebarOpen}
+          onClick={() => setSidebarOpen(true)}
+        >
+          <Menu size={22} />
+        </button>
         <header className="topbar">
           <div>
             <h1>{tabTitle(tab)}</h1>

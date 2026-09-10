@@ -35,6 +35,12 @@ textarea {
   gap: 24px;
 }
 
+.mobileMenuButton,
+.sidebarCloseButton,
+.sidebarBackdrop {
+  display: none;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -1219,7 +1225,86 @@ th {
   }
 
   .sidebar {
-    position: static;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    width: min(84vw, 320px);
+    height: 100dvh;
+    padding: 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 18px 0 45px rgb(15 23 42 / 28%);
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform 180ms ease, visibility 180ms ease;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .sidebarBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: block;
+    border: 0;
+    padding: 0;
+    background: rgb(15 23 42 / 48%);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 180ms ease, visibility 180ms ease;
+  }
+
+  .sidebarBackdrop.visible {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .sidebarCloseButton,
+  .mobileMenuButton {
+    width: 44px;
+    height: 44px;
+    border: 1px solid #d8dee7;
+    border-radius: 10px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .sidebarCloseButton {
+    position: absolute;
+    top: 18px;
+    right: 16px;
+    display: inline-flex;
+    border-color: rgb(255 255 255 / 16%);
+    background: #1f2937;
+    color: #fff;
+  }
+
+  .sidebar .brand {
+    padding-right: 46px;
+  }
+
+  .mobileMenuButton {
+    position: fixed;
+    top: 14px;
+    left: 14px;
+    z-index: 30;
+    display: inline-flex;
+    background: #111827;
+    color: #fff;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 18%);
+  }
+
+  .mobileMenuButton:active,
+  .sidebarCloseButton:active {
+    transform: scale(0.97);
+  }
+
+  .content {
+    padding: 72px 16px 22px;
   }
 
   .formGrid,
@@ -1280,5 +1365,12 @@ th {
   .userSearchInput {
     min-width: 0;
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebarBackdrop {
+    transition: none;
   }
 }
