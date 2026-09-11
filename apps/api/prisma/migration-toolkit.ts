@@ -21,6 +21,7 @@ const orderedModels = [
   "ProductReview",
   "Broadcast",
   "BroadcastDelivery",
+  "SoldProductSubscription",
   "PartnerApiCredential",
   "PartnerOrder",
   "PartnerOrderItem",
@@ -36,9 +37,9 @@ const fieldMap: Record<string, string[]> = {
   Admin: ["id", "email", "passwordHash", "name", "role", "createdAt", "updatedAt"],
   TelegramUser: ["id", "telegramId", "email", "passwordHash", "displayName", "username", "firstName", "lastName", "languageCode", "role", "isBlocked", "partnerApiEnabled", "partnerReadRateLimit", "partnerWriteRateLimit", "createdAt", "updatedAt"],
   Category: ["id", "name", "slug", "sortOrder", "active", "createdAt", "updatedAt"],
-  Product: ["id", "categoryId", "name", "nameEn", "slug", "description", "descriptionEn", "imageUrl", "buttonIcon", "price", "botPrice", "webPrice", "usdtPrice", "collaboratorDiscountPercent", "showInBot", "showInWeb", "status", "deliveryType", "sharedContent", "sharedFilePath", "manualInstructions", "manualStock", "createdAt", "updatedAt"],
+  Product: ["id", "categoryId", "name", "nameEn", "slug", "description", "descriptionEn", "imageUrl", "buttonIcon", "price", "botPrice", "webPrice", "usdtPrice", "collaboratorDiscountPercent", "showInBot", "showInWeb", "status", "deliveryType", "sharedContent", "sharedFilePath", "manualInstructions", "manualStock", "subscriptionDurationMonths", "createdAt", "updatedAt"],
   InventoryItem: ["id", "productId", "content", "status", "orderId", "soldAt", "createdAt"],
-  Order: ["id", "code", "checkoutGroupId", "userId", "productId", "quantity", "unitPrice", "subtotalAmount", "discountAmount", "collaboratorDiscountPercent", "collaboratorDiscountAmount", "voucherDiscountAmount", "customerRoleSnapshot", "totalAmount", "status", "manualStatus", "paymentMethod", "voucherCode", "voucherId", "deliveryText", "expiresAt", "fulfilledAt", "createdAt", "updatedAt"],
+  Order: ["id", "code", "checkoutGroupId", "userId", "productId", "quantity", "unitPrice", "subtotalAmount", "discountAmount", "collaboratorDiscountPercent", "collaboratorDiscountAmount", "voucherDiscountAmount", "customerRoleSnapshot", "totalAmount", "status", "manualStatus", "paymentMethod", "salesChannel", "voucherCode", "voucherId", "deliveryText", "expiresAt", "fulfilledAt", "createdAt", "updatedAt"],
   Voucher: ["id", "code", "discountPercent", "maxDiscountAmount", "maxDiscountUsdt", "active", "firstOrderOnly", "allowCollaboratorStacking", "maxUses", "usedCount", "startsAt", "expiresAt", "createdByAdminId", "createdAt", "updatedAt"],
   VoucherAssignment: ["id", "voucherId", "userId", "assignedByAdminId", "revokedAt", "usedAt", "createdAt"],
   VoucherRedemption: ["id", "voucherId", "userId", "orderId", "subtotalAmount", "discountAmount", "totalAmount", "claimIpHash", "claimFingerprintHash", "createdAt"],
@@ -46,6 +47,7 @@ const fieldMap: Record<string, string[]> = {
   WalletLedgerEntry: ["id", "userId", "amount", "type", "referencePaymentId", "referenceOrderId", "note", "createdAt"],
   BankTransaction: ["id", "provider", "providerTransactionId", "gateway", "transactionDate", "accountNumber", "subAccount", "code", "content", "transferType", "transferAmount", "accumulated", "referenceCode", "rawPayload", "paymentId", "createdAt"],
   ProductReview: ["id", "userId", "productId", "rating", "title", "content", "createdAt", "updatedAt"],
+  SoldProductSubscription: ["id", "productId", "productName", "saleAmount", "customerName", "zaloLink", "startedAt", "durationMonths", "expiresAt", "accountNote", "active", "renewalReminderFor", "renewalReminderClaimedAt", "renewalReminderSentAt", "sourceOrderId", "createdAt", "updatedAt"],
   Broadcast: ["id", "title", "message", "imageData", "imageMimeType", "imageFileName", "status", "target", "sentCount", "failedCount", "createdByAdminId", "createdAt", "updatedAt"],
   BroadcastDelivery: ["id", "broadcastId", "userId", "status", "error", "sentAt", "createdAt"],
   PartnerApiCredential: ["id", "userId", "createdByAdminId", "environment", "label", "keyPrefix", "keyHash", "scopes", "expiresAt", "revokedAt", "lastUsedAt", "createdAt", "updatedAt"],
@@ -63,6 +65,7 @@ const dateFields = new Set([
   "createdAt",
   "updatedAt",
   "soldAt",
+  "startedAt",
   "expiresAt",
   "fulfilledAt",
   "startsAt",
@@ -73,7 +76,10 @@ const dateFields = new Set([
   "lastUsedAt",
   "refundedAt",
   "nextAttemptAt",
-  "deliveredAt"
+  "deliveredAt",
+  "renewalReminderFor",
+  "renewalReminderClaimedAt",
+  "renewalReminderSentAt"
 ]);
 
 async function main() {

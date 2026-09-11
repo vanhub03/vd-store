@@ -15,6 +15,7 @@ import {
   Prisma,
   ProductDeliveryType,
   ProductStatus,
+  SalesChannel as OrderSalesChannel,
   WalletEntryType
 } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
@@ -22,6 +23,7 @@ import { DIRECT_ORDER_PREFIX, generatePaymentCode, TOPUP_PREFIX } from "./paymen
 import { assertPositiveVnd, formatVnd } from "./money";
 import { BroadcastService } from "./broadcast.service";
 import { TelegramNotifyService } from "./telegram-notify.service";
+import { SoldProductSubscriptionService } from "./sold-product-subscription.service";
 
 export type BotUserInput = {
   telegramId: string;
@@ -53,6 +55,7 @@ export type ProductInput = {
   sharedFilePath?: string | null;
   manualInstructions?: string | null;
   manualStock?: number;
+  subscriptionDurationMonths?: number;
 };
 
 export type VoucherInput = {
@@ -140,6 +143,7 @@ const catalogProductSelect = {
   status: true,
   deliveryType: true,
   manualStock: true,
+  subscriptionDurationMonths: true,
   createdAt: true,
   updatedAt: true,
   _count: {
@@ -158,7 +162,8 @@ export class ShopService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly broadcasts: BroadcastService,
-    private readonly telegram: TelegramNotifyService
+    private readonly telegram: TelegramNotifyService,
+    private readonly soldSubscriptions?: SoldProductSubscriptionService
   ) {}
 
   async upsertTelegramUser(input: BotUserInput) {
@@ -434,6 +439,7 @@ export class ShopService {
             voucherCode: quote.code,
             status: OrderStatus.PENDING_PAYMENT,
             paymentMethod: PaymentMethod.BANK_TRANSFER,
+            salesChannel: toOrderSalesChannel(channel),
             expiresAt,
             payments: {
               create: {
@@ -512,6 +518,7 @@ export class ShopService {
             voucherCode: quote.code,
             status: OrderStatus.PENDING_PAYMENT,
             paymentMethod: PaymentMethod.CRYPTOMUS,
+            salesChannel: toOrderSalesChannel(channel),
             expiresAt,
             payments: {
               create: {
@@ -635,7 +642,8 @@ export class ShopService {
             voucherId: quote.voucherId,
             voucherCode: quote.code,
             status: OrderStatus.PAID,
-            paymentMethod: PaymentMethod.WALLET
+            paymentMethod: PaymentMethod.WALLET,
+            salesChannel: toOrderSalesChannel(channel)
           }
         });
 
@@ -672,6 +680,7 @@ export class ShopService {
             fulfilledAt: new Date()
           }
         });
+        await this.trackSoldOrder(tx, fulfilledOrder.id);
 
         return { order: fulfilledOrder, payment, deliveryText, balanceAfter: balance - quote.totalAmount, voucher: publicVoucherQuote(quote) };
       },
@@ -723,7 +732,8 @@ export class ShopService {
               voucherId: index === 0 ? quote.voucherId : null,
               voucherCode: index === 0 ? quote.code : null,
               status: OrderStatus.PAID,
-              paymentMethod: PaymentMethod.WALLET
+              paymentMethod: PaymentMethod.WALLET,
+              salesChannel: toOrderSalesChannel(channel)
             }
           });
           orders.push({ order, line });
@@ -756,13 +766,13 @@ export class ShopService {
         const fulfilledOrders = [];
         for (const entry of orders) {
           const deliveryText = await this.fulfillOrderItems(tx, entry.order.id, entry.line.product, entry.line.quantity);
-          fulfilledOrders.push(
-            await tx.order.update({
+          const fulfilledOrder = await tx.order.update({
               where: { id: entry.order.id },
               data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() },
               include: { product: true }
-            })
-          );
+            });
+          await this.trackSoldOrder(tx, fulfilledOrder.id);
+          fulfilledOrders.push(fulfilledOrder);
         }
         return {
           order: fulfilledOrders[0],
@@ -845,7 +855,8 @@ export class ShopService {
             voucherId: index === 0 ? quote.voucherId : null,
             voucherCode: index === 0 ? quote.code : null,
             status: isManual ? OrderStatus.PENDING_FULFILLMENT : OrderStatus.PAID,
-            paymentMethod: PaymentMethod.WALLET
+            paymentMethod: PaymentMethod.WALLET,
+            salesChannel: OrderSalesChannel.PARTNER_API
           }
         });
         sourceOrders.push(sourceOrder);
@@ -967,6 +978,7 @@ export class ShopService {
                 voucherCode: index === 0 ? quote.code : null,
                 status: OrderStatus.PENDING_PAYMENT,
                 paymentMethod: PaymentMethod.BANK_TRANSFER,
+                salesChannel: toOrderSalesChannel(channel),
                 expiresAt
               },
               include: { product: true }
@@ -1044,6 +1056,7 @@ export class ShopService {
                 voucherCode: index === 0 ? quote.code : null,
                 status: OrderStatus.PENDING_PAYMENT,
                 paymentMethod: PaymentMethod.CRYPTOMUS,
+                salesChannel: toOrderSalesChannel(channel),
                 expiresAt
               },
               include: { product: true }
@@ -1179,6 +1192,7 @@ export class ShopService {
               where: { id: payment.order.id },
               data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() }
             });
+            await this.trackSoldOrder(tx, order.id);
             return { outcome: "fulfilled" as const, payment: updatedPayment, order, orders: [{ ...order, product: payment.order.product }], deliveryText, user: payment.order.user };
           }
           const updatedPayment = await tx.payment.update({
@@ -1189,13 +1203,13 @@ export class ShopService {
           const fulfilledOrders = [];
           for (const order of groupOrders) {
             const deliveryText = await this.fulfillOrderItems(tx, order.id, order.product, order.quantity);
-            fulfilledOrders.push(
-              await tx.order.update({
+            const fulfilledOrder = await tx.order.update({
                 where: { id: order.id },
                 data: { status: OrderStatus.FULFILLED, deliveryText, fulfilledAt: new Date() },
                 include: { product: true }
-              })
-            );
+              });
+            await this.trackSoldOrder(tx, fulfilledOrder.id);
+            fulfilledOrders.push(fulfilledOrder);
           }
           const deliveryText = formatCartDelivery(fulfilledOrders);
           return { outcome: "fulfilled" as const, payment: updatedPayment, order: fulfilledOrders[0], orders: fulfilledOrders, deliveryText, user: payment.order.user };
@@ -1558,6 +1572,7 @@ export class ShopService {
     const priceData = normalizeProductPrices(input, true);
     assertCollaboratorDiscount(input.collaboratorDiscountPercent);
     assertNonNegativeStock(input.manualStock);
+    assertSubscriptionDuration(input.subscriptionDurationMonths);
     const imageUrl = input.imageUrl ?? detectBrandImageUrl(input.name);
     const product = await this.prisma.product.create({
       data: {
@@ -1579,6 +1594,7 @@ export class ShopService {
     const priceData = normalizeProductPrices(input, false);
     assertCollaboratorDiscount(input.collaboratorDiscountPercent);
     assertNonNegativeStock(input.manualStock);
+    assertSubscriptionDuration(input.subscriptionDurationMonths);
     const previous = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!previous) throw new NotFoundException("Không tìm thấy sản phẩm.");
 
@@ -1978,6 +1994,9 @@ export class ShopService {
     const rewardVoucher = status === "COMPLETED" && order.manualStatus !== ManualOrderStatus.COMPLETED && updated.user?.role === CustomerRole.COLLABORATOR
       ? await this.awardCollaboratorCompletionVoucher(adminId, updated.userId, { entityType: "Order", entityId: updated.id, code: updated.code })
       : null;
+    if (status === ManualOrderStatus.CANCELLED) {
+      await this.soldSubscriptions?.stopTrackingOrder(adminId, orderId);
+    }
     if (rewardVoucher) return { ...updated, rewardVoucher };
     return updated;
   }
@@ -2778,10 +2797,25 @@ export class ShopService {
       this.logger.warn(`Could not queue new stock broadcast for ${product.name}: ${(error as Error).message}`);
     }
   }
+
+  private trackSoldOrder(tx: Prisma.TransactionClient, orderId: string) {
+    return this.soldSubscriptions?.trackOrder(tx, orderId) ?? Promise.resolve(null);
+  }
 }
 
 function minutesFromNow(minutes: number) {
   return new Date(Date.now() + minutes * 60_000);
+}
+
+function toOrderSalesChannel(channel: SalesChannel) {
+  return channel === "web" ? OrderSalesChannel.WEB : OrderSalesChannel.BOT;
+}
+
+function assertSubscriptionDuration(value?: number | null) {
+  if (value === undefined || value === null) return;
+  if (!Number.isInteger(value) || value < 1 || value > 120) {
+    throw new BadRequestException("Thời hạn theo dõi sản phẩm phải từ 1 đến 120 tháng.");
+  }
 }
 
 function monthFromNow() {

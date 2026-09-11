@@ -7,6 +7,7 @@ import {
   PaymentStatus,
   ProductDeliveryType,
   ProductStatus,
+  SalesChannel,
   WalletEntryType
 } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
@@ -324,7 +325,8 @@ describe("ShopService", () => {
     const prisma = {
       $transaction: vi.fn(async (callback) => callback(tx))
     };
-    const service = new ShopService(prisma as never, {} as never, {} as never);
+    const soldSubscriptions = { trackOrder: vi.fn().mockResolvedValue({ id: "subscription-auto-1" }) };
+    const service = new ShopService(prisma as never, {} as never, {} as never, soldSubscriptions as never);
     const notifyManualOrderIfNeeded = vi.spyOn(service, "notifyManualOrderIfNeeded").mockResolvedValue(undefined);
 
     const result = await service.purchaseWithWallet("web:customer_1", "product_manual_1", 2, "web");
@@ -339,7 +341,8 @@ describe("ShopService", () => {
         unitPrice: 12000,
         totalAmount: 24000,
         status: OrderStatus.PAID,
-        paymentMethod: PaymentMethod.WALLET
+        paymentMethod: PaymentMethod.WALLET,
+        salesChannel: SalesChannel.WEB
       })
     });
     expect(tx.payment.create).toHaveBeenCalledWith({
@@ -372,6 +375,7 @@ describe("ShopService", () => {
         deliveryText: "Lien he Zalo 0377952999 de nhan hang."
       })
     });
+    expect(soldSubscriptions.trackOrder).toHaveBeenCalledWith(tx, "order_manual_1");
     expect(notifyManualOrderIfNeeded).toHaveBeenCalledWith("order_manual_1");
   });
 

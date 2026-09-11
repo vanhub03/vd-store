@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { ManualOrderStatus, OrderStatus, Prisma, SalesChannel } from "@prisma/client";
 import { PrismaService } from "../prisma.service";
 import { TelegramNotifyService } from "./telegram-notify.service";
 
@@ -29,8 +29,70 @@ export class SoldProductSubscriptionService {
 
   list() {
     return this.prisma.soldProductSubscription.findMany({
-      orderBy: [{ active: "desc" }, { expiresAt: "asc" }, { createdAt: "desc" }]
+      orderBy: [{ active: "desc" }, { expiresAt: "asc" }, { createdAt: "desc" }],
+      include: {
+        sourceOrder: { select: { code: true, quantity: true, salesChannel: true } }
+      }
     });
+  }
+
+  async trackOrder(tx: Prisma.TransactionClient, orderId: string) {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { product: true, user: true }
+    });
+    if (
+      !order
+      || order.salesChannel === SalesChannel.PARTNER_API
+      || !new Set<OrderStatus>([OrderStatus.PAID, OrderStatus.FULFILLED, OrderStatus.PENDING_FULFILLMENT]).has(order.status)
+      || order.manualStatus === ManualOrderStatus.CANCELLED
+    ) {
+      return null;
+    }
+
+    const existing = await tx.soldProductSubscription.findUnique({ where: { sourceOrderId: order.id } });
+    if (existing) return existing;
+
+    const startedAt = vietnamCalendarDate(order.fulfilledAt ?? new Date());
+    const durationMonths = Math.min(120, Math.max(1, order.product.subscriptionDurationMonths || 1));
+    const subscription = await tx.soldProductSubscription.create({
+      data: {
+        productId: order.productId,
+        productName: order.product.name,
+        saleAmount: order.totalAmount,
+        customerName: customerDisplayName(order.user),
+        startedAt,
+        durationMonths,
+        expiresAt: addCalendarMonths(startedAt, durationMonths),
+        accountNote: order.deliveryText?.trim() || null,
+        sourceOrderId: order.id
+      }
+    });
+    await tx.auditLog.create({
+      data: {
+        action: "SOLD_SUBSCRIPTION_AUTO_CREATE",
+        entityType: "SoldProductSubscription",
+        entityId: subscription.id,
+        meta: {
+          orderId: order.id,
+          orderCode: order.code,
+          salesChannel: order.salesChannel,
+          productId: order.productId
+        }
+      }
+    });
+    return subscription;
+  }
+
+  async stopTrackingOrder(adminId: string, orderId: string) {
+    const subscription = await this.prisma.soldProductSubscription.findUnique({ where: { sourceOrderId: orderId } });
+    if (!subscription || !subscription.active) return subscription;
+    const updated = await this.prisma.soldProductSubscription.update({
+      where: { id: subscription.id },
+      data: { active: false }
+    });
+    await this.audit(adminId, "SOLD_SUBSCRIPTION_AUTO_DEACTIVATE", updated.id, { orderId });
+    return updated;
   }
 
   async create(adminId: string, input: SoldProductSubscriptionInput) {
@@ -310,4 +372,20 @@ function vietnamCalendarDate(now: Date) {
   }).formatToParts(now);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+}
+
+function customerDisplayName(user: {
+  displayName?: string | null;
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  telegramId: string;
+}) {
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  return user.displayName?.trim()
+    || (user.username?.trim() ? `@${user.username.trim().replace(/^@/, "")}` : "")
+    || fullName
+    || user.email?.trim()
+    || user.telegramId;
 }

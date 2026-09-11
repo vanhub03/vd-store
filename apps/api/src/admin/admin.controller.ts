@@ -117,6 +117,12 @@ class ProductDto {
   @IsInt()
   @Min(0)
   manualStock?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  subscriptionDurationMonths?: number;
 }
 
 class InventoryImportDto {

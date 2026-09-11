@@ -127,6 +127,12 @@ enum PaymentMethod {
   CRYPTOMUS
 }
 
+enum SalesChannel {
+  BOT
+  WEB
+  PARTNER_API
+}
+
 model TelegramUser {
   id           String   @id @default(cuid())
   telegramId   String   @unique
@@ -216,6 +222,7 @@ model Product {
   sharedFilePath     String?
   manualInstructions String              @default("Vui lòng ib admin @vanhdao99 để nhận hàng.")
   manualStock        Int                 @default(0)
+  subscriptionDurationMonths Int         @default(1)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
@@ -284,10 +291,12 @@ model SoldProductSubscription {
   renewalReminderFor     DateTime?
   renewalReminderClaimedAt DateTime?
   renewalReminderSentAt  DateTime?
+  sourceOrderId          String?   @unique
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sourceOrder Order?   @relation(fields: [sourceOrderId], references: [id], onDelete: SetNull)
 
   @@index([active, expiresAt])
   @@index([productId])
@@ -312,6 +321,7 @@ model Order {
   status          OrderStatus
   manualStatus    ManualOrderStatus @default(PENDING)
   paymentMethod   PaymentMethod
+  salesChannel    SalesChannel      @default(BOT)
   voucherCode     String?
   voucherId       String?
   deliveryText    String?
@@ -328,6 +338,7 @@ model Order {
   walletEntries     WalletLedgerEntry[]
   voucherRedemption VoucherRedemption?
   partnerOrderItem  PartnerOrderItem?
+  soldSubscription SoldProductSubscription?
 
   @@index([userId, createdAt])
   @@index([status, expiresAt])

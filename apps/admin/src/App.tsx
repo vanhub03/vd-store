@@ -68,6 +68,7 @@ type Product = {
   showInBot: boolean;
   showInWeb: boolean;
   manualStock?: number;
+  subscriptionDurationMonths?: number;
   status: string;
   deliveryType: string;
   sharedContent?: string;
@@ -95,6 +96,7 @@ type SoldProductSubscription = {
   accountNote?: string | null;
   active: boolean;
   renewalReminderSentAt?: string | null;
+  sourceOrder?: { code: string; quantity: number; salesChannel: "BOT" | "WEB" | "PARTNER_API" } | null;
   createdAt: string;
 };
 type SoldProductSubscriptionForm = {
@@ -229,6 +231,7 @@ type ProductForm = {
   deliveryType: string;
   status: string;
   manualStock: number;
+  subscriptionDurationMonths: number;
   description: string;
   descriptionEn: string;
   imageUrl: string;
@@ -881,6 +884,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       deliveryType: product.deliveryType,
       status: product.status,
       manualStock: product.manualStock ?? 0,
+      subscriptionDurationMonths: product.subscriptionDurationMonths ?? 1,
       description: product.description ?? "",
       descriptionEn: product.descriptionEn ?? "",
       imageUrl: product.imageUrl ?? "",
@@ -1100,6 +1104,18 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
               />
             </label>
           )}
+          <label>
+            Thời hạn theo dõi sau khi bán
+            <input
+              type="number"
+              value={form.subscriptionDurationMonths}
+              onChange={(event) => setForm({ ...form, subscriptionDurationMonths: Number(event.target.value) })}
+              min={1}
+              max={120}
+              required
+            />
+            <span className="fieldHint">Đơn mua trên web hoặc Bot sẽ tự hết hạn sau số tháng này.</span>
+          </label>
           <label className="wide">
             Mô tả
             <textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} />
@@ -1199,7 +1215,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
       </section>
 
       <DataTable
-        columns={["Tên", "Giá bot", "Giá web", "% CTV", "Giá CTV", "USDT", "Hiển thị", "Loại", "Tồn", "Trạng thái", "Thao tác"]}
+        columns={["Tên", "Giá bot", "Giá web", "% CTV", "Giá CTV", "USDT", "Hiển thị", "Loại", "Theo dõi", "Tồn", "Trạng thái", "Thao tác"]}
         rows={products.map((product) => [
           <ProductNameCell product={product} />,
           formatVnd(product.botPrice || product.price),
@@ -1209,6 +1225,7 @@ function Products({ api, onError }: { api: Api; onError: (error: string | null) 
           product.usdtPrice ? `${product.usdtPrice} USDT` : "-",
           channelVisibilityLabel(product),
           product.deliveryType,
+          `${product.subscriptionDurationMonths ?? 1} tháng`,
           productQuantityLabel(product),
           product.status,
           <div className="rowActions">
@@ -1262,6 +1279,7 @@ function emptyProductForm(): ProductForm {
     deliveryType: "STOCK_ITEM",
     status: "ACTIVE",
     manualStock: 0,
+    subscriptionDurationMonths: 1,
     description: "",
     descriptionEn: "",
     imageUrl: "",
@@ -1285,6 +1303,7 @@ function serializeProductForm(form: ProductForm) {
     showInBot: Boolean(form.showInBot),
     showInWeb: Boolean(form.showInWeb),
     manualStock: Number(form.manualStock) || 0,
+    subscriptionDurationMonths: Math.min(120, Math.max(1, Number(form.subscriptionDurationMonths) || 1)),
     imageUrl: form.imageUrl || null,
     buttonIcon: form.buttonIcon.trim() || defaultProductIcon,
     sharedContent: form.sharedContent || null,
@@ -1461,7 +1480,7 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
       <section className="panel soldProductIntro">
         <div>
           <h2>Theo dõi sản phẩm đã bán & gia hạn</h2>
-          <p>Nhập cả đơn bán ngoài website. Đến ngày hết hạn, Admin Telegram tự nhận một thông báo; nếu Telegram tạm lỗi, hệ thống tự thử lại mỗi giờ.</p>
+          <p>Đơn thành công từ website hoặc Bot được tự động thêm vào đây; đơn bán ngoài vẫn có thể nhập tay. Đến ngày hết hạn, Admin Telegram tự nhận thông báo.</p>
         </div>
         <button className="smallButton secondaryButton" type="button" disabled={runningReminders} onClick={() => void runReminders()}>
           <Bell size={14} /> {runningReminders ? "Đang kiểm tra..." : "Kiểm tra nhắc hạn"}
@@ -1524,10 +1543,13 @@ function SoldProducts({ api, onError }: { api: Api; onError: (error: string | nu
       </section>
       <DataTable
         title="Danh sách theo dõi"
-        columns={["Sản phẩm", "Khách hàng", "Giá bán", "Bắt đầu", "Gói", "Hết hạn", "Tài khoản / ghi chú", "Trạng thái", "Thao tác"]}
+        columns={["Sản phẩm", "Khách hàng", "Nguồn", "Giá bán", "Bắt đầu", "Gói", "Hết hạn", "Tài khoản / ghi chú", "Trạng thái", "Thao tác"]}
         rows={items.map((item) => [
           <strong>{item.productName}</strong>,
           <><strong>{item.customerName}</strong>{safeExternalUrl(item.zaloLink) ? <a className="tableSubtext" href={safeExternalUrl(item.zaloLink)!} target="_blank" rel="noreferrer">Mở Zalo</a> : null}</>,
+          item.sourceOrder
+            ? <><strong>{item.sourceOrder.salesChannel === "WEB" ? "Website" : item.sourceOrder.salesChannel === "BOT" ? "Telegram Bot" : "Partner API"}</strong><span className="tableSubtext">{item.sourceOrder.code} · SL {item.sourceOrder.quantity}</span></>
+            : "Nhập tay",
           item.saleAmount === null || item.saleAmount === undefined ? "—" : formatVnd(item.saleAmount),
           formatDateOnly(item.startedAt),
           `${item.durationMonths} tháng`,

@@ -1,7 +1,89 @@
 import { describe, expect, it, vi } from "vitest";
+import { ManualOrderStatus, OrderStatus, SalesChannel } from "@prisma/client";
 import { SoldProductSubscriptionService } from "./sold-product-subscription.service";
 
 describe("SoldProductSubscriptionService", () => {
+  it("automatically tracks a fulfilled website order using its product duration and customer", async () => {
+    const order = {
+      id: "order-web-1",
+      code: "DHWEB001",
+      productId: "product-1",
+      totalAmount: 250000,
+      status: OrderStatus.FULFILLED,
+      manualStatus: ManualOrderStatus.PENDING,
+      salesChannel: SalesChannel.WEB,
+      fulfilledAt: new Date("2026-09-11T04:30:00.000Z"),
+      deliveryText: "account@example.com",
+      product: { name: "ChatGPT Plus", subscriptionDurationMonths: 3 },
+      user: { telegramId: "web:customer-1", displayName: "Nguyễn Văn A" }
+    };
+    const create = vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "subscription-auto-1", ...data }));
+    const tx = {
+      order: { findUnique: vi.fn().mockResolvedValue(order) },
+      soldProductSubscription: { findUnique: vi.fn().mockResolvedValue(null), create },
+      auditLog: { create: vi.fn().mockResolvedValue({}) }
+    };
+    const service = new SoldProductSubscriptionService({} as never, {} as never);
+
+    await service.trackOrder(tx as never, order.id);
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        sourceOrderId: order.id,
+        productId: order.productId,
+        productName: "ChatGPT Plus",
+        saleAmount: 250000,
+        customerName: "Nguyễn Văn A",
+        durationMonths: 3,
+        startedAt: new Date("2026-09-11T00:00:00.000Z"),
+        expiresAt: new Date("2026-12-11T00:00:00.000Z"),
+        accountNote: "account@example.com"
+      })
+    });
+  });
+
+  it("does not create a second tracking row when the same order is processed again", async () => {
+    const existing = { id: "subscription-existing", sourceOrderId: "order-1" };
+    const tx = {
+      order: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "order-1",
+          status: OrderStatus.FULFILLED,
+          manualStatus: ManualOrderStatus.PENDING,
+          salesChannel: SalesChannel.BOT,
+          product: { subscriptionDurationMonths: 1 },
+          user: { telegramId: "123" }
+        })
+      },
+      soldProductSubscription: { findUnique: vi.fn().mockResolvedValue(existing), create: vi.fn() },
+      auditLog: { create: vi.fn() }
+    };
+    const service = new SoldProductSubscriptionService({} as never, {} as never);
+
+    expect(await service.trackOrder(tx as never, "order-1")).toBe(existing);
+    expect(tx.soldProductSubscription.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps Partner API orders out of the website and bot renewal list", async () => {
+    const tx = {
+      order: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "partner-order-1",
+          status: OrderStatus.FULFILLED,
+          manualStatus: ManualOrderStatus.PENDING,
+          salesChannel: SalesChannel.PARTNER_API,
+          product: {},
+          user: {}
+        })
+      },
+      soldProductSubscription: { findUnique: vi.fn(), create: vi.fn() }
+    };
+    const service = new SoldProductSubscriptionService({} as never, {} as never);
+
+    expect(await service.trackOrder(tx as never, "partner-order-1")).toBeNull();
+    expect(tx.soldProductSubscription.findUnique).not.toHaveBeenCalled();
+  });
+
   it("calculates expiry by calendar month when creating a sold-product record", async () => {
     const create = vi.fn().mockImplementation(({ data }) => Promise.resolve({ id: "subscription-1", ...data }));
     const prisma = {
