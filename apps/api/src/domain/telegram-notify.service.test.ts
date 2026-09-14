@@ -93,4 +93,17 @@ describe("TelegramNotifyService", () => {
       { caption: "<b>Khuyến mãi</b>", parse_mode: "HTML" }
     );
   });
+
+  it("includes the Zalo community link in fulfilled order messages", async () => {
+    const service = new TelegramNotifyService();
+    const sendMessage = vi.spyOn(service, "sendMessage").mockResolvedValue(undefined);
+
+    await service.notifyDirectOrderFulfilled("123456789", "ORDER-1", "account@example.com");
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      "123456789",
+      expect.stringContaining("https://zalo.me/g/ta1ezjiefmdom1oosg7k?joinSrc=9".replace("&", "&amp;"))
+    );
+    expect(sendMessage).toHaveBeenCalledWith("123456789", expect.stringContaining("Hàng của bạn:"));
+  });
 });

@@ -3,6 +3,11 @@ import { Input, Telegram } from "telegraf";
 import { formatVnd } from "./money";
 
 const TELEGRAM_PHOTO_CAPTION_LIMIT = 1024;
+const COMMUNITY_ZALO_URL =
+  process.env.COMMUNITY_ZALO_URL?.trim() || "https://zalo.me/g/ta1ezjiefmdom1oosg7k?joinSrc=9";
+const COMMUNITY_ZALO_LINK = `<a href="${escapeHtml(COMMUNITY_ZALO_URL)}">${escapeHtml(COMMUNITY_ZALO_URL)}</a>`;
+const COMMUNITY_ZALO_INVITE =
+  `Hãy tham gia cộng đồng bên shop để khiếu nại/bảo hành khi đơn hàng có vấn đề, và cập nhật các sản phẩm mới thường xuyên nhất: ${COMMUNITY_ZALO_LINK}`;
 
 @Injectable()
 export class TelegramNotifyService {
@@ -98,7 +103,7 @@ export class TelegramNotifyService {
   async notifyDirectOrderFulfilled(chatId: string, code: string, deliveryText: string) {
     await this.sendMessage(
       chatId,
-      `Thanh toán đơn hàng thành công.\nMã đơn: <b>${code}</b>\n\nHàng của bạn:\n<pre>${escapeHtml(deliveryText)}</pre>`
+      `Thanh toán đơn hàng thành công.\nMã đơn: <b>${escapeHtml(code)}</b>\n\n${COMMUNITY_ZALO_INVITE}\n\nHàng của bạn:\n<pre>${escapeHtml(deliveryText)}</pre>`
     );
   }
 

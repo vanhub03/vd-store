@@ -14,6 +14,7 @@ import {
 } from "./api";
 import { escapeHtml, formatVnd, productAvailableQuantity, productStockLabel } from "./format";
 import { isBareNumber, parseQuantityInput, parseVndAmount } from "./input";
+import { isTelegramHandlerTimeout } from "./runtime";
 import { currentCallbackMessageId, isCallbackContext } from "./telegram-context";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -22,10 +23,15 @@ if (!token) {
 }
 
 const api = new ApiClient();
-const bot = new Telegraf(token);
+const configuredHandlerTimeout = Number(process.env.TELEGRAM_HANDLER_TIMEOUT_MS ?? 30_000);
+const handlerTimeout = Number.isFinite(configuredHandlerTimeout) ? Math.min(90_000, Math.max(10_000, configuredHandlerTimeout)) : 30_000;
+const bot = new Telegraf(token, { handlerTimeout });
 const CATALOG_BUTTON_LIMIT = 40;
 const CATALOG_TEXT_LIMIT = 12;
 const CAPTION_LIMIT = 1000;
+const COMMUNITY_ZALO_URL =
+  process.env.COMMUNITY_ZALO_URL?.trim() || "https://zalo.me/g/ta1ezjiefmdom1oosg7k?joinSrc=9";
+const COMMUNITY_ZALO_LINK = `<a href="${escapeHtml(COMMUNITY_ZALO_URL)}">${escapeHtml(COMMUNITY_ZALO_URL)}</a>`;
 const BOT_CARD_PNG = loadBotBannerPng();
 const lastBotMessages = new Map<number, number>();
 const BOT_COMMANDS = [
@@ -87,6 +93,7 @@ type PendingQuantity = {
 
 const userLanguages = new Map<number, BotLanguage>();
 const pendingQuantities = new Map<number, PendingQuantity>();
+let timeoutRestartScheduled = false;
 
 const BOT_TEXT = {
   vi: {
@@ -149,6 +156,7 @@ const BOT_TEXT = {
     autoProcess: "Hệ thống sẽ tự xử lý khi nhận tiền.",
     paidSuccess: "Mua hàng thành công.",
     balanceAfter: "Số dư còn lại",
+    communityInvite: `Hãy tham gia cộng đồng bên shop để khiếu nại/bảo hành khi đơn hàng có vấn đề, và cập nhật các sản phẩm mới thường xuyên nhất: ${COMMUNITY_ZALO_LINK}`,
     orderCode: "Mã đơn",
     quantityLabel: "Số lượng",
     orderTotal: "Tổng tiền",
@@ -225,6 +233,7 @@ const BOT_TEXT = {
     autoProcess: "The system will process automatically after payment is received.",
     paidSuccess: "Purchase successful.",
     balanceAfter: "Balance after purchase",
+    communityInvite: `Join our shop community for order support, warranty claims, and the latest product updates: ${COMMUNITY_ZALO_LINK}`,
     orderCode: "Order code",
     quantityLabel: "Quantity",
     orderTotal: "Order total",
@@ -410,6 +419,14 @@ bot.on("text", async (ctx) => {
 
 bot.catch(async (error, ctx) => {
   console.error(error);
+  if (isTelegramHandlerTimeout(error)) {
+    if (!timeoutRestartScheduled) {
+      timeoutRestartScheduled = true;
+      console.error(`Telegram handler exceeded ${handlerTimeout}ms. Exiting so systemd can restore polling with a fresh connection.`);
+      setTimeout(() => process.exit(1), 100).unref();
+    }
+    return;
+  }
   if (isCallbackContext(ctx)) {
     const lang = currentLanguage(ctx);
     await renderScreen(ctx, `${lang === "en" ? "Error" : "Có lỗi xảy ra"}: ${escapeHtml((error as Error).message)}`, mainKeyboard(lang)).catch(() => undefined);
@@ -739,6 +756,8 @@ async function purchaseWithWallet(ctx: Context, productId: string, quantity = 1)
       `${text.quantityLabel}: <b>${result.order.quantity}</b>`,
       `${text.orderTotal}: <b>${formatVnd(result.order.totalAmount)}</b>`,
       `${text.balanceAfter}: <b>${formatVnd(result.balanceAfter)}</b>`,
+      "",
+      text.communityInvite,
       "",
       `${text.yourGoods}:`,
       `<pre>${escapeHtml(result.deliveryText)}</pre>`
